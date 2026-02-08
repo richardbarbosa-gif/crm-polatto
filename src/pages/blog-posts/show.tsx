@@ -1,8 +1,8 @@
 import { DateField, Show, TextField } from "@refinedev/antd";
-import { useShow } from "@refinedev/core";
-import { Typography, Tag } from "antd";
+import { useList, useShow } from "@refinedev/core";
+import { Typography, Tag, Timeline, Divider } from "antd";
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export const BlogPostShow = () => {
   // CORREÇÃO AQUI: Mudamos de 'queryResult' para 'query'
@@ -11,10 +11,28 @@ export const BlogPostShow = () => {
 
   const record = data?.data;
 
+  const { query: historyQuery } = useList({
+    resource: "cliente_status_history",
+    filters: [
+      { field: "cliente_id", operator: "eq", value: record?.id },
+    ],
+    sorters: [{ field: "movido_em", order: "desc" }],
+    queryOptions: { enabled: !!record?.id },
+  });
+
+  const historico = (historyQuery?.data?.data as any[]) || [];
+  const mostrarHistorico = historyQuery?.isSuccess && historico.length > 0;
+  const mostrarSemHistorico = historyQuery?.isSuccess && historico.length === 0;
+
   // Função segura para formatar dinheiro
   const formatarDinheiro = (valor: any) => {
     if (!valor) return "R$ 0,00";
     return Number(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  };
+
+  const formatarDataHora = (valor?: string) => {
+    if (!valor) return "Data indisponível";
+    return new Date(valor).toLocaleString("pt-BR");
   };
 
   return (
@@ -43,8 +61,30 @@ export const BlogPostShow = () => {
       <Title level={5} style={{ marginTop: "20px" }}>Média da Conta (R$)</Title>
       <TextField value={formatarDinheiro(record?.conta_energia_media)} />
 
+      <Title level={5} style={{ marginTop: "20px" }}>Responsável</Title>
+      <TextField value={record?.responsavel || "Não definido"} />
+
       <Title level={5} style={{ marginTop: "20px" }}>Cliente Cadastrado em</Title>
       <DateField value={record?.created_at} format="DD/MM/YYYY HH:mm" />
+
+      <Divider />
+      <Title level={5}>Histórico de Movimentações</Title>
+      {mostrarHistorico ? (
+        <Timeline
+          items={historico.map((item) => ({
+            children: (
+              <div>
+                <Text strong>{item.de_status}{" -> "}{item.para_status}</Text>
+                <div style={{ fontSize: "12px", color: "#667085" }}>
+                  {item.movido_por ? `por ${item.movido_por} - ` : ""}{formatarDataHora(item.movido_em)}
+                </div>
+              </div>
+            ),
+          }))}
+        />
+      ) : mostrarSemHistorico ? (
+        <Text type="secondary">Sem histórico</Text>
+      ) : null}
 
     </Show>
   );

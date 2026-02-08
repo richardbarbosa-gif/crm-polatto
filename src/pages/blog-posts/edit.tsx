@@ -1,8 +1,30 @@
+import { useList } from "@refinedev/core";
 import { Edit, useForm } from "@refinedev/antd";
 import { Form, Input, Select, InputNumber } from "antd";
 
 export const BlogPostEdit = () => {
   const { formProps, saveButtonProps } = useForm();
+  const { query: stagesQuery } = useList({
+    resource: "pipeline_stages",
+    pagination: { mode: "off" },
+    sorters: [{ field: "ordem", order: "asc" }],
+  });
+
+  const stagesData = (stagesQuery?.data?.data as any[]) || [];
+  const statusOptions = stagesData.length > 0
+    ? stagesData
+        .map((stage) => {
+          const nome = stage.nome ?? stage.name;
+          return nome ? { value: nome, label: nome } : null;
+        })
+        .filter((opt): opt is { value: string; label: string } => !!opt)
+    : [
+        { value: "Novo Lead", label: "Novo Lead (Chegou agora)" },
+        { value: "Em Negociação", label: "Em Negociação" },
+        { value: "Visita Agendada", label: "Visita Agendada" },
+        { value: "Fechado", label: "✅ Fechado / Ganho" },
+        { value: "Perdido", label: "❌ Perdido" },
+      ];
 
   return (
     <Edit saveButtonProps={saveButtonProps}>
@@ -72,19 +94,21 @@ export const BlogPostEdit = () => {
              />
         </Form.Item>
 
+        {/* Campo RESPONSÁVEL */}
+        <Form.Item
+          label="Responsável"
+          name="responsavel"
+        >
+          <Input placeholder="Ex.: João / Equipe Comercial" />
+        </Form.Item>
+
         {/* Campo STATUS */}
         <Form.Item
           label="Status da Negociação"
           name="status"
         >
           <Select
-            options={[
-              { value: "Novo Lead", label: "Novo Lead (Chegou agora)" },
-              { value: "Em Negociação", label: "Em Negociação" },
-              { value: "Visita Agendada", label: "Visita Agendada" },
-              { value: "Fechado", label: "✅ Fechado / Ganho" },
-              { value: "Perdido", label: "❌ Perdido" },
-            ]}
+            options={statusOptions}
           />
         </Form.Item>
 

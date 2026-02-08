@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
-import { useList, useUpdate } from "@refinedev/core";
+import { useCreate, useGetIdentity, useList, useUpdate } from "@refinedev/core";
 import { EditButton, ShowButton, CreateButton } from "@refinedev/antd";
-import { Typography, Card, Space, Spin, Input, Button, Tooltip, Table, Tag, Statistic, Row, Col, message } from "antd";
+import { Typography, Card, Space, Spin, Input, Button, Tooltip, Table, Tag, Statistic, Row, Col, message, Select } from "antd";
 import { 
     SearchOutlined, 
     AppstoreOutlined, 
@@ -14,29 +14,113 @@ import {
 
 const { Text, Title } = Typography;
 
-const ESTAGIOS = ["Novo Lead", "Em Negociação", "Fechado", "Perdido"];
+type Stage = {
+  id?: string | number;
+  nome: string;
+  cor?: string;
+  ordem?: number;
+};
+
+const DEFAULT_STAGES: Stage[] = [
+  { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
+  { id: "negociacao", nome: "Em Negociação", cor: "#3182ce", ordem: 2 },
+  { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 3 },
+  { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
+  { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
+];
+
+const formatarDinheiro = (valor: any) => {
+  if (!valor) return "R$ 0,00";
+  return Number(valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+};
+
+const getStatusAccent = (status?: string) => {
+  const s = (status ?? "").toLowerCase();
+  if (s.includes("fechado")) return "#82cf6e";
+  if (s.includes("perdido")) return "#f56565";
+  if (s.includes("visita")) return "#ed8936";
+  if (s.includes("negocia")) return "#3182ce";
+  return "#5d9cec";
+};
+
+const getStatusTagColor = (status?: string) => {
+  const s = (status ?? "").toLowerCase();
+  if (s.includes("fechado")) return "green";
+  if (s.includes("perdido")) return "red";
+  if (s.includes("visita")) return "orange";
+  if (s.includes("negocia")) return "gold";
+  return "blue";
+};
+
 
 export const BlogPostList = () => {
   const [viewType, setViewType] = useState<"kanban" | "list">("kanban");
   const [searchText, setSearchText] = useState("");
+  const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(undefined);
   
   // ESTADO PARA O DRAG AND DROP NATIVO
   const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Hooks do Refine (Dados e Atualização)
-  const { query } = useList({
+  const { query: clientesQuery } = useList({
     resource: "clientes",
     pagination: { mode: "off" },
   });
 
-  const { mutate } = useUpdate();
+  const { query: stagesQuery } = useList({
+    resource: "pipeline_stages",
+    pagination: { mode: "off" },
+    sorters: [{ field: "ordem", order: "asc" }],
+  });
 
-  const isLoading = query?.isLoading;
-  const rawData = query?.data?.data || [];
+  const { mutateAsync: updateLead } = useUpdate();
+  const { mutate: createHistory } = useCreate();
+  const { data: user } = useGetIdentity();
+
+  const isLoading = clientesQuery?.isLoading;
+  const rawData = clientesQuery?.data?.data || [];
+
+  const stages = useMemo(() => {
+    const data = (stagesQuery?.data?.data as any[]) || [];
+    const normalized = data
+      .map((stage) => ({
+        id: stage.id,
+        nome: stage.nome ?? stage.name ?? "",
+        cor: stage.cor ?? stage.color,
+        ordem: stage.ordem ?? stage.order ?? stage.sort_order,
+      }))
+      .filter((stage) => stage.nome)
+      .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
+    return normalized.length > 0 ? normalized : DEFAULT_STAGES;
+  }, [stagesQuery?.data?.data]);
+
+  const stageNames = useMemo(() => stages.map((stage) => stage.nome), [stages]);
+
+  const stagesVisiveis = useMemo(() => {
+    const possuiDesconhecidos = rawData.some((cliente: any) =>
+      cliente.status && !stageNames.includes(cliente.status)
+    );
+    if (!possuiDesconhecidos) return stages;
+    return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
+  }, [rawData, stageNames, stages]);
+
+
+  const responsaveisDisponiveis = useMemo(() => {
+    const valores = new Set<string>();
+    rawData.forEach((cliente: any) => {
+      if (cliente.responsavel) {
+        valores.add(cliente.responsavel);
+      }
+    });
+    return Array.from(valores).sort((a, b) => a.localeCompare(b));
+  }, [rawData]);
 
   // Filtro Inteligente
   const clientesFiltrados = useMemo(() => {
     return rawData.filter((cliente: any) => {
+        if (responsavelFiltro && cliente.responsavel !== responsavelFiltro) return false;
         if (!searchText) return true;
         const texto = searchText.toLowerCase();
         return (
@@ -45,7 +129,7 @@ export const BlogPostList = () => {
             cliente.status?.toLowerCase().includes(texto)
         );
     });
-  }, [rawData, searchText]);
+  }, [rawData, searchText, responsavelFiltro]);
 
   // Cálculo de KPIs
   const kpis = useMemo(() => {
@@ -61,6 +145,8 @@ export const BlogPostList = () => {
   // 1. Quando começa a arrastar
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>, id: string) => {
     setDraggedItemId(id);
+    setIsDragging(true);
+    setActiveDropColumn(null);
     e.dataTransfer.effectAllowed = "move";
     // Deixa o elemento meio transparente enquanto arrasta (Visual Opicional)
     e.currentTarget.style.opacity = "0.5";
@@ -72,37 +158,72 @@ export const BlogPostList = () => {
     e.currentTarget.style.opacity = "1";
     e.currentTarget.style.cursor = "grab";
     setDraggedItemId(null);
+    setIsDragging(false);
+    setActiveDropColumn(null);
   };
 
   // 3. Permitir soltar na coluna (Over)
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); // Necessário para permitir o "Drop"
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, status: string) => {
+    e.preventDefault(); // Necessario para permitir o "Drop"
     e.dataTransfer.dropEffect = "move";
+    if (activeDropColumn !== status) {
+      setActiveDropColumn(status);
+    }
   };
 
   // 4. A Mágica: Soltou na Coluna
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>, novoStatus: string) => {
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, novoStatus: string) => {
     e.preventDefault();
-    
+    setActiveDropColumn(null);
+    setIsDragging(false);
+
     if (!draggedItemId) return;
 
     // Encontra o lead que estava sendo arrastado
     const leadArrastado = rawData.find((c: any) => c.id.toString() === draggedItemId);
-    
-    // Se soltou na mesma coluna, não faz nada
+
+    if (!leadArrastado) {
+      message.warning("Lead nao encontrado.");
+      return;
+    }
+
+    // Se soltou na mesma coluna, nao faz nada
     if (leadArrastado?.status === novoStatus) return;
 
-    // Atualiza no Supabase
-    mutate({
+    try {
+      // Atualiza no Supabase
+      await updateLead({
         resource: "clientes",
         id: draggedItemId,
         values: { status: novoStatus },
         successNotification: () => ({
-            message: `Movido para ${novoStatus}`,
-            description: "Status atualizado com sucesso!",
-            type: "success",
+          message: `Movido para ${novoStatus}`,
+          description: "Status atualizado com sucesso!",
+          type: "success",
         }),
-    });
+        errorNotification: () => ({
+          message: "Nao foi possivel atualizar o status",
+          description: "Tente novamente.",
+          type: "error",
+        }),
+      });
+
+      // Auditoria simples (nao bloqueia o fluxo se falhar)
+      createHistory({
+        resource: "cliente_status_history",
+        values: {
+          cliente_id: leadArrastado.id,
+          de_status: leadArrastado.status,
+          para_status: novoStatus,
+          movido_em: new Date().toISOString(),
+          movido_por: user?.name || user?.email || null,
+        },
+        successNotification: false,
+        errorNotification: false,
+      });
+    } catch (err) {
+      // Notificacao de erro ja exibida pelo Refine
+    }
   };
 
   if (isLoading) return <div style={{ display: "flex", justifyContent: "center", paddingTop: 50 }}><Spin size="large" tip="Carregando CRM..." /></div>;
@@ -122,7 +243,18 @@ export const BlogPostList = () => {
                     </Tooltip>
                 </div>
             </div>
-            <Input placeholder="Busca e filtro" prefix={<SearchOutlined style={{ color: "#a0aec0" }} />} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: "250px", backgroundColor: "#f0f2f5", border: "none", borderRadius: "4px", height: "32px", fontSize: "13px" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Input placeholder="Busca e filtro" prefix={<SearchOutlined style={{ color: "#a0aec0" }} />} value={searchText} onChange={(e) => setSearchText(e.target.value)} style={{ width: "230px", backgroundColor: "#f0f2f5", border: "none", borderRadius: "4px", height: "32px", fontSize: "13px" }} />
+                <Select
+                    placeholder="Respons?vel"
+                    allowClear
+                    value={responsavelFiltro}
+                    onChange={(value) => setResponsavelFiltro(value)}
+                    options={responsaveisDisponiveis.map((responsavel) => ({ value: responsavel, label: responsavel }))}
+                    style={{ width: "180px" }}
+                    disabled={responsaveisDisponiveis.length === 0}
+                />
+            </div>
             <CreateButton type="primary" icon={<PlusOutlined />} style={{ backgroundColor: "#4c8bf5", fontWeight: 600, borderRadius: "4px", fontSize: "12px", textTransform: "uppercase" }}>Novo Lead</CreateButton>
         </div>
         <div style={{ padding: "0 20px", marginTop: "5px" }}>
@@ -137,27 +269,45 @@ export const BlogPostList = () => {
 
   const KanbanView = () => (
     <div style={{ display: "flex", overflowX: "auto", height: "calc(100vh - 180px)", backgroundColor: "#fff", padding: "20px", gap: "10px" }}>
-      {ESTAGIOS.map((estagio, index) => {
-        const clientesDaColuna = clientesFiltrados.filter((c: any) => c.status === estagio);
+      {stagesVisiveis.map((estagio) => {
+        const clientesDaColuna = clientesFiltrados.filter((c: any) => (
+          estagio.nome === "Outros"
+            ? c.status && !stageNames.includes(c.status)
+            : c.status === estagio.nome
+        ));
+        const totalColuna = clientesDaColuna.reduce((acc: number, curr: any) => acc + Number(curr.conta_energia_media || 0), 0);
+        const isDroppable = estagio.nome !== "Outros";
+        const isDropActive = isDroppable && isDragging && activeDropColumn === estagio.nome;
+        const accentColor = estagio.cor || getStatusAccent(estagio.nome);
         
         return (
           <div 
-            key={estagio}
+            key={estagio.nome}
             // EVENTOS DE DROP NA COLUNA
-            onDragOver={handleDragOver}
-            onDrop={(e) => handleDrop(e, estagio)}
+            onDragOver={isDroppable ? (e) => handleDragOver(e, estagio.nome) : undefined}
+            onDrop={isDroppable ? (e) => handleDrop(e, estagio.nome) : undefined}
             style={{ 
                 minWidth: "300px", maxWidth: "300px", display: "flex", flexDirection: "column", 
-                borderRight: "1px solid #f0f0f0", padding: "0 10px", transition: "background 0.2s" 
+                borderRight: "1px solid #f0f0f0", padding: "0 10px", transition: "background 0.2s", 
+                backgroundColor: isDropActive ? "#f0f7ff" : "transparent", 
+                boxShadow: isDropActive ? "inset 0 0 0 1px #91caff" : "none", 
+                borderRadius: "6px" 
             }}
           >
             <div style={{ paddingBottom: "15px", paddingTop: "5px", textAlign: "center" }}>
-                <Text strong style={{ textTransform: "uppercase", fontSize: "11px", color: "#6e7c87", display: "block", marginBottom: "4px" }}>{estagio}</Text>
-                <div style={{ height: "3px", width: "100%", backgroundColor: index === 2 ? "#82cf6e" : "#eef2f4", marginTop: "5px", borderRadius: "2px" }}></div>
+                <Text strong style={{ textTransform: "uppercase", fontSize: "11px", color: "#6e7c87", display: "block", marginBottom: "4px" }}>{estagio.nome}</Text>
+                <Text style={{ fontSize: "10px", color: "#98a2b3" }}>{clientesDaColuna.length} leads</Text>
+                <Text style={{ fontSize: "10px", color: "#667085" }}>{formatarDinheiro(totalColuna)}</Text>
+                <div style={{ height: "3px", width: "100%", backgroundColor: accentColor, marginTop: "6px", borderRadius: "2px" }}></div>
             </div>
             
             <div style={{ flex: 1, overflowY: "auto", minHeight: "200px" }}>
-              {clientesDaColuna.map((cliente: any) => (
+              {clientesDaColuna.length === 0 ? (
+                <div style={{ border: "1px dashed #e2e8f0", borderRadius: "6px", padding: "12px", textAlign: "center", color: "#98a2b3", fontSize: "12px", marginTop: "6px" }}>
+                  {isDropActive ? "Solte aqui" : "Sem leads"}
+                </div>
+              ) : (
+                clientesDaColuna.map((cliente: any) => (
                 <div
                     key={cliente.id}
                     // HABILITA O ARRASTAR NO CARD
@@ -171,7 +321,7 @@ export const BlogPostList = () => {
                       style={{ 
                           marginBottom: "10px", border: "1px solid #e6e6e6", borderRadius: "4px", 
                           boxShadow: "0 1px 2px rgba(0,0,0,0.03)", 
-                          borderLeft: `3px solid ${estagio === "Fechado" ? "#82cf6e" : "#5d9cec"}`,
+                          borderLeft: `3px solid ${accentColor}`,
                           // Cursor muda quando passa o mouse
                           cursor: "grab", 
                           userSelect: "none"
@@ -181,12 +331,14 @@ export const BlogPostList = () => {
                     >
                       <div style={{ marginBottom: "5px" }}><Text strong style={{ color: "#192a3e", fontSize: "13px" }}>{cliente.nome}</Text></div>
                       <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                          {cliente.conta_energia_media > 0 && <Text style={{ fontSize: "12px", color: "#555" }}>{Number(cliente.conta_energia_media).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</Text>}
+                          {cliente.conta_energia_media > 0 && <Text style={{ fontSize: "12px", color: "#555" }}>{formatarDinheiro(cliente.conta_energia_media)}</Text>}
+                          {cliente.responsavel && <Text style={{ fontSize: "10px", color: "#667085" }}>Resp: {cliente.responsavel}</Text>}
                           <Text style={{ fontSize: "10px", color: "#a0aec0" }}>{new Date(cliente.created_at).toLocaleDateString('pt-BR')}</Text>
                       </div>
                     </Card>
                 </div>
-              ))}
+                ))
+              )}
               {/* Espaço vazio invisível para facilitar o drop em colunas vazias */}
               <div style={{ height: "50px" }}></div>
             </div>
@@ -202,8 +354,9 @@ export const BlogPostList = () => {
             dataSource={clientesFiltrados} rowKey="id" size="middle" pagination={{ pageSize: 12, position: ["bottomCenter"] }}
             columns={[
                 { title: 'Nome do Lead', dataIndex: 'nome', render: (t) => <b style={{color: "#153046"}}>{t}</b> },
-                { title: 'Status', dataIndex: 'status', render: (s) => <Tag color={s === 'Fechado' ? 'green' : 'blue'}>{s}</Tag> },
-                { title: 'Valor', dataIndex: 'conta_energia_media', render: (v) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) },
+                { title: 'Status', dataIndex: 'status', render: (s) => <Tag color={getStatusTagColor(s)}>{s}</Tag> },
+                { title: 'Respons?vel', dataIndex: 'responsavel', render: (v) => v || '-' },
+                { title: 'Valor', dataIndex: 'conta_energia_media', render: (v) => formatarDinheiro(v) },
                 { title: 'Telefone', dataIndex: 'telefone' },
                 { title: '', render: (_, r: any) => <Space><EditButton hideText size="small" recordItemId={r.id} /></Space> }
             ]}
