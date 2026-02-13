@@ -1,6 +1,7 @@
 import { Authenticated, Refine } from "@refinedev/core";
 import { DevtoolsPanel, DevtoolsProvider } from "@refinedev/devtools";
 import { RefineKbar, RefineKbarProvider } from "@refinedev/kbar";
+import { AgendaPage } from "./pages/agenda";
 
 import {
   AuthPage,
@@ -31,6 +32,15 @@ import {
 } from "./pages/blog-posts";
 import { supabaseClient } from "./utility";
 
+// --- IMPORTAÇÃO DO DASHBOARD ---
+import { DashboardPage } from "./pages/dashboard";
+import { 
+    DashboardOutlined, 
+    ProjectOutlined, 
+    CalendarOutlined, 
+    TeamOutlined 
+} from "@ant-design/icons";
+
 function App() {
   return (
     <BrowserRouter>
@@ -39,10 +49,9 @@ function App() {
           <ConfigProvider
             theme={{
               token: {
-                colorPrimary: "#001529", // Azul Polatto Base
+                colorPrimary: "#001529", // Azul Polatto
               },
               components: {
-                // Configuração Global de Cores
                 Layout: {
                   headerBg: "#001529",
                   siderBg: "#001529",
@@ -71,6 +80,14 @@ function App() {
                   notificationProvider={useNotificationProvider}
                   resources={[
                     {
+                        name: "dashboard",
+                        list: "/", 
+                        meta: {
+                            label: "Dashboard",
+                            icon: <DashboardOutlined />,
+                        },
+                    },
+                    {
                       name: "clientes",
                       list: "/clientes",
                       create: "/clientes/create",
@@ -78,9 +95,26 @@ function App() {
                       show: "/clientes/show/:id",
                       meta: {
                         canDelete: true,
-                        label: "Clientes",
+                        label: "Oportunidades",
+                        icon: <ProjectOutlined />,
                       },
                     },
+                    {
+                        name: "agenda",
+                        list: "/agenda",
+                        meta: {
+                            label: "Agenda",
+                            icon: <CalendarOutlined />
+                        }
+                    },
+                    {
+                        name: "base_clientes",
+                        list: "/base-clientes",
+                        meta: {
+                            label: "Base de Clientes",
+                            icon: <TeamOutlined />
+                        }
+                    }
                   ]}
                   options={{
                     syncWithLocation: true,
@@ -106,27 +140,19 @@ function App() {
                                             display: "flex",
                                             justifyContent: "center",
                                             alignItems: "center",
-                                            // O TRUQUE ESTÁ AQUI:
-                                            // 1. Margem negativa para 'comer' o espaço em branco lateral
-                                            margin: "-16px", 
-                                            // 2. Largura compensada (100% + o que tiramos da margem)
+                                            margin: "-16px",
                                             width: "calc(100% + 32px)", 
-                                            // 3. Altura fixa do cabeçalho
                                             height: "64px",
                                             backgroundColor: "#001529",
-                                            overflow: "hidden" // Garante que nada saia para fora
+                                            overflow: "hidden"
                                         }}>
                                             <img
                                                 src="/logo.png"
                                                 alt="Polatto"
                                                 style={{
-                                                    // Agora o logo pode ocupar todo o espaço disponível
                                                     width: collapsed ? "40px" : "100%", 
                                                     height: "100%",
-                                                    // 'cover' faz a imagem preencher tudo sem deixar buraco (pode cortar pontinhas)
-                                                    // 'contain' mostra a imagem inteira (pode sobrar espaço se a proporção for diferente)
-                                                    // Teste com 'cover' se o fundo do logo for igual ao azul do menu
-                                                    objectFit: "cover", 
+                                                    objectFit: "cover",
                                                     transition: "all 0.3s ease"
                                                 }}
                                             />
@@ -140,10 +166,9 @@ function App() {
                         </Authenticated>
                       }
                     >
-                      <Route
-                        index
-                        element={<NavigateToResource resource="clientes" />}
-                      />
+                      {/* ROTA PRINCIPAL */}
+                      <Route index element={<DashboardPage />} />
+
                       <Route path="/clientes">
                         <Route index element={<BlogPostList />} />
                         <Route path="create" element={<BlogPostCreate />} />
@@ -151,8 +176,12 @@ function App() {
                         <Route path="show/:id" element={<BlogPostShow />} />
                       </Route>
 
+                      <Route path="/agenda" element={<AgendaPage />} />
+                      <Route path="/base-clientes" element={<div style={{padding: 20}}><h1>👥 Base de Clientes em Breve</h1></div>} />
+
                       <Route path="*" element={<ErrorComponent />} />
                     </Route>
+                    
                     <Route
                       element={
                         <Authenticated
@@ -170,30 +199,17 @@ function App() {
                             type="login"
                             title={
                                 <div style={{ display: "flex", justifyContent: "center", marginBottom: "24px" }}>
-                                    <img
-                                        src="/logo.png"
-                                        alt="Polatto Energia Solar"
-                                        style={{ width: "250px" }}
-                                    />
+                                    <img src="/logo.png" alt="Polatto" style={{ width: "250px" }} />
                                 </div>
-                            }
+                             }
                             formProps={{
-                              initialValues: {
-                                email: "info@refine.dev",
-                                password: "refine-supabase",
-                              },
+                              initialValues: { email: "info@refine.dev", password: "refine-supabase" },
                             }}
                           />
                         }
                       />
-                      <Route
-                        path="/register"
-                        element={<AuthPage type="register" />}
-                      />
-                      <Route
-                        path="/forgot-password"
-                        element={<AuthPage type="forgotPassword" />}
-                      />
+                      <Route path="/register" element={<AuthPage type="register" />} />
+                      <Route path="/forgot-password" element={<AuthPage type="forgotPassword" />} />
                     </Route>
                   </Routes>
 
