@@ -1,0 +1,1 @@
+export { BaseClientesPage } from "./page";

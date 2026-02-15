@@ -1,27 +1,68 @@
-import { CalendarOutlined, EnvironmentOutlined, GoogleOutlined, PhoneOutlined, UserOutlined } from "@ant-design/icons";
+import {
+    CalendarOutlined,
+    EnvironmentOutlined,
+    GoogleOutlined,
+    PhoneOutlined,
+    UserOutlined,
+} from "@ant-design/icons";
 import { DateField, Show } from "@refinedev/antd";
 import { useShow } from "@refinedev/core";
-import { Button, Card, Divider, Skeleton, Space, Tag, Typography } from "antd";
-import { useState } from "react";
+import { Divider, Select, Skeleton, Space, Typography } from "antd";
+import { useEffect, useState } from "react";
+import {
+    Badge,
+    Button,
+    Card,
+    TemperatureBadge,
+} from "../../components/ui";
+import { formatCurrencyBRL } from "../../lib/formatters";
+import {
+    LEAD_TEMPERATURE_OPTIONS,
+    type LeadTemperature,
+    resolveLeadTemperature,
+    setLeadTemperature,
+} from "../../lib/leadTemperature";
 import { TaskFormModal } from "../../components/modal/agenda";
 
 const { Title, Text } = Typography;
+
+const getStatusTone = (status?: string) => {
+    const value = (status ?? "").toLowerCase();
+    if (value.includes("fechado")) return "success" as const;
+    if (value.includes("perdido")) return "danger" as const;
+    if (value.includes("visita")) return "warning" as const;
+    return "info" as const;
+};
 
 export const BlogPostShow = () => {
     const showResult = useShow() as any;
     const { data, isLoading } = showResult.query || showResult;
     const record = data?.data;
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [temperature, setTemperature] = useState<LeadTemperature | undefined>(undefined);
+
+    useEffect(() => {
+        setTemperature(resolveLeadTemperature(record));
+    }, [record]);
+
+    const handleTemperatureChange = (value?: LeadTemperature) => {
+        setTemperature(value);
+        if (record?.id) {
+            setLeadTemperature(record.id, value);
+        }
+    };
 
     const abrirNoMapa = () => {
-        const endereco = `${record?.endereco_instalacao || ""}, ${record?.numero || ""} - ${record?.cep || ""}`;
+        const endereco = `${record?.endereco_instalacao || ""}, ${record?.numero || ""} - ${
+            record?.cep || ""
+        }`;
         const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(endereco)}`;
-        window.open(url, "_blank");
+        window.open(url, "_blank", "noopener,noreferrer");
     };
 
     if (isLoading) {
         return (
-            <Show isLoading={true}>
+            <Show isLoading>
                 <Skeleton active />
             </Show>
         );
@@ -29,71 +70,132 @@ export const BlogPostShow = () => {
 
     return (
         <Show isLoading={isLoading} title="Detalhes do Cliente">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                <Tag color="blue" style={{ fontSize: 16, padding: "5px 15px" }}>
-                    {record?.status || "Novo Lead"}
-                </Tag>
+            <div
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 16,
+                    gap: 10,
+                    flexWrap: "wrap",
+                }}
+            >
+                <Space wrap>
+                    <Badge tone={getStatusTone(record?.status)}>
+                        {record?.status || "Novo Lead"}
+                    </Badge>
+                    <TemperatureBadge value={temperature} />
+                    <Select
+                        size="small"
+                        style={{ width: 180 }}
+                        allowClear
+                        placeholder="Editar temperatura"
+                        value={temperature}
+                        onChange={handleTemperatureChange}
+                        options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                        }))}
+                    />
+                </Space>
+
                 <Button
                     type="primary"
                     icon={<CalendarOutlined />}
                     onClick={() => setIsModalOpen(true)}
                     size="large"
-                    style={{ backgroundColor: "#25D366", borderColor: "#25D366", fontWeight: "bold" }}
+                    style={{
+                        backgroundColor: "#25D366",
+                        borderColor: "#25D366",
+                        fontWeight: 700,
+                    }}
                 >
                     Agendar Visita
                 </Button>
             </div>
 
-            <Card bordered={false} style={{ borderRadius: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between" }}>
+            <Card style={{ borderRadius: 10 }}>
+                <div
+                    style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 16,
+                        flexWrap: "wrap",
+                    }}
+                >
                     <div>
                         <Title level={3} style={{ margin: 0 }}>
                             {record?.nome}
                         </Title>
-                        <Space style={{ marginTop: 5 }}>
-                            <Text type="secondary" style={{ fontSize: 16 }}>
+                        <Space wrap style={{ marginTop: 6 }}>
+                            <Text type="secondary" style={{ fontSize: 15 }}>
                                 <PhoneOutlined /> {record?.ddi} {record?.telefone}
                             </Text>
-                            {record?.responsavel && (
-                                <Tag icon={<UserOutlined />} color="purple">
-                                    {record.responsavel}
-                                </Tag>
-                            )}
+                            {record?.responsavel ? (
+                                <Badge tone="info">
+                                    <UserOutlined /> {record.responsavel}
+                                </Badge>
+                            ) : null}
                         </Space>
                     </div>
+
                     <div style={{ textAlign: "right" }}>
                         <Text type="secondary">Conta Media</Text>
-                        <div style={{ fontSize: 28, fontWeight: "bold", color: "#389e0d" }}>
-                            {Number(record?.conta_energia_media || 0).toLocaleString("pt-BR", {
-                                style: "currency",
-                                currency: "BRL",
-                            })}
+                        <div style={{ fontSize: 28, fontWeight: 700, color: "#389e0d" }}>
+                            {formatCurrencyBRL(record?.conta_energia_media, "R$ 0,00")}
                         </div>
                     </div>
                 </div>
 
                 <Divider />
 
-                <div style={{ background: "#f5f5f5", padding: 20, borderRadius: 8 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div
+                    style={{
+                        background: "#f5f7fa",
+                        padding: 20,
+                        borderRadius: 10,
+                        border: "1px solid #e7edf5",
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            flexWrap: "wrap",
+                        }}
+                    >
                         <div>
                             <Title level={5} style={{ margin: 0 }}>
                                 <EnvironmentOutlined /> Local da Instalacao
                             </Title>
-                            <Text style={{ fontSize: 16 }}>
-                                {record?.endereco_instalacao}, {record?.numero} {record?.complemento ? `- ${record.complemento}` : ""}
+                            <Text style={{ fontSize: 15 }}>
+                                {record?.endereco_instalacao}, {record?.numero}{" "}
+                                {record?.complemento ? `- ${record.complemento}` : ""}
                             </Text>
                             <br />
                             <Text type="secondary">CEP: {record?.cep}</Text>
                         </div>
-                        <Button type="primary" ghost icon={<GoogleOutlined />} onClick={abrirNoMapa}>
+                        <Button
+                            type="default"
+                            icon={<GoogleOutlined />}
+                            onClick={abrirNoMapa}
+                        >
                             Ver no Mapa
                         </Button>
                     </div>
                 </div>
 
                 <Divider />
-                <Space split={<Divider type="vertical" />}>
+
+                <div
+                    style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                        gap: 14,
+                    }}
+                >
                     <div>
                         <Text type="secondary">E-mail</Text>
                         <br />
@@ -109,10 +211,10 @@ export const BlogPostShow = () => {
                         <br />
                         <DateField value={record?.created_at} format="DD/MM/YYYY" />
                     </div>
-                </Space>
+                </div>
             </Card>
 
-            {record?.id && (
+            {record?.id ? (
                 <TaskFormModal
                     open={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
@@ -122,7 +224,7 @@ export const BlogPostShow = () => {
                         clienteEndereco: record.endereco_instalacao || "",
                     }}
                 />
-            )}
+            ) : null}
         </Show>
     );
 };
