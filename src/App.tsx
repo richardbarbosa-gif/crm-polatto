@@ -20,10 +20,16 @@ import { dataProvider, liveProvider } from "@refinedev/supabase";
 import { App as AntdApp, ConfigProvider } from "antd";
 import { BrowserRouter, Outlet, Route, Routes } from "react-router";
 import {
+    BarChartOutlined,
     CalendarOutlined,
     DashboardOutlined,
+    FlagOutlined,
+    LineChartOutlined,
+    ProfileOutlined,
     ProjectOutlined,
+    RiseOutlined,
     TeamOutlined,
+    UsergroupAddOutlined,
 } from "@ant-design/icons";
 import authProvider from "./authProvider";
 import { Header } from "./components/header";
@@ -37,6 +43,15 @@ import {
     BlogPostShow,
 } from "./pages/blog-posts";
 import { DashboardPage } from "./pages/dashboard";
+import {
+    InsightsActivitiesPage,
+    InsightsActivityLogPage,
+    InsightsEmployeesPage,
+    InsightsGainsLossesPage,
+    InsightsGoalsPage,
+    InsightsPanelPage,
+    InsightsROIPage,
+} from "./pages/insights";
 import { supabaseClient } from "./utility";
 
 function App() {
@@ -95,6 +110,77 @@ function App() {
                                                 canDelete: true,
                                                 label: "Oportunidades",
                                                 icon: <ProjectOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights",
+                                            list: "/insights",
+                                            meta: {
+                                                label: "Insights",
+                                                icon: <BarChartOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_panel",
+                                            list: "/insights/painel",
+                                            meta: {
+                                                label: "Painel",
+                                                parent: "insights",
+                                                icon: <DashboardOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_roi",
+                                            list: "/insights/roi",
+                                            meta: {
+                                                label: "ROI",
+                                                parent: "insights",
+                                                icon: <LineChartOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_gains_losses",
+                                            list: "/insights/gains-losses",
+                                            meta: {
+                                                label: "Ganhos e perdas",
+                                                parent: "insights",
+                                                icon: <RiseOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_activities",
+                                            list: "/insights/activities",
+                                            meta: {
+                                                label: "Relatorio de atividades",
+                                                parent: "insights",
+                                                icon: <CalendarOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_logs",
+                                            list: "/insights/logs",
+                                            meta: {
+                                                label: "Registro de atividades",
+                                                parent: "insights",
+                                                icon: <ProfileOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_employees",
+                                            list: "/insights/employees",
+                                            meta: {
+                                                label: "Funcionarios",
+                                                parent: "insights",
+                                                icon: <UsergroupAddOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "insights_goals",
+                                            list: "/insights/goals",
+                                            meta: {
+                                                label: "Metas",
+                                                parent: "insights",
+                                                icon: <FlagOutlined />,
                                             },
                                         },
                                         {
@@ -185,6 +271,32 @@ function App() {
                                             <Route
                                                 path="/base-clientes"
                                                 element={<BaseClientesPage />}
+                                            />
+                                            <Route path="/insights" element={<InsightsPanelPage />} />
+                                            <Route
+                                                path="/insights/painel"
+                                                element={<InsightsPanelPage />}
+                                            />
+                                            <Route path="/insights/roi" element={<InsightsROIPage />} />
+                                            <Route
+                                                path="/insights/gains-losses"
+                                                element={<InsightsGainsLossesPage />}
+                                            />
+                                            <Route
+                                                path="/insights/activities"
+                                                element={<InsightsActivitiesPage />}
+                                            />
+                                            <Route
+                                                path="/insights/logs"
+                                                element={<InsightsActivityLogPage />}
+                                            />
+                                            <Route
+                                                path="/insights/employees"
+                                                element={<InsightsEmployeesPage />}
+                                            />
+                                            <Route
+                                                path="/insights/goals"
+                                                element={<InsightsGoalsPage />}
                                             />
 
                                             <Route path="*" element={<ErrorComponent />} />

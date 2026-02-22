@@ -3,6 +3,7 @@ import {
     EditOutlined,
     EyeOutlined,
     ReloadOutlined,
+    UserOutlined,
 } from "@ant-design/icons";
 import { useList } from "@refinedev/core";
 import {
@@ -15,14 +16,24 @@ import {
     Empty,
     List,
     Modal,
+    Segmented,
     Skeleton,
     Tag,
     Typography,
 } from "antd";
 import type { CalendarProps } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TaskFormModal, type TaskContextData, type TarefaRecord } from "../../components/modal/agenda";
+import { getTaskSituation, type TaskSituation, isTaskOverdue } from "../../lib/insights";
+import {
+    resolveTaskExecutionStatus,
+    setTaskExecutionStatus,
+    subscribeTaskExecutionStatusUpdates,
+    TASK_EXECUTION_STATUS_LABELS,
+    TASK_EXECUTION_STATUS_OPTIONS,
+    type TaskExecutionStatus,
+} from "../../lib/taskExecutionStatus";
 
 const TIPO_LABELS: Record<string, string> = {
     visita: "Visita",
@@ -37,12 +48,41 @@ const getTipoLabel = (tipo?: string | null) => {
     return TIPO_LABELS[tipo] || tipo;
 };
 
-const getClienteLabel = (clienteId?: string | number | null) => {
+const getClienteFallbackLabel = (clienteId?: string | number | null) => {
     if (!clienteId) return "Cliente nao informado";
     return `Cliente #${clienteId}`;
 };
 
+const getSituationBadgeStatus = (situation: TaskSituation) => {
+    if (situation === "atrasada") return "error";
+    if (situation === "tratada") return "success";
+    if (situation === "hoje") return "processing";
+    if (situation === "proxima") return "warning";
+    return "default";
+};
+
+const getSituationLabel = (situation: TaskSituation) => {
+    if (situation === "atrasada") return "Atrasada";
+    if (situation === "hoje") return "Hoje";
+    if (situation === "proxima") return "Proxima";
+    if (situation === "tratada") return "Tratada";
+    return "Agendada";
+};
+
+const TASK_EXECUTION_STATUS_COLORS: Record<TaskExecutionStatus, string> = {
+    pendente: "default",
+    resolvido: "success",
+    ligar_novamente: "purple",
+    voltar_outro_dia: "gold",
+};
+
+type ClienteAgendaRecord = {
+    id: string | number;
+    nome?: string | null;
+};
+
 export const AgendaPage = () => {
+    const [, setExecutionStatusRevision] = useState(0);
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
 
@@ -54,6 +94,12 @@ export const AgendaPage = () => {
     const [taskEditRecord, setTaskEditRecord] = useState<TarefaRecord | null>(null);
     const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
     const [taskInitialDate, setTaskInitialDate] = useState<Dayjs | null>(null);
+
+    useEffect(() => {
+        return subscribeTaskExecutionStatusUpdates(() => {
+            setExecutionStatusRevision((previous) => previous + 1);
+        });
+    }, []);
 
     const rangeStart = useMemo(
         () => visibleDate.startOf("month").subtract(1, "month").startOf("day"),
@@ -85,6 +131,71 @@ export const AgendaPage = () => {
     const query = listResult.query || listResult;
     const { data, isLoading, isError, error, refetch } = query;
     const tarefas: TarefaRecord[] = data?.data || [];
+
+    const clientesResult = useList<ClienteAgendaRecord>({
+        resource: "clientes",
+        pagination: { mode: "off" },
+        sorters: [{ field: "nome", order: "asc" }],
+    }) as any;
+
+    const clientesQuery = clientesResult.query || clientesResult;
+    const clientes: ClienteAgendaRecord[] = clientesQuery?.data?.data || [];
+
+    const clientesById = useMemo(() => {
+        const map = new Map<string, ClienteAgendaRecord>();
+        clientes.forEach((cliente) => map.set(String(cliente.id), cliente));
+        return map;
+    }, [clientes]);
+
+    const getClienteLabel = (
+        clienteId?: string | number | null,
+        fallbackName?: string | null,
+    ) => {
+        if (!clienteId) {
+            return "Cliente nao informado";
+        }
+
+        const nome =
+            clientesById.get(String(clienteId))?.nome?.trim() ||
+            fallbackName?.trim() ||
+            "";
+
+        if (nome) {
+            return nome;
+        }
+
+        return getClienteFallbackLabel(clienteId);
+    };
+
+    const getExecutionStatus = (tarefa?: TarefaRecord | null): TaskExecutionStatus => {
+        return resolveTaskExecutionStatus(tarefa as Record<string, any>);
+    };
+
+    const getTaskStatusTag = (tarefa: TarefaRecord) => {
+        const executionStatus = getExecutionStatus(tarefa);
+        if (executionStatus !== "pendente") {
+            return (
+                <Tag color={TASK_EXECUTION_STATUS_COLORS[executionStatus]}>
+                    {TASK_EXECUTION_STATUS_LABELS[executionStatus]}
+                </Tag>
+            );
+        }
+
+        const situation = getTaskSituation(tarefa.data_vencimento, dayjs(), executionStatus);
+        if (situation === "atrasada") {
+            return <Tag color="red">Atrasada</Tag>;
+        }
+
+        if (situation === "hoje") {
+            return <Tag color="blue">Hoje</Tag>;
+        }
+
+        if (situation === "proxima") {
+            return <Tag color="gold">Proxima</Tag>;
+        }
+
+        return null;
+    };
 
     const tarefasPorDia = useMemo(() => {
         const map = new Map<string, TarefaRecord[]>();
@@ -133,7 +244,7 @@ export const AgendaPage = () => {
             tarefa.cliente_id
                 ? {
                       clienteId: tarefa.cliente_id,
-                      clienteNome: getClienteLabel(tarefa.cliente_id),
+                      clienteNome: getClienteLabel(tarefa.cliente_id, tarefa.cliente_nome),
                   }
                 : null
         );
@@ -156,20 +267,56 @@ export const AgendaPage = () => {
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {tarefasDoDia.slice(0, 3).map((tarefa) => (
                     <li key={tarefa.id}>
-                        <Badge
-                            status="warning"
-                            text={
-                                <span
-                                    style={{ cursor: "pointer" }}
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        abrirDrawerTarefa(tarefa);
-                                    }}
-                                >
-                                    {tarefa.titulo || "Sem titulo"}
-                                </span>
-                            }
-                        />
+                        {(() => {
+                            const clienteLabel = getClienteLabel(
+                                tarefa.cliente_id,
+                                tarefa.cliente_nome,
+                            );
+                            const executionStatus = getExecutionStatus(tarefa);
+                            const situation = getTaskSituation(
+                                tarefa.data_vencimento,
+                                dayjs(),
+                                executionStatus,
+                            );
+                            const statusLabel =
+                                executionStatus !== "pendente"
+                                    ? TASK_EXECUTION_STATUS_LABELS[executionStatus]
+                                    : getSituationLabel(situation);
+
+                            return (
+                                <Badge
+                                    status={getSituationBadgeStatus(situation)}
+                                    text={
+                                        <span
+                                            style={{
+                                                cursor: "pointer",
+                                                display: "inline-flex",
+                                                flexDirection: "column",
+                                                lineHeight: 1.25,
+                                            }}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                abrirDrawerTarefa(tarefa);
+                                            }}
+                                        >
+                                            <span>{tarefa.titulo || "Sem titulo"}</span>
+                                            <Typography.Text
+                                                type="secondary"
+                                                style={{ fontSize: 11 }}
+                                            >
+                                                {clienteLabel}
+                                            </Typography.Text>
+                                            <Typography.Text
+                                                type="secondary"
+                                                style={{ fontSize: 10 }}
+                                            >
+                                                {statusLabel}
+                                            </Typography.Text>
+                                        </span>
+                                    }
+                                />
+                            );
+                        })()}
                     </li>
                 ))}
                 {tarefasDoDia.length > 3 && (
@@ -261,55 +408,79 @@ export const AgendaPage = () => {
                     <List
                         dataSource={tarefasSelecionadas}
                         rowKey="id"
-                        renderItem={(tarefa) => (
-                            <List.Item
-                                style={{ cursor: "pointer" }}
-                                onClick={() => abrirDrawerTarefa(tarefa)}
-                                actions={[
-                                    <Button
-                                        key={`view-${tarefa.id}`}
-                                        size="small"
-                                        icon={<EyeOutlined />}
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            abrirDrawerTarefa(tarefa);
-                                        }}
-                                    >
-                                        Ver
-                                    </Button>,
-                                ]}
-                            >
-                                <div style={{ width: "100%" }}>
-                                    <div
-                                        style={{
-                                            display: "flex",
-                                            justifyContent: "space-between",
-                                            alignItems: "center",
-                                            gap: 12,
-                                            marginBottom: 6,
-                                        }}
-                                    >
-                                        <Typography.Text strong>
-                                            {tarefa.titulo || "Sem titulo"}
-                                        </Typography.Text>
-                                        <Typography.Text type="secondary">
-                                            {tarefa.data_vencimento
-                                                ? dayjs(tarefa.data_vencimento).format("HH:mm")
-                                                : "-"}
-                                        </Typography.Text>
-                                    </div>
+                        renderItem={(tarefa) => {
+                            const clienteLabel = getClienteLabel(
+                                tarefa.cliente_id,
+                                tarefa.cliente_nome,
+                            );
 
-                                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                                        <Tag color="blue">{getTipoLabel(tarefa.tipo)}</Tag>
-                                        <Tag>{getClienteLabel(tarefa.cliente_id)}</Tag>
-                                    </div>
+                            return (
+                                <List.Item
+                                    style={{
+                                        cursor: "pointer",
+                                        border: "1px solid #e4e9f1",
+                                        borderRadius: 12,
+                                        padding: "12px 14px",
+                                        marginBottom: 10,
+                                        background: "#fcfdff",
+                                    }}
+                                    onClick={() => abrirDrawerTarefa(tarefa)}
+                                    actions={[
+                                        <Button
+                                            key={`view-${tarefa.id}`}
+                                            size="small"
+                                            icon={<EyeOutlined />}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                abrirDrawerTarefa(tarefa);
+                                            }}
+                                        >
+                                            Ver
+                                        </Button>,
+                                    ]}
+                                >
+                                    <div style={{ width: "100%" }}>
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                justifyContent: "space-between",
+                                                alignItems: "center",
+                                                gap: 12,
+                                                marginBottom: 6,
+                                            }}
+                                        >
+                                            <Typography.Text strong>
+                                                {tarefa.titulo || "Sem titulo"}
+                                            </Typography.Text>
+                                            <Typography.Text type="secondary">
+                                                {tarefa.data_vencimento
+                                                    ? dayjs(tarefa.data_vencimento).format("HH:mm")
+                                                    : "-"}
+                                            </Typography.Text>
+                                        </div>
 
-                                    <Typography.Paragraph style={{ margin: 0 }}>
-                                        {tarefa.descricao?.trim() || "Sem observacoes."}
-                                    </Typography.Paragraph>
-                                </div>
-                            </List.Item>
-                        )}
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                gap: 8,
+                                                marginBottom: 8,
+                                                flexWrap: "wrap",
+                                            }}
+                                        >
+                                            <Tag color="blue">{getTipoLabel(tarefa.tipo)}</Tag>
+                                            <Tag icon={<UserOutlined />} color="default">
+                                                {clienteLabel}
+                                            </Tag>
+                                            {getTaskStatusTag(tarefa)}
+                                        </div>
+
+                                        <Typography.Paragraph style={{ margin: 0 }}>
+                                            {tarefa.descricao?.trim() || "Sem observacoes."}
+                                        </Typography.Paragraph>
+                                    </div>
+                                </List.Item>
+                            );
+                        }}
                     />
                 )}
             </Modal>
@@ -335,15 +506,79 @@ export const AgendaPage = () => {
                     <Empty description="Nenhuma tarefa selecionada." />
                 ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                        <Typography.Title level={5} style={{ margin: 0 }}>
-                            {tarefaEmFoco.titulo || "Sem titulo"}
-                        </Typography.Title>
+                        {(() => {
+                            const clienteLabel = getClienteLabel(
+                                tarefaEmFoco.cliente_id,
+                                tarefaEmFoco.cliente_nome,
+                            );
+                            const executionStatus = getExecutionStatus(tarefaEmFoco);
+                            const canUpdateExecutionStatus = isTaskOverdue(
+                                tarefaEmFoco.data_vencimento,
+                            );
 
-                        <div style={{ display: "flex", gap: 8 }}>
-                            <Tag color="blue">{getTipoLabel(tarefaEmFoco.tipo)}</Tag>
-                            <Tag>{getClienteLabel(tarefaEmFoco.cliente_id)}</Tag>
-                        </div>
+                            return (
+                                <>
+                                    <Typography.Title level={5} style={{ margin: 0 }}>
+                                        {tarefaEmFoco.titulo || "Sem titulo"}
+                                    </Typography.Title>
 
+                                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                        <Tag color="blue">{getTipoLabel(tarefaEmFoco.tipo)}</Tag>
+                                        <Tag icon={<UserOutlined />} color="default">
+                                            {clienteLabel}
+                                        </Tag>
+                                        {getTaskStatusTag(tarefaEmFoco)}
+                                    </div>
+
+                                    {canUpdateExecutionStatus ? (
+                                        <div
+                                            style={{
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                gap: 6,
+                                                border: "1px solid #e4e9f1",
+                                                borderRadius: 12,
+                                                padding: 12,
+                                                background: "#fafcff",
+                                            }}
+                                        >
+                                            <Typography.Text strong>
+                                                Tratativa da atividade
+                                            </Typography.Text>
+                                            <Segmented
+                                                block
+                                                size="middle"
+                                                options={TASK_EXECUTION_STATUS_OPTIONS}
+                                                value={executionStatus}
+                                                onChange={(value) => {
+                                                    if (!tarefaEmFoco?.id) {
+                                                        return;
+                                                    }
+
+                                                    setTaskExecutionStatus(
+                                                        tarefaEmFoco.id,
+                                                        value as TaskExecutionStatus,
+                                                    );
+                                                }}
+                                            />
+                                            <Typography.Text
+                                                type="secondary"
+                                                style={{ fontSize: 12 }}
+                                            >
+                                                Ao definir uma tratativa, a atividade deixa de contar
+                                                como atrasada nos Insights.
+                                            </Typography.Text>
+                                        </div>
+                                    ) : (
+                                        <Alert
+                                            type="info"
+                                            showIcon
+                                            message="Tratativa habilita apenas apos o vencimento da atividade."
+                                        />
+                                    )}
+                                </>
+                            );
+                        })()}
                         <Typography.Text>
                             Data:{" "}
                             {tarefaEmFoco.data_vencimento

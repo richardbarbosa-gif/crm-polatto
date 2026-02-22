@@ -3,10 +3,13 @@ import { Edit, useForm } from "@refinedev/antd";
 import { Form, Input, InputNumber, Select } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { formatCpfCnpj } from "../../lib/formatters";
 import {
+    LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
     type LeadTemperature,
-    resolveLeadTemperature,
+    resolveAutomaticLeadTemperature,
+    resolveEditableLeadTemperature,
     setLeadTemperature,
 } from "../../lib/leadTemperature";
 
@@ -45,6 +48,8 @@ export const BlogPostEdit = () => {
     );
 
     const record = (query?.data?.data as any) ?? null;
+    const watchedStatus = Form.useWatch("status", form) as string | undefined;
+    const automaticTemperature = resolveAutomaticLeadTemperature(watchedStatus ?? record?.status);
 
     const { query: stagesQuery } = useList({
         resource: "pipeline_stages",
@@ -78,19 +83,40 @@ export const BlogPostEdit = () => {
             return;
         }
 
-        form.setFieldValue("temperature", resolveLeadTemperature(record));
+        form.setFieldValue("temperature", resolveEditableLeadTemperature(record));
     }, [form, record]);
 
-    const handleFinish = async (values: ClienteEditFormValues) => {
-        const { temperature, ...payload } = values;
+    useEffect(() => {
+        if (automaticTemperature) {
+            form.setFieldValue("temperature", undefined);
+        }
+    }, [automaticTemperature, form]);
 
-        pendingTemperatureRef.current = temperature;
-
-        if (record?.id) {
-            setLeadTemperature(record.id, temperature);
+    useEffect(() => {
+        const currentDocument = form.getFieldValue("cpf_cnpj");
+        if (!currentDocument) {
+            return;
         }
 
-        return formProps.onFinish?.(payload as any);
+        form.setFieldValue("cpf_cnpj", formatCpfCnpj(currentDocument));
+    }, [form, record?.cpf_cnpj]);
+
+    const handleCpfCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        form.setFieldValue("cpf_cnpj", formatCpfCnpj(event.target.value));
+    };
+
+    const handleFinish = async (values: ClienteEditFormValues) => {
+        const { temperature, status, ...payload } = values;
+        const automaticFromStatus = resolveAutomaticLeadTemperature(status ?? record?.status);
+        const nextTemperature = automaticFromStatus ? undefined : temperature;
+
+        pendingTemperatureRef.current = nextTemperature;
+
+        if (record?.id) {
+            setLeadTemperature(record.id, nextTemperature);
+        }
+
+        return formProps.onFinish?.({ ...payload, status } as any);
     };
 
     return (
@@ -127,7 +153,11 @@ export const BlogPostEdit = () => {
                 </Form.Item>
 
                 <Form.Item label="CPF ou CNPJ" name="cpf_cnpj">
-                    <Input />
+                    <Input
+                        maxLength={18}
+                        placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                        onChange={handleCpfCnpjChange}
+                    />
                 </Form.Item>
 
                 <Form.Item label="Endereco de Instalacao" name="endereco_instalacao">
@@ -152,10 +182,23 @@ export const BlogPostEdit = () => {
                     <Select options={statusOptions} />
                 </Form.Item>
 
-                <Form.Item label="Temperatura" name="temperature">
+                <Form.Item
+                    label="Temperatura"
+                    name="temperature"
+                    extra={
+                        automaticTemperature
+                            ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
+                            : "Manual para leads em aberto."
+                    }
+                >
                     <Select
                         allowClear
-                        placeholder="Selecione"
+                        placeholder={
+                            automaticTemperature
+                                ? "Temperatura automatica por status"
+                                : "Selecione"
+                        }
+                        disabled={Boolean(automaticTemperature)}
                         options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
                             value: option.value,
                             label: <TemperatureBadge value={option.value} />,

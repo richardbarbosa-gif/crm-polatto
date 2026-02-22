@@ -17,8 +17,12 @@ import {
 } from "../../components/ui";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import {
+    LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
     type LeadTemperature,
+    type LeadTemperatureTag,
+    isAutomaticLeadTemperature,
+    resolveAutomaticLeadTemperature,
     resolveLeadTemperature,
     setLeadTemperature,
 } from "../../lib/leadTemperature";
@@ -39,14 +43,20 @@ export const BlogPostShow = () => {
     const { data, isLoading } = showResult.query || showResult;
     const record = data?.data;
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [temperature, setTemperature] = useState<LeadTemperature | undefined>(undefined);
+    const [temperatureTag, setTemperatureTag] = useState<LeadTemperatureTag | undefined>(undefined);
+    const automaticTemperature = resolveAutomaticLeadTemperature(record?.status);
+    const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
 
     useEffect(() => {
-        setTemperature(resolveLeadTemperature(record));
+        setTemperatureTag(resolveLeadTemperature(record));
     }, [record]);
 
     const handleTemperatureChange = (value?: LeadTemperature) => {
-        setTemperature(value);
+        if (automaticTemperature) {
+            return;
+        }
+
+        setTemperatureTag(value);
         if (record?.id) {
             setLeadTemperature(record.id, value);
         }
@@ -84,19 +94,29 @@ export const BlogPostShow = () => {
                     <Badge tone={getStatusTone(record?.status)}>
                         {record?.status || "Novo Lead"}
                     </Badge>
-                    <TemperatureBadge value={temperature} />
+                    <TemperatureBadge value={temperatureTag} />
                     <Select
                         size="small"
                         style={{ width: 180 }}
                         allowClear
-                        placeholder="Editar temperatura"
-                        value={temperature}
+                        placeholder={
+                            automaticTemperature
+                                ? `Automatica: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
+                                : "Editar temperatura"
+                        }
+                        value={isAutomaticTemperature ? undefined : temperatureTag}
                         onChange={handleTemperatureChange}
+                        disabled={Boolean(automaticTemperature)}
                         options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
                             value: option.value,
                             label: option.label,
                         }))}
                     />
+                    {automaticTemperature ? (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                            Temperatura automatica pelo status.
+                        </Text>
+                    ) : null}
                 </Space>
 
                 <Button

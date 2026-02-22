@@ -14,6 +14,7 @@ interface ClienteRecord {
 export interface TarefaRecord {
     id: string | number;
     cliente_id?: string | number | null;
+    cliente_nome?: string | null;
     titulo?: string | null;
     tipo?: string | null;
     descricao?: string | null;
@@ -137,15 +138,27 @@ export const TaskFormModal = ({
         return Array.from(map.values());
     }, [clientes, contextData]);
 
-    const hasContextCliente = contextData?.clienteId !== undefined && contextData?.clienteId !== null;
-    const isClienteLocked = hasContextCliente && mode === "create";
-    const clienteContextLabel = getContextLabel(contextData) || "Cliente vinculado";
+    const contextClienteId = normalizeId(contextData?.clienteId);
+    const taskClienteId = normalizeId(task?.cliente_id);
+    const lockedClienteId =
+        contextClienteId !== undefined && contextClienteId !== null
+            ? contextClienteId
+            : mode === "edit"
+              ? taskClienteId
+              : undefined;
+    const isClienteLocked = lockedClienteId !== undefined && lockedClienteId !== null;
+    const clienteFromList = isClienteLocked ? clientesById.get(String(lockedClienteId)) : undefined;
+    const clienteContextLabel =
+        clienteFromList?.nome?.trim() ||
+        getContextLabel(contextData) ||
+        task?.cliente_nome?.trim() ||
+        (isClienteLocked ? `Cliente #${lockedClienteId}` : "Cliente vinculado");
     const modalTitle = mode === "edit" ? "Editar agendamento" : "Novo agendamento";
 
     useEffect(() => {
         if (!open) return;
 
-        const initialClienteId = normalizeId(task?.cliente_id ?? contextData?.clienteId);
+        const initialClienteId = normalizeId(lockedClienteId ?? task?.cliente_id ?? contextData?.clienteId);
 
         form.setFieldsValue({
             cliente_id: initialClienteId ?? undefined,
@@ -154,7 +167,7 @@ export const TaskFormModal = ({
             data_vencimento: getTaskDateValue(task?.data_vencimento, initialDate),
             descricao: task?.descricao || "",
         });
-    }, [contextData?.clienteId, form, initialDate, open, task]);
+    }, [contextData?.clienteId, form, initialDate, lockedClienteId, open, task]);
 
     const handleCancel = () => {
         form.resetFields();
@@ -166,7 +179,7 @@ export const TaskFormModal = ({
             setIsSaving(true);
 
             const values = await form.validateFields();
-            const selectedClienteId = normalizeId(contextData?.clienteId ?? values.cliente_id);
+            const selectedClienteId = normalizeId(lockedClienteId ?? values.cliente_id);
 
             if (!selectedClienteId) {
                 message.error("Selecione um cliente para continuar.");
@@ -256,7 +269,10 @@ export const TaskFormModal = ({
             <Form form={form} layout="vertical" preserve={false}>
                 {isClienteLocked ? (
                     <>
-                        <Form.Item label="Cliente">
+                        <Form.Item
+                            label="Cliente"
+                            extra="Cliente vinculado ao agendamento. Para trocar, crie uma nova atividade."
+                        >
                             <Input value={clienteContextLabel} disabled />
                         </Form.Item>
                         <Form.Item name="cliente_id" hidden>

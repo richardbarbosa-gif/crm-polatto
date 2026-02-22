@@ -1,11 +1,17 @@
+import { normalizeText } from "./formatters";
+
 export type LeadTemperature = "frio" | "morno" | "quente";
+export type LeadTemperatureAuto = "fechado" | "perdido";
+export type LeadTemperatureTag = LeadTemperature | LeadTemperatureAuto;
 
 const STORAGE_KEY = "crm-polatto:lead-temperature:v1";
 
-export const LEAD_TEMPERATURE_LABELS: Record<LeadTemperature, string> = {
+export const LEAD_TEMPERATURE_LABELS: Record<LeadTemperatureTag, string> = {
     frio: "Frio",
     morno: "Morno",
     quente: "Quente",
+    fechado: "Fechado",
+    perdido: "Perdido",
 };
 
 export const LEAD_TEMPERATURE_OPTIONS: Array<{
@@ -17,10 +23,34 @@ export const LEAD_TEMPERATURE_OPTIONS: Array<{
     { value: "quente", label: "Quente" },
 ];
 
+export const LEAD_AUTOMATIC_TEMPERATURE_OPTIONS: Array<{
+    value: LeadTemperatureAuto;
+    label: string;
+}> = [
+    { value: "fechado", label: "Fechado" },
+    { value: "perdido", label: "Perdido" },
+];
+
 type TemperatureMap = Record<string, LeadTemperature>;
 
 export const isLeadTemperature = (value: unknown): value is LeadTemperature => {
     return value === "frio" || value === "morno" || value === "quente";
+};
+
+export const isLeadTemperatureTag = (value: unknown): value is LeadTemperatureTag => {
+    return (
+        value === "frio" ||
+        value === "morno" ||
+        value === "quente" ||
+        value === "fechado" ||
+        value === "perdido"
+    );
+};
+
+export const isAutomaticLeadTemperature = (
+    value: LeadTemperatureTag | null | undefined,
+): value is LeadTemperatureAuto => {
+    return value === "fechado" || value === "perdido";
 };
 
 const toStorageKey = (id?: string | number | null): string | undefined => {
@@ -106,19 +136,38 @@ export const setLeadTemperature = (
 
 export const getLeadTemperatureFromRecord = (
     record: Record<string, any> | undefined | null,
-): LeadTemperature | undefined => {
+): LeadTemperatureTag | undefined => {
     if (!record) {
         return undefined;
     }
 
     const directValue = record.temperature ?? record.temperatura;
-    if (isLeadTemperature(directValue)) {
+    if (isLeadTemperatureTag(directValue)) {
         return directValue;
     }
 
     const metadataValue = record.metadata?.temperature ?? record.extra?.temperature;
-    if (isLeadTemperature(metadataValue)) {
+    if (isLeadTemperatureTag(metadataValue)) {
         return metadataValue;
+    }
+
+    return undefined;
+};
+
+export const resolveAutomaticLeadTemperature = (
+    status?: string | null,
+): LeadTemperatureAuto | undefined => {
+    const normalized = normalizeText(status);
+    if (!normalized) {
+        return undefined;
+    }
+
+    if (normalized.includes("fechado") || normalized.includes("ganho")) {
+        return "fechado";
+    }
+
+    if (normalized.includes("perdido")) {
+        return "perdido";
     }
 
     return undefined;
@@ -126,11 +175,23 @@ export const getLeadTemperatureFromRecord = (
 
 export const resolveLeadTemperature = (
     record: Record<string, any> | undefined | null,
-): LeadTemperature | undefined => {
+): LeadTemperatureTag | undefined => {
+    const automatic = resolveAutomaticLeadTemperature(record?.status);
+    if (automatic) {
+        return automatic;
+    }
+
     const fromRecord = getLeadTemperatureFromRecord(record);
     if (fromRecord) {
         return fromRecord;
     }
 
     return getLeadTemperature(record?.id);
+};
+
+export const resolveEditableLeadTemperature = (
+    record: Record<string, any> | undefined | null,
+): LeadTemperature | undefined => {
+    const resolved = resolveLeadTemperature(record);
+    return isLeadTemperature(resolved) ? resolved : undefined;
 };

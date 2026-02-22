@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useCreate, useGetIdentity, useList, useUpdate } from "@refinedev/core";
+import { useGetIdentity, useList, useUpdate } from "@refinedev/core";
 import { CreateButton, EditButton, ShowButton } from "@refinedev/antd";
 import { Input, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
@@ -20,11 +20,14 @@ import {
     TemperatureBadge,
 } from "../../components/ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
+import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import {
-    type LeadTemperature,
+    type LeadTemperatureTag,
+    LEAD_AUTOMATIC_TEMPERATURE_OPTIONS,
     LEAD_TEMPERATURE_OPTIONS,
     resolveLeadTemperature,
 } from "../../lib/leadTemperature";
+import { supabaseClient } from "../../utility";
 
 const { Text, Title } = Typography;
 
@@ -69,7 +72,7 @@ export const BlogPostList = () => {
         undefined,
     );
     const [temperaturaFiltro, setTemperaturaFiltro] = useState<
-        "todas" | LeadTemperature
+        "todas" | LeadTemperatureTag
     >("todas");
     const [temperatureRevision, setTemperatureRevision] = useState(0);
 
@@ -89,7 +92,6 @@ export const BlogPostList = () => {
     });
 
     const { mutateAsync: updateLead } = useUpdate();
-    const { mutate: createHistory } = useCreate();
     const { data: user } = useGetIdentity();
 
     const isLoading = clientesQuery?.isLoading;
@@ -247,18 +249,21 @@ export const BlogPostList = () => {
                 }),
             });
 
-            createHistory({
-                resource: "cliente_status_history",
-                values: {
+            const { error: historyError } = await supabaseClient
+                .from("cliente_status_history")
+                .insert({
                     cliente_id: leadArrastado.id,
                     de_status: leadArrastado.status,
                     para_status: novoStatus,
                     movido_em: new Date().toISOString(),
                     movido_por: user?.name || user?.email || null,
-                },
-                successNotification: false,
-                errorNotification: false,
-            });
+                });
+
+            if (historyError && !isSupabaseMissingRelation(historyError)) {
+                message.warning(
+                    "Status atualizado, mas nao foi possivel registrar no historico.",
+                );
+            }
         } catch {
             // Error notification is handled by refine.
         }
@@ -366,6 +371,10 @@ export const BlogPostList = () => {
                         options={[
                             { value: "todas", label: "Temperatura: Todas" },
                             ...LEAD_TEMPERATURE_OPTIONS.map((option) => ({
+                                value: option.value,
+                                label: `Temperatura: ${option.label}`,
+                            })),
+                            ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((option) => ({
                                 value: option.value,
                                 label: `Temperatura: ${option.label}`,
                             })),

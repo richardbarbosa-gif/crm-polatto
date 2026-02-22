@@ -1,10 +1,13 @@
 import { Create, useForm } from "@refinedev/antd";
 import { Col, Form, Input, InputNumber, Row, Select, message } from "antd";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { formatCpfCnpj } from "../../lib/formatters";
 import {
+    LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
     type LeadTemperature,
+    resolveAutomaticLeadTemperature,
     setLeadTemperature,
 } from "../../lib/leadTemperature";
 
@@ -44,6 +47,14 @@ export const BlogPostCreate = () => {
 
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
     const numeroInputRef = useRef<any>(null);
+    const statusValue = Form.useWatch("status", form) as string | undefined;
+    const automaticTemperature = resolveAutomaticLeadTemperature(statusValue);
+
+    useEffect(() => {
+        if (automaticTemperature) {
+            form.setFieldValue("temperature", undefined);
+        }
+    }, [automaticTemperature, form]);
 
     const formatarTelefone = (valor: string, pais: string) => {
         let sanitized = valor.replace(/\D/g, "");
@@ -65,6 +76,10 @@ export const BlogPostCreate = () => {
     const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const valorFormatado = formatarTelefone(event.target.value, paisSelecionado);
         form.setFieldValue("telefone", valorFormatado);
+    };
+
+    const handleCpfCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        form.setFieldValue("cpf_cnpj", formatCpfCnpj(event.target.value));
     };
 
     const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,7 +109,8 @@ export const BlogPostCreate = () => {
 
     const handleFinish = async (values: ClienteCreateFormValues) => {
         const { temperature, ...payload } = values;
-        pendingTemperatureRef.current = temperature;
+        const automaticFromStatus = resolveAutomaticLeadTemperature(values.status);
+        pendingTemperatureRef.current = automaticFromStatus ? undefined : temperature;
         return formProps.onFinish?.(payload as any);
     };
 
@@ -133,7 +149,12 @@ export const BlogPostCreate = () => {
                             name="cpf_cnpj"
                             rules={[{ required: true }]}
                         >
-                            <Input size="large" />
+                            <Input
+                                size="large"
+                                maxLength={18}
+                                placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                                onChange={handleCpfCnpjChange}
+                            />
                         </Form.Item>
                     </Col>
                 </Row>
@@ -231,11 +252,24 @@ export const BlogPostCreate = () => {
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>
-                        <Form.Item label="Temperatura" name="temperature">
+                        <Form.Item
+                            label="Temperatura"
+                            name="temperature"
+                            extra={
+                                automaticTemperature
+                                    ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
+                                    : "Manual para leads em aberto."
+                            }
+                        >
                             <Select
                                 size="large"
                                 allowClear
-                                placeholder="Selecione"
+                                placeholder={
+                                    automaticTemperature
+                                        ? "Temperatura automatica por status"
+                                        : "Selecione"
+                                }
+                                disabled={Boolean(automaticTemperature)}
                                 options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
                                     value: option.value,
                                     label: <TemperatureBadge value={option.value} />,
