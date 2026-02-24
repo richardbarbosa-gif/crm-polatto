@@ -27,6 +27,8 @@ import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 
+type EmployeeSourceTable = "funcionarios" | "crm_employees";
+
 type EmployeeRecord = {
     id: string;
     full_name: string;
@@ -67,6 +69,32 @@ const matchOwnerPerformance = (
     );
 };
 
+const toEmployeeRecord = (row: any, sourceTable: EmployeeSourceTable): EmployeeRecord => {
+    if (sourceTable === "funcionarios") {
+        return {
+            id: String(row.id),
+            full_name: row.nome || "Sem nome",
+            email: row.email || null,
+            role: row.cargo || null,
+            monthly_goal_value: Number(row.monthly_goal_value || 0),
+            monthly_goal_count: Number(row.monthly_goal_count || 0),
+            active: row.ativo !== false,
+            created_at: row.created_at || null,
+        };
+    }
+
+    return {
+        id: String(row.id),
+        full_name: row.full_name || "Sem nome",
+        email: row.email || null,
+        role: row.role || null,
+        monthly_goal_value: Number(row.monthly_goal_value || 0),
+        monthly_goal_count: Number(row.monthly_goal_count || 0),
+        active: row.active !== false,
+        created_at: row.created_at || null,
+    };
+};
+
 export const InsightsEmployeesPage = () => {
     const [form] = Form.useForm<EmployeeFormValues>();
     const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
@@ -76,6 +104,7 @@ export const InsightsEmployeesPage = () => {
     const [editingEmployee, setEditingEmployee] = useState<EmployeeRecord | null>(null);
     const [schemaMissing, setSchemaMissing] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [sourceTable, setSourceTable] = useState<EmployeeSourceTable>("funcionarios");
 
     const clientesResult = useList<InsightClienteRecord>({
         resource: "clientes",
@@ -88,16 +117,33 @@ export const InsightsEmployeesPage = () => {
         setIsLoadingEmployees(true);
         setErrorMessage(null);
         try {
-            const { data, error } = await supabaseClient
+            const current = await supabaseClient
+                .from("funcionarios")
+                .select("*")
+                .order("created_at", { ascending: false });
+
+            if (!current.error) {
+                setSourceTable("funcionarios");
+                setEmployees(((current.data || []) as any[]).map((row) => toEmployeeRecord(row, "funcionarios")));
+                setSchemaMissing(false);
+                return;
+            }
+
+            if (!isSupabaseMissingRelation(current.error)) {
+                throw current.error;
+            }
+
+            const legacy = await supabaseClient
                 .from("crm_employees")
                 .select("*")
                 .order("created_at", { ascending: false });
 
-            if (error) {
-                throw error;
+            if (legacy.error) {
+                throw legacy.error;
             }
 
-            setEmployees((data || []) as EmployeeRecord[]);
+            setSourceTable("crm_employees");
+            setEmployees(((legacy.data || []) as any[]).map((row) => toEmployeeRecord(row, "crm_employees")));
             setSchemaMissing(false);
         } catch (error: any) {
             if (isSupabaseMissingRelation(error)) {
@@ -184,30 +230,53 @@ export const InsightsEmployeesPage = () => {
         try {
             setIsSaving(true);
             const values = await form.validateFields();
-            const payload = {
-                full_name: values.full_name.trim(),
-                email: values.email?.trim() || null,
-                role: values.role?.trim() || null,
-                monthly_goal_value: Number(values.monthly_goal_value || 0),
-                monthly_goal_count: Number(values.monthly_goal_count || 0),
-                active: values.active !== false,
-                updated_at: new Date().toISOString(),
-            };
 
-            if (editingEmployee?.id) {
-                const { error } = await supabaseClient
-                    .from("crm_employees")
-                    .update(payload)
-                    .eq("id", editingEmployee.id);
-                if (error) throw error;
-                message.success("Funcionario atualizado.");
+            if (sourceTable === "funcionarios") {
+                const payload = {
+                    nome: values.full_name.trim(),
+                    email: values.email?.trim() || null,
+                    cargo: values.role?.trim() || null,
+                    ativo: values.active !== false,
+                };
+
+                if (editingEmployee?.id) {
+                    const { error } = await supabaseClient
+                        .from("funcionarios")
+                        .update(payload)
+                        .eq("id", editingEmployee.id);
+                    if (error) throw error;
+                    message.success("Funcionario atualizado.");
+                } else {
+                    const { error } = await supabaseClient.from("funcionarios").insert(payload);
+                    if (error) throw error;
+                    message.success("Funcionario criado.");
+                }
             } else {
-                const { error } = await supabaseClient.from("crm_employees").insert({
-                    ...payload,
-                    created_at: new Date().toISOString(),
-                });
-                if (error) throw error;
-                message.success("Funcionario criado.");
+                const payload = {
+                    full_name: values.full_name.trim(),
+                    email: values.email?.trim() || null,
+                    role: values.role?.trim() || null,
+                    monthly_goal_value: Number(values.monthly_goal_value || 0),
+                    monthly_goal_count: Number(values.monthly_goal_count || 0),
+                    active: values.active !== false,
+                    updated_at: new Date().toISOString(),
+                };
+
+                if (editingEmployee?.id) {
+                    const { error } = await supabaseClient
+                        .from("crm_employees")
+                        .update(payload)
+                        .eq("id", editingEmployee.id);
+                    if (error) throw error;
+                    message.success("Funcionario atualizado.");
+                } else {
+                    const { error } = await supabaseClient.from("crm_employees").insert({
+                        ...payload,
+                        created_at: new Date().toISOString(),
+                    });
+                    if (error) throw error;
+                    message.success("Funcionario criado.");
+                }
             }
 
             setIsModalOpen(false);
@@ -229,7 +298,7 @@ export const InsightsEmployeesPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Funcionarios"
-                subtitle="Cadastro do time comercial com metas padrao e produtividade vinculada ao CRM."
+                subtitle={`Cadastro do time comercial com metas e produtividade vinculada ao CRM. Fonte: ${sourceTable}.`}
                 extra={
                     <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
                         Novo funcionario
@@ -243,7 +312,7 @@ export const InsightsEmployeesPage = () => {
             />
 
             {schemaMissing ? (
-                <MissingSchemaAlert description="Execute o script `database/insights_schema.sql` no Supabase SQL Editor para liberar o modulo de funcionarios e metas." />
+                <MissingSchemaAlert description="Nenhuma tabela de funcionarios encontrada (`funcionarios` ou `crm_employees`)." />
             ) : null}
 
             {errorMessage ? (

@@ -1,8 +1,9 @@
 import { useList } from "@refinedev/core";
 import { Edit, useForm } from "@refinedev/antd";
-import { Form, Input, InputNumber, Select } from "antd";
+import { Alert, Form, Input, InputNumber, Select } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj } from "../../lib/formatters";
 import {
     LEAD_TEMPERATURE_LABELS,
@@ -25,8 +26,9 @@ type ClienteEditFormValues = {
     temperature?: LeadTemperature;
 };
 
-export const BlogPostEdit = () => {
+export const ClienteEdit = () => {
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
+    const { canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
 
     const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>(
         {
@@ -48,6 +50,7 @@ export const BlogPostEdit = () => {
     );
 
     const record = (query?.data?.data as any) ?? null;
+    const canEditRecord = canViewAllLeads || matchesLeadOwner(record?.responsavel, ownerCandidatesNormalized);
     const watchedStatus = Form.useWatch("status", form) as string | undefined;
     const automaticTemperature = resolveAutomaticLeadTemperature(watchedStatus ?? record?.status);
 
@@ -93,6 +96,12 @@ export const BlogPostEdit = () => {
     }, [automaticTemperature, form]);
 
     useEffect(() => {
+        if (!canViewAllLeads) {
+            form.setFieldValue("responsavel", ownerDisplayName);
+        }
+    }, [canViewAllLeads, form, ownerDisplayName]);
+
+    useEffect(() => {
         const currentDocument = form.getFieldValue("cpf_cnpj");
         if (!currentDocument) {
             return;
@@ -116,8 +125,23 @@ export const BlogPostEdit = () => {
             setLeadTemperature(record.id, nextTemperature);
         }
 
-        return formProps.onFinish?.({ ...payload, status } as any);
+        return formProps.onFinish?.(
+            { ...payload, status, responsavel: canViewAllLeads ? values.responsavel : ownerDisplayName } as any,
+        );
     };
+
+    if (!canEditRecord && record) {
+        return (
+            <Edit saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="Acesso restrito"
+                    description="Este lead nao esta vinculado ao seu usuario."
+                />
+            </Edit>
+        );
+    }
 
     return (
         <Edit saveButtonProps={saveButtonProps}>
@@ -175,7 +199,10 @@ export const BlogPostEdit = () => {
                 </Form.Item>
 
                 <Form.Item label="Responsavel" name="responsavel">
-                    <Input placeholder="Ex.: Joao / Equipe Comercial" />
+                    <Input
+                        placeholder="Ex.: Joao / Equipe Comercial"
+                        disabled={!canViewAllLeads}
+                    />
                 </Form.Item>
 
                 <Form.Item label="Status da Negociacao" name="status">

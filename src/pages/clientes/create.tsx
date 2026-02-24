@@ -2,6 +2,7 @@ import { Create, useForm } from "@refinedev/antd";
 import { Col, Form, Input, InputNumber, Row, Select, message } from "antd";
 import { useEffect, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj } from "../../lib/formatters";
 import {
     LEAD_TEMPERATURE_LABELS,
@@ -27,8 +28,9 @@ type ClienteCreateFormValues = {
     temperature?: LeadTemperature;
 };
 
-export const BlogPostCreate = () => {
+export const ClienteCreate = () => {
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
+    const { canViewAllLeads, ownerDisplayName } = useCrmAccess();
 
     const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>(
         {
@@ -55,6 +57,12 @@ export const BlogPostCreate = () => {
             form.setFieldValue("temperature", undefined);
         }
     }, [automaticTemperature, form]);
+
+    useEffect(() => {
+        if (!canViewAllLeads) {
+            form.setFieldValue("responsavel", ownerDisplayName);
+        }
+    }, [canViewAllLeads, form, ownerDisplayName]);
 
     const formatarTelefone = (valor: string, pais: string) => {
         let sanitized = valor.replace(/\D/g, "");
@@ -111,6 +119,9 @@ export const BlogPostCreate = () => {
         const { temperature, ...payload } = values;
         const automaticFromStatus = resolveAutomaticLeadTemperature(values.status);
         pendingTemperatureRef.current = automaticFromStatus ? undefined : temperature;
+        if (!canViewAllLeads) {
+            payload.responsavel = ownerDisplayName;
+        }
         return formProps.onFinish?.(payload as any);
     };
 
@@ -234,7 +245,11 @@ export const BlogPostCreate = () => {
                     </Col>
                     <Col xs={24} lg={6}>
                         <Form.Item label="Responsavel" name="responsavel">
-                            <Input placeholder="Ex: Joao (Comercial)" size="large" />
+                            <Input
+                                placeholder="Ex: Joao (Comercial)"
+                                size="large"
+                                disabled={!canViewAllLeads}
+                            />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>

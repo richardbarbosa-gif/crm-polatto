@@ -28,6 +28,8 @@ import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 
+type GoalsSourceMode = "current" | "legacy";
+
 type EmployeeRecord = {
     id: string;
     full_name: string;
@@ -43,29 +45,6 @@ type GoalRecord = {
     target_value?: number | null;
     target_wins?: number | null;
     notes?: string | null;
-    crm_employees?:
-        | {
-              id: string;
-              full_name?: string | null;
-              email?: string | null;
-              role?: string | null;
-          }[]
-        | null;
-};
-
-type GoalRecordRaw = {
-    id: string;
-    employee_id: string;
-    goal_month: string;
-    target_value?: number | null;
-    target_wins?: number | null;
-    notes?: string | null;
-    crm_employees?: {
-        id: string;
-        full_name?: string | null;
-        email?: string | null;
-        role?: string | null;
-    }[] | null;
 };
 
 type GoalFormValues = {
@@ -108,6 +87,7 @@ export const InsightsGoalsPage = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [isSaving, setIsSaving] = useState<boolean>(false);
+    const [sourceMode, setSourceMode] = useState<GoalsSourceMode>("current");
 
     const clientesResult = useList<InsightClienteRecord>({
         resource: "clientes",
@@ -121,22 +101,78 @@ export const InsightsGoalsPage = () => {
         setErrorMessage(null);
         try {
             const monthStart = monthRef.startOf("month").format("YYYY-MM-DD");
-            const [{ data: employeesData, error: employeesError }, { data: goalsData, error: goalsError }] =
-                await Promise.all([
-                    supabaseClient.from("crm_employees").select("*").order("full_name", { ascending: true }),
-                    supabaseClient
-                        .from("crm_goals")
-                        .select(
-                            "id, employee_id, goal_month, target_value, target_wins, notes, crm_employees(id, full_name, email, role)",
-                        )
-                        .eq("goal_month", monthStart),
-                ]);
 
-            if (employeesError) throw employeesError;
-            if (goalsError) throw goalsError;
+            const currentEmployees = await supabaseClient
+                .from("funcionarios")
+                .select("*")
+                .order("nome", { ascending: true });
 
-            setEmployees((employeesData || []) as EmployeeRecord[]);
-            setGoals((goalsData || []) as GoalRecordRaw[]);
+            if (!currentEmployees.error) {
+                const currentGoals = await supabaseClient
+                    .from("metas")
+                    .select("*")
+                    .eq("mes_referencia", monthStart);
+
+                if (currentGoals.error && !isSupabaseMissingRelation(currentGoals.error)) {
+                    throw currentGoals.error;
+                }
+
+                setSourceMode("current");
+                setEmployees(
+                    ((currentEmployees.data || []) as any[]).map((row) => ({
+                        id: String(row.id),
+                        full_name: row.nome || "Sem nome",
+                        email: row.email || null,
+                        role: row.cargo || null,
+                        active: row.ativo !== false,
+                    })),
+                );
+                setGoals(
+                    ((currentGoals.data || []) as any[]).map((row) => ({
+                        id: String(row.id),
+                        employee_id: String(row.funcionario_id),
+                        goal_month: row.mes_referencia,
+                        target_value: Number(row.valor_meta || 0),
+                        target_wins: Number(row.target_wins || 0),
+                        notes: row.notes || null,
+                    })),
+                );
+                setSchemaMissing(false);
+                return;
+            }
+
+            if (!isSupabaseMissingRelation(currentEmployees.error)) {
+                throw currentEmployees.error;
+            }
+
+            const [legacyEmployees, legacyGoals] = await Promise.all([
+                supabaseClient.from("crm_employees").select("*").order("full_name", { ascending: true }),
+                supabaseClient.from("crm_goals").select("*").eq("goal_month", monthStart),
+            ]);
+
+            if (legacyEmployees.error) throw legacyEmployees.error;
+            if (legacyGoals.error) throw legacyGoals.error;
+
+            setSourceMode("legacy");
+            setEmployees(
+                ((legacyEmployees.data || []) as any[]).map((row) => ({
+                    id: String(row.id),
+                    full_name: row.full_name || "Sem nome",
+                    email: row.email || null,
+                    role: row.role || null,
+                    active: row.active !== false,
+                })),
+            );
+            setGoals(
+                ((legacyGoals.data || []) as any[]).map((row) => ({
+                    id: String(row.id),
+                    employee_id: String(row.employee_id),
+                    goal_month: row.goal_month,
+                    target_value: Number(row.target_value || 0),
+                    target_wins: Number(row.target_wins || 0),
+                    notes: row.notes || null,
+                })),
+            );
             setSchemaMissing(false);
         } catch (error: any) {
             if (isSupabaseMissingRelation(error)) {
@@ -231,19 +267,34 @@ export const InsightsGoalsPage = () => {
         try {
             setIsSaving(true);
             const values = await form.validateFields();
-            const payload = {
-                employee_id: values.employee_id,
-                goal_month: monthRef.startOf("month").format("YYYY-MM-DD"),
-                target_value: Number(values.target_value || 0),
-                target_wins: Number(values.target_wins || 0),
-                notes: values.notes?.trim() || null,
-                updated_at: new Date().toISOString(),
-            };
+            const monthStart = monthRef.startOf("month").format("YYYY-MM-DD");
 
-            const { error } = await supabaseClient
-                .from("crm_goals")
-                .upsert(payload, { onConflict: "employee_id,goal_month" });
-            if (error) throw error;
+            if (sourceMode === "current") {
+                const payload = {
+                    funcionario_id: values.employee_id,
+                    mes_referencia: monthStart,
+                    valor_meta: Number(values.target_value || 0),
+                };
+
+                const { error } = await supabaseClient
+                    .from("metas")
+                    .upsert(payload, { onConflict: "funcionario_id,mes_referencia" });
+                if (error) throw error;
+            } else {
+                const payload = {
+                    employee_id: values.employee_id,
+                    goal_month: monthStart,
+                    target_value: Number(values.target_value || 0),
+                    target_wins: Number(values.target_wins || 0),
+                    notes: values.notes?.trim() || null,
+                    updated_at: new Date().toISOString(),
+                };
+
+                const { error } = await supabaseClient
+                    .from("crm_goals")
+                    .upsert(payload, { onConflict: "employee_id,goal_month" });
+                if (error) throw error;
+            }
 
             message.success("Meta salva.");
             setIsModalOpen(false);
@@ -264,7 +315,7 @@ export const InsightsGoalsPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Relatorio de metas"
-                subtitle="Defina metas por funcionario e acompanhe o atingimento por valor ou quantidade."
+                subtitle={`Defina metas por funcionario e acompanhe o atingimento. Fonte: ${sourceMode === "current" ? "metas/funcionarios" : "crm_goals/crm_employees"}.`}
                 extra={
                     <Space wrap>
                         <DatePicker
@@ -294,7 +345,7 @@ export const InsightsGoalsPage = () => {
             />
 
             {schemaMissing ? (
-                <MissingSchemaAlert description="Execute o script `database/insights_schema.sql` no Supabase SQL Editor para liberar o modulo de metas." />
+                <MissingSchemaAlert description="Nenhuma tabela de metas encontrada (`metas` ou `crm_goals`)." />
             ) : null}
 
             {errorMessage ? (

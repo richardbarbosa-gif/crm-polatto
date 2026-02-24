@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useGetIdentity, useList, useUpdate } from "@refinedev/core";
-import { CreateButton, EditButton, ShowButton } from "@refinedev/antd";
-import { Input, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
+import { useList, useUpdate } from "@refinedev/core";
+import { CreateButton, EditButton } from "@refinedev/antd";
+import { Drawer, Input, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
     AppstoreOutlined,
     ArrowUpOutlined,
     BarsOutlined,
     CheckCircleOutlined,
     DollarCircleOutlined,
+    EyeOutlined,
     PlusOutlined,
     SearchOutlined,
 } from "@ant-design/icons";
@@ -19,14 +20,18 @@ import {
     StatCard,
     TemperatureBadge,
 } from "../../components/ui";
+import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
+import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import { addLeadActivity } from "../../lib/leadTimeline";
 import {
     type LeadTemperatureTag,
     LEAD_AUTOMATIC_TEMPERATURE_OPTIONS,
     LEAD_TEMPERATURE_OPTIONS,
     resolveLeadTemperature,
 } from "../../lib/leadTemperature";
+import { LeadDetails } from "./lead-details";
 import { supabaseClient } from "../../utility";
 
 const { Text, Title } = Typography;
@@ -65,7 +70,13 @@ const getStatusTone = (
     return "info";
 };
 
-export const BlogPostList = () => {
+export const ClienteList = () => {
+    const {
+        canViewAllLeads,
+        isLoadingAccess,
+        ownerCandidatesNormalized,
+        ownerDisplayName,
+    } = useCrmAccess();
     const [viewType, setViewType] = useState<"kanban" | "list">("kanban");
     const [searchText, setSearchText] = useState("");
     const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(
@@ -79,10 +90,15 @@ export const BlogPostList = () => {
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false);
+    const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
+    const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+    const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
 
     const { query: clientesQuery } = useList({
         resource: "clientes",
         pagination: { mode: "off" },
+        liveMode: "auto",
     });
 
     const { query: stagesQuery } = useList({
@@ -92,16 +108,62 @@ export const BlogPostList = () => {
     });
 
     const { mutateAsync: updateLead } = useUpdate();
-    const { data: user } = useGetIdentity();
-
-    const isLoading = clientesQuery?.isLoading;
+    const isLoading = clientesQuery?.isLoading || isLoadingAccess;
     const rawData = clientesQuery?.data?.data || [];
+
+    const visibleData = useMemo(() => {
+        if (canViewAllLeads) {
+            return rawData;
+        }
+
+        return rawData.filter((cliente: any) =>
+            matchesLeadOwner(cliente.responsavel, ownerCandidatesNormalized),
+        );
+    }, [canViewAllLeads, ownerCandidatesNormalized, rawData]);
+
+    const selectedLead = useMemo<Record<string, any> | null>(() => {
+        if (selectedLeadId === null || selectedLeadId === undefined) {
+            return null;
+        }
+
+        const lead =
+            rawData.find((cliente: any) => String(cliente.id) === String(selectedLeadId)) || null;
+
+        if (!lead || lead.id === null || lead.id === undefined) {
+            return null;
+        }
+
+        return lead as Record<string, any>;
+    }, [rawData, selectedLeadId]);
 
     useEffect(() => {
         const handleFocus = () => setTemperatureRevision((prev) => prev + 1);
         window.addEventListener("focus", handleFocus);
         return () => window.removeEventListener("focus", handleFocus);
     }, []);
+
+    const refetchClientes = clientesQuery?.refetch;
+
+    useEffect(() => {
+        const channel = supabaseClient
+            .channel("crm-leads-realtime-notifications")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "clientes" },
+                (payload) => {
+                    const leadName = (payload.new as Record<string, unknown>)?.nome;
+                    message.info(
+                        `Novo lead recebido: ${typeof leadName === "string" ? leadName : "Sem nome"}`,
+                    );
+                    refetchClientes?.();
+                },
+            )
+            .subscribe();
+
+        return () => {
+            supabaseClient.removeChannel(channel);
+        };
+    }, [refetchClientes]);
 
     const stages = useMemo(() => {
         const data = (stagesQuery?.data?.data as any[]) || [];
@@ -120,23 +182,23 @@ export const BlogPostList = () => {
     const stageNames = useMemo(() => stages.map((stage) => stage.nome), [stages]);
 
     const stagesVisiveis = useMemo(() => {
-        const possuiDesconhecidos = rawData.some(
+        const possuiDesconhecidos = visibleData.some(
             (cliente: any) => cliente.status && !stageNames.includes(cliente.status),
         );
 
         if (!possuiDesconhecidos) return stages;
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [rawData, stageNames, stages]);
+    }, [stageNames, stages, visibleData]);
 
     const responsaveisDisponiveis = useMemo(() => {
         const valores = new Set<string>();
-        rawData.forEach((cliente: any) => {
+        visibleData.forEach((cliente: any) => {
             if (cliente.responsavel) {
                 valores.add(cliente.responsavel);
             }
         });
         return Array.from(valores).sort((a, b) => a.localeCompare(b));
-    }, [rawData]);
+    }, [visibleData]);
 
     const getClienteTemperature = (cliente: any) => {
         return resolveLeadTemperature(cliente);
@@ -145,7 +207,7 @@ export const BlogPostList = () => {
     const clientesFiltrados = useMemo(() => {
         const texto = normalizeText(searchText);
 
-        return rawData.filter((cliente: any) => {
+        return visibleData.filter((cliente: any) => {
             if (responsavelFiltro && cliente.responsavel !== responsavelFiltro) {
                 return false;
             }
@@ -168,7 +230,7 @@ export const BlogPostList = () => {
             );
         });
     }, [
-        rawData,
+        visibleData,
         responsavelFiltro,
         searchText,
         temperaturaFiltro,
@@ -223,7 +285,7 @@ export const BlogPostList = () => {
 
         if (!draggedItemId) return;
 
-        const leadArrastado = rawData.find((item: any) => item.id.toString() === draggedItemId);
+        const leadArrastado = visibleData.find((item: any) => item.id.toString() === draggedItemId);
 
         if (!leadArrastado) {
             message.warning("Lead nao encontrado.");
@@ -256,7 +318,7 @@ export const BlogPostList = () => {
                     de_status: leadArrastado.status,
                     para_status: novoStatus,
                     movido_em: new Date().toISOString(),
-                    movido_por: user?.name || user?.email || null,
+                    movido_por: ownerDisplayName || null,
                 });
 
             if (historyError && !isSupabaseMissingRelation(historyError)) {
@@ -264,9 +326,41 @@ export const BlogPostList = () => {
                     "Status atualizado, mas nao foi possivel registrar no historico.",
                 );
             }
+
+            if (leadArrastado.id !== undefined && leadArrastado.id !== null) {
+                await addLeadActivity({
+                    leadId: String(leadArrastado.id),
+                    activityType: "status",
+                    title: "Mudanca de status",
+                    description: `${leadArrastado.status || "-"} -> ${novoStatus}`,
+                    fromStatus: leadArrastado.status || undefined,
+                    toStatus: novoStatus,
+                    author: ownerDisplayName,
+                });
+            }
         } catch {
             // Error notification is handled by refine.
         }
+    };
+
+    const openLeadDrawer = (lead: any) => {
+        setSelectedLeadId(lead.id);
+        setIsLeadDrawerOpen(true);
+    };
+
+    const closeLeadDrawer = () => {
+        setIsLeadDrawerOpen(false);
+        setSelectedLeadId(null);
+    };
+
+    const openTaskModal = (contextData: TaskContextData) => {
+        setTaskContextData(contextData);
+        setIsTaskModalOpen(true);
+    };
+
+    const closeTaskModal = () => {
+        setIsTaskModalOpen(false);
+        setTaskContextData(null);
     };
 
     if (isLoading) {
@@ -396,6 +490,14 @@ export const BlogPostList = () => {
                     Novo Lead
                 </CreateButton>
             </div>
+
+            {!canViewAllLeads ? (
+                <div style={{ padding: "0 20px 8px 20px" }}>
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        Visao restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
+                    </Text>
+                </div>
+            ) : null}
 
             <div style={{ padding: "0 20px", marginTop: "5px" }}>
                 <div
@@ -558,12 +660,14 @@ export const BlogPostList = () => {
                                                         size="small"
                                                         recordItemId={cliente.id}
                                                     />,
-                                                    <ShowButton
+                                                    <Button
                                                         key={`show-${cliente.id}`}
-                                                        hideText
+                                                        icon={<EyeOutlined />}
                                                         size="small"
-                                                        recordItemId={cliente.id}
-                                                    />,
+                                                        onClick={() => openLeadDrawer(cliente)}
+                                                    >
+                                                        Ver
+                                                    </Button>,
                                                 ]}
                                             >
                                                 <div style={{ marginBottom: "6px" }}>
@@ -658,6 +762,13 @@ export const BlogPostList = () => {
                         title: "",
                         render: (_, record: any) => (
                             <Space>
+                                <Button
+                                    size="small"
+                                    icon={<EyeOutlined />}
+                                    onClick={() => openLeadDrawer(record)}
+                                >
+                                    Ver
+                                </Button>
                                 <EditButton hideText size="small" recordItemId={record.id} />
                             </Space>
                         ),
@@ -680,6 +791,26 @@ export const BlogPostList = () => {
             <div style={{ flex: 1, backgroundColor: "#fff" }}>
                 {viewType === "kanban" ? <KanbanView /> : <ListView />}
             </div>
+
+            <Drawer
+                title={selectedLead?.nome ? `Lead: ${selectedLead.nome}` : "Detalhes do lead"}
+                open={isLeadDrawerOpen}
+                width={620}
+                onClose={closeLeadDrawer}
+                destroyOnClose
+            >
+                <LeadDetails
+                    record={selectedLead}
+                    currentUserLabel={ownerDisplayName}
+                    onScheduleVisit={openTaskModal}
+                />
+            </Drawer>
+
+            <TaskFormModal
+                open={isTaskModalOpen}
+                onClose={closeTaskModal}
+                contextData={taskContextData}
+            />
         </div>
     );
 };

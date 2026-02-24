@@ -13,3 +13,12 @@ export const isSupabaseMissingRelation = (error: any): boolean => {
         message.includes("schema cache")
     );
 };
+
+export const isSupabaseMissingColumn = (error: any): boolean => {
+    if (!error) {
+        return false;
+    }
+
+    const message = String(error?.message || error?.details || "").toLowerCase();
+    return error?.code === "42703" || (message.includes("column") && message.includes("does not exist"));
+};

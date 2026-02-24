@@ -30,6 +30,7 @@ import {
     RiseOutlined,
     TeamOutlined,
     UsergroupAddOutlined,
+    SettingOutlined,
 } from "@ant-design/icons";
 import authProvider from "./authProvider";
 import { Header } from "./components/header";
@@ -37,11 +38,11 @@ import { ColorModeContextProvider } from "./contexts/color-mode";
 import { AgendaPage } from "./pages/agenda";
 import { BaseClientesPage } from "./pages/base-clientes";
 import {
-    BlogPostCreate,
-    BlogPostEdit,
-    BlogPostList,
-    BlogPostShow,
-} from "./pages/blog-posts";
+    ClienteCreate,
+    ClienteEdit,
+    ClienteList,
+    ClienteShow,
+} from "./pages/clientes";
 import { DashboardPage } from "./pages/dashboard";
 import {
     InsightsActivitiesPage,
@@ -53,6 +54,7 @@ import {
     InsightsROIPage,
 } from "./pages/insights";
 import { supabaseClient } from "./utility";
+import { ConfiguracoesPage } from "./pages/configuracoes";
 
 function App() {
     return (
@@ -62,7 +64,13 @@ function App() {
                     <ConfigProvider
                         theme={{
                             token: {
-                                colorPrimary: "#001529",
+                                colorPrimary: "#002b5b",
+                                colorInfo: "#002b5b",
+                                colorSuccess: "#15803d",
+                                colorWarning: "#d97706",
+                                colorError: "#dc2626",
+                                borderRadius: 12,
+                                fontFamily: "'Segoe UI', 'Montserrat', sans-serif",
                             },
                             components: {
                                 Layout: {
@@ -75,10 +83,22 @@ function App() {
                                     itemBg: "#001529",
                                     subMenuItemBg: "#001529",
                                     itemColor: "#ffffff",
-                                    itemHoverColor: "#FFD700",
-                                    itemSelectedColor: "#FFD700",
+                                    itemHoverColor: "#ffd166",
+                                    itemSelectedColor: "#ffd166",
                                     itemSelectedBg: "rgba(255, 215, 0, 0.1)",
                                     iconSize: 18,
+                                },
+                                Button: {
+                                    borderRadius: 10,
+                                },
+                                Card: {
+                                    borderRadiusLG: 14,
+                                },
+                                Input: {
+                                    borderRadius: 10,
+                                },
+                                Select: {
+                                    borderRadius: 10,
                                 },
                             },
                         }}
@@ -199,6 +219,32 @@ function App() {
                                                 icon: <TeamOutlined />,
                                             },
                                         },
+                                        {
+                                            name: "configuracoes",
+                                            list: "/configuracoes",
+                                            meta: {
+                                                label: "Configuracoes",
+                                                icon: <SettingOutlined />,
+                                            },
+                                        },
+                                        {
+                                            name: "funcionarios",
+                                        },
+                                        {
+                                            name: "metas",
+                                        },
+                                        {
+                                            name: "atividades_lead",
+                                        },
+                                        {
+                                            name: "tarefas",
+                                        },
+                                        {
+                                            name: "pipeline_stages",
+                                        },
+                                        {
+                                            name: "cliente_status_history",
+                                        }
                                     ]}
                                     options={{
                                         syncWithLocation: true,
@@ -236,17 +282,28 @@ function App() {
                                                                             src="/logo.png"
                                                                             alt="Polatto"
                                                                             style={{
-                                                                                width: collapsed
-                                                                                    ? "40px"
-                                                                                    : "100%",
+                                                                                width: collapsed ? "40px" : "100%",
                                                                                 height: "100%",
                                                                                 objectFit: "cover",
-                                                                                transition:
-                                                                                    "all 0.3s ease",
+                                                                                transition: "all 0.3s ease",
                                                                             }}
                                                                         />
                                                                     </div>
                                                                 )}
+                                                                render={({ items, logout }) => {
+                                                                    return (
+                                                                        <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                                                                            <div style={{ flex: 1, overflowY: "auto" }}>
+                                                                                {items}
+                                                                            </div>
+                                                                            <div style={{ padding: "16px", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                                                                                <div style={{ marginTop: '8px' }}>
+                                                                                    {logout}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                }}
                                                             />
                                                         )}
                                                     >
@@ -256,49 +313,23 @@ function App() {
                                             }
                                         >
                                             <Route index element={<DashboardPage />} />
-
+                                            <Route path="/configuracoes" element={<ConfiguracoesPage />} />
                                             <Route path="/clientes">
-                                                <Route index element={<BlogPostList />} />
-                                                <Route
-                                                    path="create"
-                                                    element={<BlogPostCreate />}
-                                                />
-                                                <Route path="edit/:id" element={<BlogPostEdit />} />
-                                                <Route path="show/:id" element={<BlogPostShow />} />
+                                                <Route index element={<ClienteList />} />
+                                                <Route path="create" element={<ClienteCreate />} />
+                                                <Route path="edit/:id" element={<ClienteEdit />} />
+                                                <Route path="show/:id" element={<ClienteShow />} />
                                             </Route>
-
                                             <Route path="/agenda" element={<AgendaPage />} />
-                                            <Route
-                                                path="/base-clientes"
-                                                element={<BaseClientesPage />}
-                                            />
+                                            <Route path="/base-clientes" element={<BaseClientesPage />} />
                                             <Route path="/insights" element={<InsightsPanelPage />} />
-                                            <Route
-                                                path="/insights/painel"
-                                                element={<InsightsPanelPage />}
-                                            />
+                                            <Route path="/insights/painel" element={<InsightsPanelPage />} />
                                             <Route path="/insights/roi" element={<InsightsROIPage />} />
-                                            <Route
-                                                path="/insights/gains-losses"
-                                                element={<InsightsGainsLossesPage />}
-                                            />
-                                            <Route
-                                                path="/insights/activities"
-                                                element={<InsightsActivitiesPage />}
-                                            />
-                                            <Route
-                                                path="/insights/logs"
-                                                element={<InsightsActivityLogPage />}
-                                            />
-                                            <Route
-                                                path="/insights/employees"
-                                                element={<InsightsEmployeesPage />}
-                                            />
-                                            <Route
-                                                path="/insights/goals"
-                                                element={<InsightsGoalsPage />}
-                                            />
-
+                                            <Route path="/insights/gains-losses" element={<InsightsGainsLossesPage />} />
+                                            <Route path="/insights/activities" element={<InsightsActivitiesPage />} />
+                                            <Route path="/insights/logs" element={<InsightsActivityLogPage />} />
+                                            <Route path="/insights/employees" element={<InsightsEmployeesPage />} />
+                                            <Route path="/insights/goals" element={<InsightsGoalsPage />} />
                                             <Route path="*" element={<ErrorComponent />} />
                                         </Route>
 
@@ -341,17 +372,10 @@ function App() {
                                                     />
                                                 }
                                             />
-                                            <Route
-                                                path="/register"
-                                                element={<AuthPage type="register" />}
-                                            />
-                                            <Route
-                                                path="/forgot-password"
-                                                element={<AuthPage type="forgotPassword" />}
-                                            />
+                                            <Route path="/register" element={<AuthPage type="register" />} />
+                                            <Route path="/forgot-password" element={<AuthPage type="forgotPassword" />} />
                                         </Route>
                                     </Routes>
-
                                     <RefineKbar />
                                     <UnsavedChangesNotifier />
                                     <DocumentTitleHandler />
@@ -367,3 +391,4 @@ function App() {
 }
 
 export default App;
+

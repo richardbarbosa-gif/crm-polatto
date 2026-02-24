@@ -16,6 +16,7 @@ import {
     SkeletonRow,
     StatCard,
 } from "../../components/ui";
+import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import {
     formatCurrencyBRL,
     formatDateBR,
@@ -47,6 +48,8 @@ const PERIOD_OPTIONS = [
 
 export const BaseClientesPage = () => {
     const navigate = useNavigate();
+    const { canViewAllLeads, isLoadingAccess, ownerCandidatesNormalized, ownerDisplayName } =
+        useCrmAccess();
     const [clientesFechados, setClientesFechados] = useState<ClienteBaseRecord[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -103,6 +106,10 @@ export const BaseClientesPage = () => {
         const oneDayMs = 24 * 60 * 60 * 1000;
 
         return clientesFechados.filter((cliente) => {
+            if (!canViewAllLeads && !matchesLeadOwner(cliente.responsavel, ownerCandidatesNormalized)) {
+                return false;
+            }
+
             if (responsavelFiltro && cliente.responsavel !== responsavelFiltro) {
                 return false;
             }
@@ -125,7 +132,14 @@ export const BaseClientesPage = () => {
                 normalizeText(value).includes(texto),
             );
         });
-    }, [clientesFechados, periodoDias, responsavelFiltro, searchText]);
+    }, [
+        canViewAllLeads,
+        clientesFechados,
+        ownerCandidatesNormalized,
+        periodoDias,
+        responsavelFiltro,
+        searchText,
+    ]);
 
     const hasValorField = useMemo(() => {
         return clientesFiltrados.some((item) =>
@@ -272,7 +286,7 @@ export const BaseClientesPage = () => {
         },
     ];
 
-    if (isLoading) {
+    if (isLoading || isLoadingAccess) {
         return (
             <div style={{ padding: 20 }}>
                 <SkeletonCard cards={3} />
@@ -301,6 +315,13 @@ export const BaseClientesPage = () => {
                     <Typography.Text type="secondary">
                         Clientes com oportunidades fechadas
                     </Typography.Text>
+                    {!canViewAllLeads ? (
+                        <div>
+                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                Visao restrita para {ownerDisplayName}
+                            </Typography.Text>
+                        </div>
+                    ) : null}
                 </div>
                 <Button type="primary" onClick={() => navigate("/clientes")}>
                     Ir para Oportunidades

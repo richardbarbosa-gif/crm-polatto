@@ -20,6 +20,7 @@ import {
     Skeleton,
     Tag,
     Typography,
+    message,
 } from "antd";
 import type { CalendarProps } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
@@ -34,6 +35,7 @@ import {
     TASK_EXECUTION_STATUS_OPTIONS,
     type TaskExecutionStatus,
 } from "../../lib/taskExecutionStatus";
+import { supabaseClient } from "../../utility";
 
 const TIPO_LABELS: Record<string, string> = {
     visita: "Visita",
@@ -114,6 +116,7 @@ export const AgendaPage = () => {
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
+        liveMode: "auto",
         filters: [
             {
                 field: "data_vencimento",
@@ -131,6 +134,27 @@ export const AgendaPage = () => {
     const query = listResult.query || listResult;
     const { data, isLoading, isError, error, refetch } = query;
     const tarefas: TarefaRecord[] = data?.data || [];
+
+    useEffect(() => {
+        const channel = supabaseClient
+            .channel("crm-tasks-realtime-notifications")
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "tarefas" },
+                (payload) => {
+                    const titulo = (payload.new as Record<string, unknown>)?.titulo;
+                    message.info(
+                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem titulo"}`,
+                    );
+                    refetch?.();
+                },
+            )
+            .subscribe();
+
+        return () => {
+            supabaseClient.removeChannel(channel);
+        };
+    }, [refetch]);
 
     const clientesResult = useList<ClienteAgendaRecord>({
         resource: "clientes",
