@@ -1,10 +1,11 @@
-import { useList } from "@refinedev/core";
 import { Edit, useForm } from "@refinedev/antd";
+import { useList } from "@refinedev/core";
 import { Alert, Form, Input, InputNumber, Select } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj } from "../../lib/formatters";
+import { buildLeadStatusOptions, coerceLeadStatusValue } from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -30,56 +31,37 @@ export const ClienteEdit = () => {
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
     const { canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
 
-    const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>(
-        {
-            onMutationSuccess: (data) => {
-                const updatedId = (data as any)?.data?.id ?? (query?.data?.data as any)?.id;
-                const temperature = pendingTemperatureRef.current;
+    const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({
+        onMutationSuccess: (data) => {
+            const updatedId = (data as any)?.data?.id ?? (query?.data?.data as any)?.id;
+            const temperature = pendingTemperatureRef.current;
 
-                if (updatedId && temperature) {
-                    setLeadTemperature(updatedId, temperature);
-                }
+            if (updatedId && temperature) {
+                setLeadTemperature(updatedId, temperature);
+            }
 
-                if (updatedId && !temperature) {
-                    setLeadTemperature(updatedId, undefined);
-                }
+            if (updatedId && !temperature) {
+                setLeadTemperature(updatedId, undefined);
+            }
 
-                pendingTemperatureRef.current = undefined;
-            },
+            pendingTemperatureRef.current = undefined;
         },
-    );
+    });
 
     const record = (query?.data?.data as any) ?? null;
     const canEditRecord = canViewAllLeads || matchesLeadOwner(record?.responsavel, ownerCandidatesNormalized);
     const watchedStatus = Form.useWatch("status", form) as string | undefined;
-    const automaticTemperature = resolveAutomaticLeadTemperature(watchedStatus ?? record?.status);
 
     const { query: stagesQuery } = useList({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
         sorters: [{ field: "ordem", order: "asc" }],
     });
-
     const stagesData = (stagesQuery?.data?.data as any[]) || [];
+    const statusOptions = useMemo(() => buildLeadStatusOptions(stagesData), [stagesData]);
 
-    const statusOptions = useMemo(() => {
-        if (stagesData.length > 0) {
-            return stagesData
-                .map((stage) => {
-                    const nome = stage.nome ?? stage.name;
-                    return nome ? { value: nome, label: nome } : null;
-                })
-                .filter((option): option is { value: string; label: string } => Boolean(option));
-        }
-
-        return [
-            { value: "Novo Lead", label: "Novo Lead (Chegou agora)" },
-            { value: "Em Negociação", label: "Em Negociação" },
-            { value: "Visita Agendada", label: "Visita Agendada" },
-            { value: "Fechado", label: "Fechado / Ganho" },
-            { value: "Perdido", label: "Perdido" },
-        ];
-    }, [stagesData]);
+    const normalizedStatus = coerceLeadStatusValue(watchedStatus ?? record?.status, statusOptions);
+    const automaticTemperature = resolveAutomaticLeadTemperature(normalizedStatus);
 
     useEffect(() => {
         if (!record?.id) {
@@ -94,6 +76,21 @@ export const ClienteEdit = () => {
             form.setFieldValue("temperature", undefined);
         }
     }, [automaticTemperature, form]);
+
+    useEffect(() => {
+        const currentStatus = form.getFieldValue("status") ?? record?.status;
+        if (!currentStatus && statusOptions.length > 0) {
+            form.setFieldValue("status", statusOptions[0].value);
+            return;
+        }
+
+        if (currentStatus) {
+            const nextStatus = coerceLeadStatusValue(currentStatus, statusOptions);
+            if (nextStatus !== currentStatus) {
+                form.setFieldValue("status", nextStatus);
+            }
+        }
+    }, [form, record?.status, statusOptions]);
 
     useEffect(() => {
         if (!canViewAllLeads) {
@@ -116,7 +113,8 @@ export const ClienteEdit = () => {
 
     const handleFinish = async (values: ClienteEditFormValues) => {
         const { temperature, status, ...payload } = values;
-        const automaticFromStatus = resolveAutomaticLeadTemperature(status ?? record?.status);
+        const nextStatus = coerceLeadStatusValue(status ?? record?.status, statusOptions);
+        const automaticFromStatus = resolveAutomaticLeadTemperature(nextStatus);
         const nextTemperature = automaticFromStatus ? undefined : temperature;
 
         pendingTemperatureRef.current = nextTemperature;
@@ -126,7 +124,11 @@ export const ClienteEdit = () => {
         }
 
         return formProps.onFinish?.(
-            { ...payload, status, responsavel: canViewAllLeads ? values.responsavel : ownerDisplayName } as any,
+            {
+                ...payload,
+                status: nextStatus,
+                responsavel: canViewAllLeads ? values.responsavel : ownerDisplayName,
+            } as any,
         );
     };
 
@@ -191,9 +193,7 @@ export const ClienteEdit = () => {
                 <Form.Item label="Media da Conta de Energia (R$)" name="conta_energia_media">
                     <InputNumber
                         style={{ width: "220px" }}
-                        formatter={(value) =>
-                            `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
-                        }
+                        formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
                         parser={(value) => value!.replace(/[^\d.-]/g, "")}
                     />
                 </Form.Item>
@@ -205,7 +205,11 @@ export const ClienteEdit = () => {
                     />
                 </Form.Item>
 
-                <Form.Item label="Status da Negociacao" name="status">
+                <Form.Item
+                    label="Status da Negociacao"
+                    name="status"
+                    rules={[{ required: true, message: "Selecione o status." }]}
+                >
                     <Select options={statusOptions} />
                 </Form.Item>
 

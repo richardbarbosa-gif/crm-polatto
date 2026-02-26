@@ -31,6 +31,7 @@ import {
     LEAD_TEMPERATURE_OPTIONS,
     resolveLeadTemperature,
 } from "../../lib/leadTemperature";
+import { isLeadRecentlyCreated } from "../../lib/leadVisibility";
 import { LeadDetails } from "./lead-details";
 import { supabaseClient } from "../../utility";
 
@@ -116,9 +117,14 @@ export const ClienteList = () => {
             return rawData;
         }
 
-        return rawData.filter((cliente: any) =>
-            matchesLeadOwner(cliente.responsavel, ownerCandidatesNormalized),
-        );
+        return rawData.filter((cliente: any) => {
+            if (matchesLeadOwner(cliente.responsavel, ownerCandidatesNormalized)) {
+                return true;
+            }
+
+            // Evita "salvou e sumiu" para quem acabou de cadastrar um lead.
+            return isLeadRecentlyCreated(cliente.id);
+        });
     }, [canViewAllLeads, ownerCandidatesNormalized, rawData]);
 
     const selectedLead = useMemo<Record<string, any> | null>(() => {

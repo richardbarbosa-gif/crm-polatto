@@ -210,15 +210,7 @@ export const AgendaPage = () => {
             return <Tag color="red">Atrasada</Tag>;
         }
 
-        if (situation === "hoje") {
-            return <Tag color="blue">Hoje</Tag>;
-        }
-
-        if (situation === "proxima") {
-            return <Tag color="gold">Proxima</Tag>;
-        }
-
-        return null;
+        return <Tag color="processing">{TASK_EXECUTION_STATUS_LABELS.pendente}</Tag>;
     };
 
     const tarefasPorDia = useMemo(() => {
@@ -305,7 +297,9 @@ export const AgendaPage = () => {
                             const statusLabel =
                                 executionStatus !== "pendente"
                                     ? TASK_EXECUTION_STATUS_LABELS[executionStatus]
-                                    : getSituationLabel(situation);
+                                    : situation === "atrasada"
+                                      ? getSituationLabel(situation)
+                                      : TASK_EXECUTION_STATUS_LABELS.pendente;
 
                             return (
                                 <Badge

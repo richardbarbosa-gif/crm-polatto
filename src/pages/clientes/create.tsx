@@ -1,9 +1,11 @@
 import { Create, useForm } from "@refinedev/antd";
+import { useList } from "@refinedev/core";
 import { Col, Form, Input, InputNumber, Row, Select, message } from "antd";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
-import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { formatCpfCnpj } from "../../lib/formatters";
+import { buildLeadStatusOptions, coerceLeadStatusValue } from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -11,6 +13,7 @@ import {
     resolveAutomaticLeadTemperature,
     setLeadTemperature,
 } from "../../lib/leadTemperature";
+import { markLeadAsRecentlyCreated } from "../../lib/leadVisibility";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -30,39 +33,97 @@ type ClienteCreateFormValues = {
 
 export const ClienteCreate = () => {
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
-    const { canViewAllLeads, ownerDisplayName } = useCrmAccess();
 
-    const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>(
-        {
-            onMutationSuccess: (data) => {
-                const createdId = (data as any)?.data?.id;
-                const pendingTemperature = pendingTemperatureRef.current;
-
-                if (createdId && pendingTemperature) {
-                    setLeadTemperature(createdId, pendingTemperature);
-                }
-
-                pendingTemperatureRef.current = undefined;
-            },
-        },
+    const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>(
+        [],
     );
-
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
     const numeroInputRef = useRef<any>(null);
+
+    const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>({
+        onMutationSuccess: (data) => {
+            const createdId = (data as any)?.data?.id;
+            const pendingTemperature = pendingTemperatureRef.current;
+
+            if (createdId && pendingTemperature) {
+                setLeadTemperature(createdId, pendingTemperature);
+            }
+            if (createdId) {
+                markLeadAsRecentlyCreated(createdId);
+            }
+
+            pendingTemperatureRef.current = undefined;
+        },
+    });
+
+    const { query: stagesQuery } = useList({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        sorters: [{ field: "ordem", order: "asc" }],
+    });
+
+    const stagesData = (stagesQuery?.data?.data as any[]) || [];
+    const statusOptions = useMemo(() => buildLeadStatusOptions(stagesData), [stagesData]);
+    const responsavelOptions = useMemo(() => {
+        const map = new Map<string, { label: string; value: string }>();
+
+        listaResponsaveis.forEach((option) => {
+            const key = option.value.trim().toLowerCase();
+            if (!key) {
+                return;
+            }
+            map.set(key, option);
+        });
+        return Array.from(map.values());
+    }, [listaResponsaveis]);
+
     const statusValue = Form.useWatch("status", form) as string | undefined;
     const automaticTemperature = resolveAutomaticLeadTemperature(statusValue);
+
+    useEffect(() => {
+        const carregarEquipe = async () => {
+            try {
+                const { employees } = await fetchEmployeesDirectory();
+                const opcoes = employees
+                    .filter((emp) => emp.ativo && emp.nome && !emp.nome.includes("@"))
+                    .map((emp) => ({
+                        label: emp.nome,
+                        value: emp.nome,
+                    }));
+                setListaResponsaveis(opcoes);
+            } catch {
+                setListaResponsaveis([]);
+            }
+        };
+
+        carregarEquipe();
+    }, []);
+
+    useEffect(() => {
+        const currentStatus = form.getFieldValue("status");
+        if (!currentStatus && statusOptions.length > 0) {
+            form.setFieldValue("status", statusOptions[0].value);
+            return;
+        }
+
+        if (currentStatus) {
+            const normalizedStatus = coerceLeadStatusValue(currentStatus, statusOptions);
+            if (normalizedStatus !== currentStatus) {
+                form.setFieldValue("status", normalizedStatus);
+            }
+        }
+    }, [form, statusOptions]);
+
+    useEffect(() => {
+        // Novo lead sempre inicia sem responsavel pre-selecionado.
+        form.setFieldValue("responsavel", undefined);
+    }, [form]);
 
     useEffect(() => {
         if (automaticTemperature) {
             form.setFieldValue("temperature", undefined);
         }
     }, [automaticTemperature, form]);
-
-    useEffect(() => {
-        if (!canViewAllLeads) {
-            form.setFieldValue("responsavel", ownerDisplayName);
-        }
-    }, [canViewAllLeads, form, ownerDisplayName]);
 
     const formatarTelefone = (valor: string, pais: string) => {
         let sanitized = valor.replace(/\D/g, "");
@@ -117,12 +178,13 @@ export const ClienteCreate = () => {
 
     const handleFinish = async (values: ClienteCreateFormValues) => {
         const { temperature, ...payload } = values;
-        const automaticFromStatus = resolveAutomaticLeadTemperature(values.status);
-        pendingTemperatureRef.current = automaticFromStatus ? undefined : temperature;
-        if (!canViewAllLeads) {
-            payload.responsavel = ownerDisplayName;
-        }
-        return formProps.onFinish?.(payload as any);
+        const status = coerceLeadStatusValue(values.status, statusOptions);
+        const automaticFromStatus = resolveAutomaticLeadTemperature(status);
+        const nextTemperature = automaticFromStatus ? undefined : temperature;
+
+        pendingTemperatureRef.current = nextTemperature;
+
+        return formProps.onFinish?.({ ...payload, status, responsavel: values.responsavel } as any);
     };
 
     const selectPais = (
@@ -146,20 +208,12 @@ export const ClienteCreate = () => {
             <Form {...formProps} layout="vertical" onFinish={handleFinish}>
                 <Row gutter={20}>
                     <Col xs={24} lg={12}>
-                        <Form.Item
-                            label="Nome Completo"
-                            name="nome"
-                            rules={[{ required: true }]}
-                        >
+                        <Form.Item label="Nome Completo" name="nome" rules={[{ required: true }]}>
                             <Input size="large" />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={12}>
-                        <Form.Item
-                            label="CPF ou CNPJ"
-                            name="cpf_cnpj"
-                            rules={[{ required: true }]}
-                        >
+                        <Form.Item label="CPF ou CNPJ" name="cpf_cnpj" rules={[{ required: true }]}>
                             <Input
                                 size="large"
                                 maxLength={18}
@@ -172,16 +226,8 @@ export const ClienteCreate = () => {
 
                 <Row gutter={20}>
                     <Col xs={24} lg={12}>
-                        <Form.Item
-                            label="WhatsApp / Telefone"
-                            name="telefone"
-                            rules={[{ required: true }]}
-                        >
-                            <Input
-                                addonBefore={selectPais}
-                                size="large"
-                                onChange={handlePhoneChange}
-                            />
+                        <Form.Item label="WhatsApp / Telefone" name="telefone" rules={[{ required: true }]}>
+                            <Input addonBefore={selectPais} size="large" onChange={handlePhoneChange} />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={12}>
@@ -244,26 +290,30 @@ export const ClienteCreate = () => {
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>
-                        <Form.Item label="Responsavel" name="responsavel">
-                            <Input
-                                placeholder="Ex: Joao (Comercial)"
+                        <Form.Item
+                            label="Responsavel"
+                            name="responsavel"
+                            rules={[{ required: true, message: "Obrigatorio" }]}
+                        >
+                            <Select
+                                showSearch
+                                allowClear
+                                placeholder="Selecione a equipe"
                                 size="large"
-                                disabled={!canViewAllLeads}
+                                options={responsavelOptions}
+                                filterOption={(input, option) =>
+                                    (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
+                                }
                             />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>
-                        <Form.Item label="Status Inicial" name="status" initialValue="Novo Lead">
-                            <Select
-                                size="large"
-                                options={[
-                                    { value: "Novo Lead", label: "Novo Lead" },
-                                    { value: "Visita Agendada", label: "Visita Agendada" },
-                                    { value: "Em Negociação", label: "Em Negociação" },
-                                    { value: "Fechado", label: "Fechado" },
-                                    { value: "Perdido", label: "Perdido" },
-                                ]}
-                            />
+                        <Form.Item
+                            label="Status Inicial"
+                            name="status"
+                            rules={[{ required: true, message: "Selecione o status inicial." }]}
+                        >
+                            <Select size="large" options={statusOptions} />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>

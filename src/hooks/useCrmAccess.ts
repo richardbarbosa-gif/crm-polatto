@@ -12,6 +12,8 @@ type IdentityRecord = {
     [key: string]: unknown;
 };
 
+const NON_CRM_ROLE_TERMS = new Set(["authenticated", "anon", "service_role", "supabase_admin"]);
+
 const toStringValue = (value: unknown): string | undefined => {
     if (typeof value !== "string") {
         return undefined;
@@ -48,6 +50,20 @@ const dedupeStrings = (values: Array<string | undefined>): string[] => {
     });
 
     return Array.from(normalizedMap.values());
+};
+
+const toBusinessRole = (value: unknown): string | undefined => {
+    const parsed = toStringValue(value);
+    if (!parsed) {
+        return undefined;
+    }
+
+    const normalized = normalizeText(parsed);
+    if (!normalized || NON_CRM_ROLE_TERMS.has(normalized)) {
+        return undefined;
+    }
+
+    return parsed;
 };
 
 export const matchesLeadOwner = (
@@ -126,16 +142,18 @@ export const useCrmAccess = () => {
 
     const roleFromMetadata = useMemo(() => {
         return (
-            toStringValue(identity?.role) ||
-            toStringValue(identity?.app_metadata?.role) ||
-            toStringValue(identity?.user_metadata?.role) ||
-            toStringValue(identity?.user_metadata?.perfil) ||
+            toBusinessRole(identity?.app_metadata?.role) ||
+            toBusinessRole(identity?.user_metadata?.role) ||
+            toBusinessRole(identity?.user_metadata?.perfil) ||
+            toBusinessRole(identity?.role) ||
             undefined
         );
     }, [identity]);
 
-    const roleCandidate = employee?.cargo || roleFromMetadata;
-    const canViewAllLeads = isManagerRole(roleCandidate);
+    const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata;
+    const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
+    // Fail-open quando nao ha papel definido para evitar ocultar leads validos.
+    const canViewAllLeads = !hasExplicitRole || isManagerRole(roleCandidate);
 
     const ownerCandidates = useMemo(() => {
         const identityName =

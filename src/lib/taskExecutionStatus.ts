@@ -5,7 +5,7 @@ export type TaskExecutionStatus =
     | "voltar_outro_dia";
 
 export const TASK_EXECUTION_STATUS_LABELS: Record<TaskExecutionStatus, string> = {
-    pendente: "Sem tratativa",
+    pendente: "Em andamento",
     resolvido: "Resolvido",
     ligar_novamente: "Ligar de novo",
     voltar_outro_dia: "Voltar outro dia",
@@ -49,11 +49,23 @@ const normalizeTaskExecutionStatus = (value: unknown): TaskExecutionStatus | und
         return "voltar_outro_dia";
     }
 
-    if (normalized === "resolvido") {
+    if (
+        normalized === "resolvido" ||
+        normalized === "corrigido" ||
+        normalized === "concluido" ||
+        normalized === "concluida" ||
+        normalized === "finalizado" ||
+        normalized === "finalizada"
+    ) {
         return "resolvido";
     }
 
-    if (normalized === "pendente") {
+    if (
+        normalized === "pendente" ||
+        normalized === "em_andamento" ||
+        normalized === "em-andamento" ||
+        normalized === "andamento"
+    ) {
         return "pendente";
     }
 
@@ -175,11 +187,17 @@ export const resolveTaskExecutionStatus = (
         record.status_execucao ??
         record.status_atividade;
     const normalizedDirect = normalizeTaskExecutionStatus(direct);
-    if (normalizedDirect) {
-        return normalizedDirect;
+    const resolved = normalizedDirect || getTaskExecutionStatus(record.id);
+
+    const dueDate = record.data_vencimento ?? record.due_date ?? record.data ?? record.date;
+    if (resolved !== "pendente" && dueDate) {
+        const due = new Date(dueDate);
+        if (!Number.isNaN(due.getTime()) && due.getTime() > Date.now()) {
+            return "pendente";
+        }
     }
 
-    return getTaskExecutionStatus(record.id);
+    return resolved;
 };
 
 export const hasTaskExecutionAction = (status: TaskExecutionStatus): boolean => {
