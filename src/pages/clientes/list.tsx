@@ -1,16 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useList, useUpdate } from "@refinedev/core";
 import { CreateButton, EditButton } from "@refinedev/antd";
-import { Drawer, Input, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
+import { Drawer, Input, Modal, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
     AppstoreOutlined,
     ArrowUpOutlined,
     BarsOutlined,
     CheckCircleOutlined,
+    DeleteOutlined,
     DollarCircleOutlined,
     EyeOutlined,
     PlusOutlined,
     SearchOutlined,
+    SettingOutlined,
 } from "@ant-design/icons";
 import {
     Badge,
@@ -42,12 +44,21 @@ type Stage = {
     nome: string;
     cor?: string;
     ordem?: number;
+    persisted?: boolean;
 };
 
 const DEFAULT_STAGES: Stage[] = [
     { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
     { id: "negociacao", nome: "Em Negociação", cor: "#3182ce", ordem: 2 },
     { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 3 },
+    { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
+    { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
+];
+
+const DEFAULT_STAGE_BLUEPRINT: Stage[] = [
+    { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
+    { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 2 },
+    { id: "negociacao", nome: "Em Negociacao", cor: "#3182ce", ordem: 3 },
     { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
     { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
 ];
@@ -95,6 +106,23 @@ export const ClienteList = () => {
     const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
+    const [isStageManagerOpen, setIsStageManagerOpen] = useState(false);
+    const [newStageName, setNewStageName] = useState("");
+    const [newStageColor, setNewStageColor] = useState("#5d9cec");
+    const [isCreatingStage, setIsCreatingStage] = useState(false);
+    const [stagePendingDelete, setStagePendingDelete] = useState<Stage | null>(null);
+    const [deleteDestinationStage, setDeleteDestinationStage] = useState<string | undefined>(
+        undefined,
+    );
+    const [isDeletingStage, setIsDeletingStage] = useState(false);
+    const [isBoardPanning, setIsBoardPanning] = useState(false);
+    const boardRef = useRef<HTMLDivElement | null>(null);
+    const boardPanStartRef = useRef<{
+        x: number;
+        y: number;
+        scrollLeft: number;
+        scrollTop: number;
+    } | null>(null);
 
     const { query: clientesQuery } = useList({
         resource: "clientes",
@@ -111,6 +139,10 @@ export const ClienteList = () => {
     const { mutateAsync: updateLead } = useUpdate();
     const isLoading = clientesQuery?.isLoading || isLoadingAccess;
     const rawData = clientesQuery?.data?.data || [];
+
+    const persistedStagesRaw = useMemo(() => {
+        return ((stagesQuery?.data?.data as any[]) || []).filter((stage) => stage !== null);
+    }, [stagesQuery?.data?.data]);
 
     const visibleData = useMemo(() => {
         if (canViewAllLeads) {
@@ -172,20 +204,28 @@ export const ClienteList = () => {
     }, [refetchClientes]);
 
     const stages = useMemo(() => {
-        const data = (stagesQuery?.data?.data as any[]) || [];
-        const normalized = data
+        const normalized = persistedStagesRaw
             .map((stage) => ({
                 id: stage.id,
                 nome: stage.nome ?? stage.name ?? "",
                 cor: stage.cor ?? stage.color,
                 ordem: stage.ordem ?? stage.order ?? stage.sort_order,
+                persisted: stage.id !== undefined && stage.id !== null,
             }))
             .filter((stage) => stage.nome)
             .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
-        return normalized.length > 0 ? normalized : DEFAULT_STAGES;
-    }, [stagesQuery?.data?.data]);
+        if (normalized.length > 0) {
+            return normalized;
+        }
+        return DEFAULT_STAGE_BLUEPRINT.map((stage) => ({ ...stage, persisted: false }));
+    }, [persistedStagesRaw]);
 
     const stageNames = useMemo(() => stages.map((stage) => stage.nome), [stages]);
+    const manageableStages = useMemo(
+        () => stages.filter((stage) => stage.nome !== "Outros"),
+        [stages],
+    );
+    const canDeleteAnyStage = manageableStages.length > 1;
 
     const stagesVisiveis = useMemo(() => {
         const possuiDesconhecidos = visibleData.some(
@@ -195,6 +235,35 @@ export const ClienteList = () => {
         if (!possuiDesconhecidos) return stages;
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
     }, [stageNames, stages, visibleData]);
+
+    const leadCountByStatus = useMemo(() => {
+        return rawData.reduce<Record<string, number>>((acc, cliente: any) => {
+            if (!cliente?.status) {
+                return acc;
+            }
+            acc[cliente.status] = (acc[cliente.status] || 0) + 1;
+            return acc;
+        }, {});
+    }, [rawData]);
+
+    const leadsInPendingDeleteStage = useMemo(() => {
+        if (!stagePendingDelete) {
+            return 0;
+        }
+        return leadCountByStatus[stagePendingDelete.nome] || 0;
+    }, [leadCountByStatus, stagePendingDelete]);
+
+    const deleteStageDestinationOptions = useMemo(() => {
+        if (!stagePendingDelete) {
+            return [];
+        }
+        return manageableStages
+            .filter((stage) => stage.nome !== stagePendingDelete.nome)
+            .map((stage) => ({
+                value: stage.nome,
+                label: stage.nome,
+            }));
+    }, [manageableStages, stagePendingDelete]);
 
     const responsaveisDisponiveis = useMemo(() => {
         const valores = new Set<string>();
@@ -208,6 +277,156 @@ export const ClienteList = () => {
 
     const getClienteTemperature = (cliente: any) => {
         return resolveLeadTemperature(cliente);
+    };
+
+    const persistDefaultStagesIfNeeded = async () => {
+        const refreshed = await stagesQuery?.refetch?.();
+        const existingRows = ((refreshed?.data?.data as any[]) || persistedStagesRaw).filter(
+            (stage: any) => stage !== null && stage !== undefined,
+        );
+        if (existingRows.length > 0) {
+            return true;
+        }
+
+        const payload = DEFAULT_STAGE_BLUEPRINT.map((stage, index) => ({
+            nome: stage.nome,
+            cor: stage.cor || getStatusAccent(stage.nome),
+            ordem: index + 1,
+        }));
+
+        const { error } = await supabaseClient.from("pipeline_stages").insert(payload);
+
+        if (error) {
+            message.error("Nao foi possivel preparar as colunas do funil.");
+            return false;
+        }
+
+        await stagesQuery?.refetch?.();
+        return true;
+    };
+
+    const openStageManager = async () => {
+        const ready = await persistDefaultStagesIfNeeded();
+        if (!ready) {
+            return;
+        }
+        setIsStageManagerOpen(true);
+    };
+
+    const handleCreateStage = async () => {
+        const nome = newStageName.trim();
+        if (!nome) {
+            message.warning("Informe o nome da coluna.");
+            return;
+        }
+
+        const duplicated = manageableStages.some(
+            (stage) => normalizeText(stage.nome) === normalizeText(nome),
+        );
+        if (duplicated) {
+            message.warning("Ja existe uma coluna com esse nome.");
+            return;
+        }
+
+        setIsCreatingStage(true);
+        try {
+            const ready = await persistDefaultStagesIfNeeded();
+            if (!ready) {
+                return;
+            }
+
+            const maxOrder = manageableStages.reduce((acc, stage) => {
+                return Math.max(acc, Number(stage.ordem || 0));
+            }, 0);
+
+            const { error } = await supabaseClient.from("pipeline_stages").insert({
+                nome,
+                cor: newStageColor,
+                ordem: maxOrder + 1,
+            });
+
+            if (error) {
+                throw error;
+            }
+
+            message.success(`Coluna "${nome}" criada com sucesso.`);
+            setNewStageName("");
+            setNewStageColor("#5d9cec");
+            await stagesQuery?.refetch?.();
+        } catch {
+            message.error("Nao foi possivel criar a coluna.");
+        } finally {
+            setIsCreatingStage(false);
+        }
+    };
+
+    const requestDeleteStage = (stage: Stage) => {
+        if (!canDeleteAnyStage) {
+            message.warning("Mantenha ao menos uma coluna no funil.");
+            return;
+        }
+
+        setStagePendingDelete(stage);
+        const defaultDestination = manageableStages.find(
+            (item) => item.nome !== stage.nome,
+        )?.nome;
+        setDeleteDestinationStage(defaultDestination);
+    };
+
+    const cancelDeleteStage = () => {
+        setStagePendingDelete(null);
+        setDeleteDestinationStage(undefined);
+    };
+
+    const confirmDeleteStage = async () => {
+        if (!stagePendingDelete) {
+            return;
+        }
+
+        if (
+            leadsInPendingDeleteStage > 0 &&
+            (!deleteDestinationStage || deleteDestinationStage === stagePendingDelete.nome)
+        ) {
+            message.warning("Selecione uma coluna destino para mover os leads.");
+            return;
+        }
+
+        if (stagePendingDelete.id === undefined || stagePendingDelete.id === null) {
+            message.error("Nao foi possivel identificar a coluna para exclusao.");
+            return;
+        }
+
+        setIsDeletingStage(true);
+        try {
+            if (leadsInPendingDeleteStage > 0 && deleteDestinationStage) {
+                const { error: moveError } = await supabaseClient
+                    .from("clientes")
+                    .update({ status: deleteDestinationStage })
+                    .eq("status", stagePendingDelete.nome);
+
+                if (moveError) {
+                    throw moveError;
+                }
+            }
+
+            const { error: deleteError } = await supabaseClient
+                .from("pipeline_stages")
+                .delete()
+                .eq("id", stagePendingDelete.id);
+
+            if (deleteError) {
+                throw deleteError;
+            }
+
+            message.success(`Coluna "${stagePendingDelete.nome}" excluida.`);
+            cancelDeleteStage();
+            await stagesQuery?.refetch?.();
+            await clientesQuery?.refetch?.();
+        } catch {
+            message.error("Nao foi possivel excluir a coluna.");
+        } finally {
+            setIsDeletingStage(false);
+        }
     };
 
     const clientesFiltrados = useMemo(() => {
@@ -260,6 +479,8 @@ export const ClienteList = () => {
         setDraggedItemId(id);
         setIsDragging(true);
         setActiveDropColumn(null);
+        setIsBoardPanning(false);
+        boardPanStartRef.current = null;
         event.dataTransfer.effectAllowed = "move";
         event.currentTarget.style.opacity = "0.5";
         event.currentTarget.style.cursor = "grabbing";
@@ -271,6 +492,57 @@ export const ClienteList = () => {
         setDraggedItemId(null);
         setIsDragging(false);
         setActiveDropColumn(null);
+    };
+
+    const shouldIgnoreBoardPan = (target: EventTarget | null) => {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+        return Boolean(target.closest("[data-pan-ignore='true']"));
+    };
+
+    const handleBoardMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (event.button !== 0 || isDragging || shouldIgnoreBoardPan(event.target)) {
+            return;
+        }
+
+        const board = boardRef.current;
+        if (!board) {
+            return;
+        }
+
+        boardPanStartRef.current = {
+            x: event.clientX,
+            y: event.clientY,
+            scrollLeft: board.scrollLeft,
+            scrollTop: board.scrollTop,
+        };
+        setIsBoardPanning(true);
+    };
+
+    const handleBoardMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+        if (!isBoardPanning || !boardPanStartRef.current) {
+            return;
+        }
+
+        const board = boardRef.current;
+        if (!board) {
+            return;
+        }
+
+        const deltaX = event.clientX - boardPanStartRef.current.x;
+        const deltaY = event.clientY - boardPanStartRef.current.y;
+        board.scrollLeft = boardPanStartRef.current.scrollLeft - deltaX;
+        board.scrollTop = boardPanStartRef.current.scrollTop - deltaY;
+        event.preventDefault();
+    };
+
+    const stopBoardPan = () => {
+        if (!isBoardPanning) {
+            return;
+        }
+        boardPanStartRef.current = null;
+        setIsBoardPanning(false);
     };
 
     const handleDragOver = (event: React.DragEvent<HTMLDivElement>, status: string) => {
@@ -368,6 +640,16 @@ export const ClienteList = () => {
         setIsTaskModalOpen(false);
         setTaskContextData(null);
     };
+
+    useEffect(() => {
+        const handleMouseUp = () => {
+            boardPanStartRef.current = null;
+            setIsBoardPanning(false);
+        };
+
+        window.addEventListener("mouseup", handleMouseUp);
+        return () => window.removeEventListener("mouseup", handleMouseUp);
+    }, []);
 
     if (isLoading) {
         return (
@@ -495,6 +777,9 @@ export const ClienteList = () => {
                 >
                     Novo Lead
                 </CreateButton>
+                <Button icon={<SettingOutlined />} onClick={openStageManager}>
+                    Colunas
+                </Button>
             </div>
 
             {!canViewAllLeads ? (
@@ -534,6 +819,9 @@ export const ClienteList = () => {
                         accentColor="#ed8936"
                     />
                 </div>
+                <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>
+                    Dica: clique e arraste no fundo do kanban para navegar como "maozinha".
+                </Text>
             </div>
         </div>
     );
@@ -552,13 +840,22 @@ export const ClienteList = () => {
 
         return (
             <div
+                ref={boardRef}
+                className="crm-kanban-scroll"
+                onMouseDown={handleBoardMouseDown}
+                onMouseMove={handleBoardMouseMove}
+                onMouseUp={stopBoardPan}
+                onMouseLeave={stopBoardPan}
                 style={{
                     display: "flex",
-                    overflowX: "auto",
+                    overflow: "auto",
                     height: "calc(100vh - 210px)",
                     backgroundColor: "#fff",
                     padding: "20px",
                     gap: "10px",
+                    cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
+                    userSelect: isBoardPanning ? "none" : "auto",
+                    scrollbarWidth: "none",
                 }}
             >
                 {stagesVisiveis.map((estagio) => {
@@ -585,6 +882,7 @@ export const ClienteList = () => {
                                 maxWidth: "300px",
                                 display: "flex",
                                 flexDirection: "column",
+                                alignSelf: "flex-start",
                                 borderRight: "1px solid #f0f0f0",
                                 padding: "0 10px",
                                 transition: "background 0.2s",
@@ -623,7 +921,7 @@ export const ClienteList = () => {
                                 />
                             </div>
 
-                            <div style={{ flex: 1, overflowY: "auto", minHeight: "200px" }}>
+                            <div style={{ minHeight: "200px" }}>
                                 {clientesDaColuna.length === 0 ? (
                                     <div
                                         style={{
@@ -642,6 +940,7 @@ export const ClienteList = () => {
                                     clientesDaColuna.map((cliente: any) => (
                                         <div
                                             key={cliente.id}
+                                            data-pan-ignore="true"
                                             draggable
                                             onDragStart={(event) =>
                                                 handleDragStart(event, cliente.id.toString())
@@ -717,7 +1016,7 @@ export const ClienteList = () => {
                                         </div>
                                     ))
                                 )}
-                                <div style={{ height: "50px" }} />
+                                <div style={{ height: "24px" }} />
                             </div>
                         </div>
                     );
@@ -795,8 +1094,145 @@ export const ClienteList = () => {
         >
             <KommoHeader />
             <div style={{ flex: 1, backgroundColor: "#fff" }}>
+                <style>{`
+                    .crm-kanban-scroll::-webkit-scrollbar {
+                        width: 0;
+                        height: 0;
+                        display: none;
+                    }
+                `}</style>
                 {viewType === "kanban" ? <KanbanView /> : <ListView />}
             </div>
+
+            <Modal
+                title="Gerenciar colunas do funil"
+                open={isStageManagerOpen}
+                onCancel={() => setIsStageManagerOpen(false)}
+                footer={null}
+                width={680}
+                destroyOnClose
+            >
+                <Text type="secondary">
+                    Crie ou exclua colunas para adaptar o pipeline ao tipo de negocio.
+                </Text>
+                <div
+                    style={{
+                        display: "flex",
+                        gap: 10,
+                        alignItems: "center",
+                        marginTop: 16,
+                        marginBottom: 18,
+                        flexWrap: "wrap",
+                    }}
+                >
+                    <Input
+                        placeholder="Nome da nova coluna"
+                        value={newStageName}
+                        onChange={(event) => setNewStageName(event.target.value)}
+                        onPressEnter={handleCreateStage}
+                        style={{ flex: 1, minWidth: 240 }}
+                    />
+                    <input
+                        type="color"
+                        value={newStageColor}
+                        onChange={(event) => setNewStageColor(event.target.value)}
+                        aria-label="Cor da coluna"
+                        style={{
+                            width: 42,
+                            height: 36,
+                            border: "1px solid #d9d9d9",
+                            borderRadius: 8,
+                            backgroundColor: "#fff",
+                            cursor: "pointer",
+                        }}
+                    />
+                    <Button
+                        type="primary"
+                        icon={<PlusOutlined />}
+                        onClick={handleCreateStage}
+                        loading={isCreatingStage}
+                    >
+                        Adicionar
+                    </Button>
+                </div>
+                <div style={{ maxHeight: 340, overflowY: "auto", paddingRight: 4 }}>
+                    {manageableStages.map((stage) => (
+                        <div
+                            key={stage.id ?? stage.nome}
+                            style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "10px 12px",
+                                border: "1px solid #e5e7eb",
+                                borderRadius: 10,
+                                marginBottom: 8,
+                                backgroundColor: "#fff",
+                            }}
+                        >
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span
+                                    style={{
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: "50%",
+                                        backgroundColor: stage.cor || "#94a3b8",
+                                    }}
+                                />
+                                <div>
+                                    <Text strong>{stage.nome}</Text>
+                                    <Text type="secondary" style={{ marginLeft: 8 }}>
+                                        {leadCountByStatus[stage.nome] || 0} leads
+                                    </Text>
+                                </div>
+                            </div>
+                            <Button
+                                type="text"
+                                danger
+                                icon={<DeleteOutlined />}
+                                onClick={() => requestDeleteStage(stage)}
+                                disabled={!canDeleteAnyStage || !stage.persisted}
+                            >
+                                Excluir
+                            </Button>
+                        </div>
+                    ))}
+                </div>
+                {!canDeleteAnyStage ? (
+                    <Text type="secondary">E necessario manter ao menos uma coluna no funil.</Text>
+                ) : null}
+            </Modal>
+
+            <Modal
+                title="Excluir coluna"
+                open={Boolean(stagePendingDelete)}
+                onCancel={cancelDeleteStage}
+                onOk={confirmDeleteStage}
+                okText="Excluir coluna"
+                okButtonProps={{ danger: true, loading: isDeletingStage }}
+                cancelButtonProps={{ disabled: isDeletingStage }}
+                destroyOnClose
+            >
+                <Text>
+                    Tem certeza que deseja excluir a coluna{" "}
+                    <Text strong>{stagePendingDelete?.nome || "-"}</Text>?
+                </Text>
+                {leadsInPendingDeleteStage > 0 ? (
+                    <div style={{ marginTop: 14 }}>
+                        <Text type="warning" style={{ display: "block", marginBottom: 8 }}>
+                            Essa coluna possui {leadsInPendingDeleteStage} leads. Selecione o destino
+                            antes de excluir.
+                        </Text>
+                        <Select
+                            value={deleteDestinationStage}
+                            onChange={(value) => setDeleteDestinationStage(value)}
+                            options={deleteStageDestinationOptions}
+                            placeholder="Mover leads para"
+                            style={{ width: "100%" }}
+                        />
+                    </div>
+                ) : null}
+            </Modal>
 
             <Drawer
                 title={selectedLead?.nome ? `Lead: ${selectedLead.nome}` : "Detalhes do lead"}
