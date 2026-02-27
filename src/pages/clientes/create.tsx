@@ -1,10 +1,26 @@
 import { Create, useForm } from "@refinedev/antd";
-import { useList } from "@refinedev/core";
-import { Col, Form, Input, InputNumber, Row, Select, message } from "antd";
+import { useGo, useList } from "@refinedev/core";
+import { UploadOutlined } from "@ant-design/icons";
+import {
+    Button,
+    Card,
+    Col,
+    Form,
+    Input,
+    InputNumber,
+    Row,
+    Select,
+    Typography,
+    Upload,
+    message,
+    type UploadFile,
+} from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { formatCpfCnpj } from "../../lib/formatters";
+import { uploadNewLeadDocument } from "../../lib/leadTimeline";
 import { buildLeadStatusOptions, coerceLeadStatusValue } from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
@@ -31,28 +47,116 @@ type ClienteCreateFormValues = {
     temperature?: LeadTemperature;
 };
 
+const { Text, Title } = Typography;
+
 export const ClienteCreate = () => {
+    const go = useGo();
+    const { ownerDisplayName } = useCrmAccess();
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
+    const pendingFilesRef = useRef<{
+        propostaFile: File | null;
+        contaLuzFile: File | null;
+        enviadoPor?: string;
+    }>({
+        propostaFile: null,
+        contaLuzFile: null,
+        enviadoPor: undefined,
+    });
 
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>(
         [],
     );
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
     const numeroInputRef = useRef<any>(null);
+    const [propostaFile, setPropostaFile] = useState<File | null>(null);
+    const [contaLuzFile, setContaLuzFile] = useState<File | null>(null);
+    const [isUploadingFiles, setIsUploadingFiles] = useState(false);
 
     const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>({
-        onMutationSuccess: (data) => {
-            const createdId = (data as any)?.data?.id;
+        redirect: false,
+        successNotification: false,
+        onMutationSuccess: async (data) => {
+            const createdId = (data as any)?.data?.id ?? (data as any)?.id;
             const pendingTemperature = pendingTemperatureRef.current;
+            const pendingFiles = pendingFilesRef.current;
 
-            if (createdId && pendingTemperature) {
-                setLeadTemperature(createdId, pendingTemperature);
-            }
-            if (createdId) {
-                markLeadAsRecentlyCreated(createdId);
-            }
+            try {
+                if (createdId && pendingTemperature) {
+                    setLeadTemperature(createdId, pendingTemperature);
+                }
 
-            pendingTemperatureRef.current = undefined;
+                if (createdId) {
+                    markLeadAsRecentlyCreated(createdId);
+                }
+
+                const uploadJobs: Promise<unknown>[] = [];
+                const hasPendingFiles = Boolean(
+                    pendingFiles.propostaFile || pendingFiles.contaLuzFile,
+                );
+
+                if (!createdId && hasPendingFiles) {
+                    throw new Error(
+                        "Lead criado sem retorno de ID. Nao foi possivel anexar os documentos automaticamente.",
+                    );
+                }
+
+                if (createdId && pendingFiles.propostaFile) {
+                    uploadJobs.push(
+                        uploadNewLeadDocument(
+                            createdId,
+                            pendingFiles.propostaFile,
+                            "proposta",
+                            pendingFiles.enviadoPor,
+                        ),
+                    );
+                }
+
+                if (createdId && pendingFiles.contaLuzFile) {
+                    uploadJobs.push(
+                        uploadNewLeadDocument(
+                            createdId,
+                            pendingFiles.contaLuzFile,
+                            "conta_luz",
+                            pendingFiles.enviadoPor,
+                        ),
+                    );
+                }
+
+                if (uploadJobs.length > 0) {
+                    setIsUploadingFiles(true);
+                    await Promise.all(uploadJobs);
+                }
+
+                message.success(
+                    uploadJobs.length > 0
+                        ? "Lead criado e documentos anexados com sucesso."
+                        : "Lead criado com sucesso.",
+                );
+
+                go({
+                    to: "/clientes",
+                    type: "replace",
+                });
+            } catch (error) {
+                const errorMessage =
+                    typeof error === "object" && error && "message" in error
+                        ? String((error as { message?: unknown }).message || "Falha no upload.")
+                        : "Falha no upload.";
+
+                message.error(
+                    `Lead criado, mas houve falha no envio dos documentos: ${errorMessage}`,
+                );
+            } finally {
+                setIsUploadingFiles(false);
+                pendingTemperatureRef.current = undefined;
+                pendingFilesRef.current = {
+                    propostaFile: null,
+                    contaLuzFile: null,
+                    enviadoPor: undefined,
+                };
+                setPropostaFile(null);
+                setContaLuzFile(null);
+            }
         },
     });
 
@@ -176,6 +280,43 @@ export const ClienteCreate = () => {
         }
     };
 
+    const toUploadFileList = (file: File | null, uid: string): UploadFile[] => {
+        if (!file) {
+            return [];
+        }
+
+        return [
+            {
+                uid,
+                name: file.name,
+                status: "done",
+                size: file.size,
+                type: file.type,
+            },
+        ];
+    };
+
+    const handleBeforeUpload = (
+        tipo: "proposta" | "conta_luz",
+        file: File,
+    ): false | typeof Upload.LIST_IGNORE => {
+        const isPdf =
+            file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
+
+        if (!isPdf) {
+            message.warning("Somente arquivos PDF sao permitidos.");
+            return Upload.LIST_IGNORE;
+        }
+
+        if (tipo === "proposta") {
+            setPropostaFile(file);
+        } else {
+            setContaLuzFile(file);
+        }
+
+        return false;
+    };
+
     const handleFinish = async (values: ClienteCreateFormValues) => {
         const { temperature, ...payload } = values;
         const status = coerceLeadStatusValue(values.status, statusOptions);
@@ -183,8 +324,19 @@ export const ClienteCreate = () => {
         const nextTemperature = automaticFromStatus ? undefined : temperature;
 
         pendingTemperatureRef.current = nextTemperature;
+        pendingFilesRef.current = {
+            propostaFile,
+            contaLuzFile,
+            enviadoPor: values.responsavel || ownerDisplayName,
+        };
 
         return formProps.onFinish?.({ ...payload, status, responsavel: values.responsavel } as any);
+    };
+
+    const finalSaveButtonProps = {
+        ...saveButtonProps,
+        loading: Boolean(saveButtonProps?.loading) || isUploadingFiles,
+        disabled: Boolean(saveButtonProps?.disabled) || isUploadingFiles,
     };
 
     const selectPais = (
@@ -204,7 +356,7 @@ export const ClienteCreate = () => {
     );
 
     return (
-        <Create saveButtonProps={saveButtonProps} title="Novo Cliente Solar">
+        <Create saveButtonProps={finalSaveButtonProps} title="Novo Cliente Solar">
             <Form {...formProps} layout="vertical" onFinish={handleFinish}>
                 <Row gutter={20}>
                     <Col xs={24} lg={12}>
@@ -343,6 +495,66 @@ export const ClienteCreate = () => {
                         </Form.Item>
                     </Col>
                 </Row>
+
+                <Card
+                    size="small"
+                    style={{
+                        marginTop: 8,
+                        borderRadius: 10,
+                        border: "1px solid #e5e7eb",
+                        background: "#f8fafc",
+                    }}
+                >
+                    <Title level={5} style={{ margin: 0 }}>
+                        Documentos iniciais do lead
+                    </Title>
+                    <Text type="secondary">
+                        Opcional no cadastro: anexe proposta e/ou conta de luz em PDF.
+                    </Text>
+
+                    <Row gutter={20} style={{ marginTop: 12 }}>
+                        <Col xs={24} lg={12}>
+                            <Form.Item label="Proposta comercial (PDF)">
+                                <Upload
+                                    accept=".pdf,application/pdf"
+                                    maxCount={1}
+                                    beforeUpload={(file) => handleBeforeUpload("proposta", file)}
+                                    fileList={toUploadFileList(propostaFile, "proposta")}
+                                    onRemove={() => {
+                                        setPropostaFile(null);
+                                        return true;
+                                    }}
+                                    disabled={isUploadingFiles}
+                                >
+                                    <Button icon={<UploadOutlined />}>Selecionar proposta</Button>
+                                </Upload>
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={12}>
+                            <Form.Item label="Conta de luz (PDF)">
+                                <Upload
+                                    accept=".pdf,application/pdf"
+                                    maxCount={1}
+                                    beforeUpload={(file) => handleBeforeUpload("conta_luz", file)}
+                                    fileList={toUploadFileList(contaLuzFile, "conta_luz")}
+                                    onRemove={() => {
+                                        setContaLuzFile(null);
+                                        return true;
+                                    }}
+                                    disabled={isUploadingFiles}
+                                >
+                                    <Button icon={<UploadOutlined />}>Selecionar conta de luz</Button>
+                                </Upload>
+                            </Form.Item>
+                        </Col>
+                    </Row>
+
+                    {isUploadingFiles ? (
+                        <Text type="secondary">
+                            Enviando documentos para o repositório oficial do lead...
+                        </Text>
+                    ) : null}
+                </Card>
             </Form>
         </Create>
     );

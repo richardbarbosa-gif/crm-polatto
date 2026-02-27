@@ -24,6 +24,13 @@ export type LeadStoredFile = {
     url?: string;
 };
 
+export type LeadDocumentType = "proposta" | "conta_luz";
+
+export type UploadNewLeadDocumentResult = {
+    success: true;
+    path: string;
+};
+
 type ActivityInsertInput = {
     leadId: string | number;
     activityType: string;
@@ -294,6 +301,15 @@ const sanitizeFileName = (fileName: string): string => {
     return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 };
 
+const sanitizeStorageBaseName = (fileName: string): string => {
+    const withoutExtension = fileName.replace(/\.[^/.]+$/, "");
+    const sanitized = sanitizeFileName(withoutExtension)
+        .replace(/_+/g, "_")
+        .replace(/^_+|_+$/g, "");
+
+    return sanitized || "documento";
+};
+
 const inferFileType = (fileName: string): LeadStoredFile["fileType"] => {
     const value = fileName.toLowerCase();
     if (value.includes("proposta")) return "proposta";
@@ -307,21 +323,13 @@ export const uploadLeadPdf = async (params: {
     kind: "proposta" | "conta_luz";
     author?: string;
 }): Promise<LeadStoredFile> => {
-    const sanitizedFileName = sanitizeFileName(params.file.name);
-    const prefixedName = `${params.kind}_${Date.now()}_${sanitizedFileName}`;
-    const path = `${String(params.leadId)}/${prefixedName}`;
-
-    const { error: uploadError } = await supabaseClient.storage
-        .from(LEAD_FILES_BUCKET)
-        .upload(path, params.file, {
-            cacheControl: "3600",
-            upsert: false,
-            contentType: "application/pdf",
-        });
-
-    if (uploadError) {
-        throw uploadError;
-    }
+    const result = await uploadNewLeadDocument(
+        params.leadId,
+        params.file,
+        params.kind,
+        params.author,
+    );
+    const path = result.path;
 
     const signedResult = await supabaseClient.storage
         .from(LEAD_FILES_BUCKET)
@@ -346,6 +354,56 @@ export const uploadLeadPdf = async (params: {
         fileType: params.kind,
         url,
     };
+};
+
+export const uploadNewLeadDocument = async (
+    clienteId: string | number,
+    file: File,
+    tipo: LeadDocumentType,
+    enviadoPor?: string,
+): Promise<UploadNewLeadDocumentResult> => {
+    const isPdf =
+        file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
+    if (!isPdf) {
+        throw new Error("Apenas arquivos PDF sao permitidos para documentos do lead.");
+    }
+
+    const timestamp = Date.now();
+    const sanitizedBaseName = sanitizeStorageBaseName(file.name);
+    const storageFileName = `${tipo}_${timestamp}_${sanitizedBaseName}.pdf`;
+    const path = `${String(clienteId)}/${storageFileName}`;
+
+    const { error: uploadError } = await supabaseClient.storage
+        .from(LEAD_FILES_BUCKET)
+        .upload(path, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: "application/pdf",
+        });
+
+    if (uploadError) {
+        throw new Error(`Falha ao enviar o arquivo para o Storage: ${uploadError.message}`);
+    }
+
+    const payload = {
+        cliente_id: clienteId,
+        tipo,
+        nome_arquivo: file.name,
+        caminho_storage: path,
+        tamanho_bytes: file.size,
+        enviado_por: enviadoPor || null,
+    };
+
+    const { error: documentError } = await supabaseClient.from("documentos_lead").insert(payload);
+
+    if (documentError) {
+        await supabaseClient.storage.from(LEAD_FILES_BUCKET).remove([path]);
+        throw new Error(
+            `Arquivo enviado, mas falhou ao registrar em documentos_lead: ${documentError.message}`,
+        );
+    }
+
+    return { success: true, path };
 };
 
 export const listLeadFiles = async (leadId: string | number): Promise<LeadStoredFile[]> => {

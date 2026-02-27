@@ -152,8 +152,7 @@ export const useCrmAccess = () => {
 
     const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata;
     const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
-    // Fail-open quando nao ha papel definido para evitar ocultar leads validos.
-    const canViewAllLeads = !hasExplicitRole || isManagerRole(roleCandidate);
+    const canViewAllLeads = hasExplicitRole && isManagerRole(roleCandidate);
 
     const ownerCandidates = useMemo(() => {
         const identityName =
