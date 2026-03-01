@@ -1,11 +1,17 @@
 import { Edit, useForm } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
-import { Alert, Form, Input, InputNumber, Select } from "antd";
+import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { useTenant } from "../../contexts/tenant";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj } from "../../lib/formatters";
-import { buildLeadStatusOptions, coerceLeadStatusValue } from "../../lib/leadStatus";
+import {
+    buildLeadStageOptions,
+    buildLeadStages,
+    coerceLeadStageIdValue,
+    findLeadStageById,
+} from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -23,13 +29,15 @@ type ClienteEditFormValues = {
     endereco_instalacao?: string;
     conta_energia_media?: number;
     responsavel?: string;
-    status?: string;
+    stage_id?: string;
     temperature?: LeadTemperature;
 };
 
 export const ClienteEdit = () => {
+    const { tenantId } = useTenant();
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
-    const { canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
+    const { canDeleteRecords, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } =
+        useCrmAccess();
 
     const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({
         onMutationSuccess: (data) => {
@@ -49,8 +57,10 @@ export const ClienteEdit = () => {
     });
 
     const record = (query?.data?.data as any) ?? null;
+    const isRecordLoading = Boolean(query?.isLoading || query?.isFetching);
+    const recordError = query?.error as any;
     const canEditRecord = canViewAllLeads || matchesLeadOwner(record?.responsavel, ownerCandidatesNormalized);
-    const watchedStatus = Form.useWatch("status", form) as string | undefined;
+    const watchedStageId = Form.useWatch("stage_id", form) as string | undefined;
 
     const { query: stagesQuery } = useList({
         resource: "pipeline_stages",
@@ -58,10 +68,14 @@ export const ClienteEdit = () => {
         sorters: [{ field: "ordem", order: "asc" }],
     });
     const stagesData = (stagesQuery?.data?.data as any[]) || [];
-    const statusOptions = useMemo(() => buildLeadStatusOptions(stagesData), [stagesData]);
-
-    const normalizedStatus = coerceLeadStatusValue(watchedStatus ?? record?.status, statusOptions);
-    const automaticTemperature = resolveAutomaticLeadTemperature(normalizedStatus);
+    const leadStages = useMemo(() => buildLeadStages(stagesData), [stagesData]);
+    const stageOptions = useMemo(() => buildLeadStageOptions(stagesData), [stagesData]);
+    const resolvedStageId = coerceLeadStageIdValue(
+        watchedStageId ?? record?.stage_id ?? record?.status,
+        leadStages,
+    );
+    const selectedStage = findLeadStageById(leadStages, resolvedStageId);
+    const automaticTemperature = resolveAutomaticLeadTemperature(selectedStage?.nome);
 
     useEffect(() => {
         if (!record?.id) {
@@ -78,19 +92,19 @@ export const ClienteEdit = () => {
     }, [automaticTemperature, form]);
 
     useEffect(() => {
-        const currentStatus = form.getFieldValue("status") ?? record?.status;
-        if (!currentStatus && statusOptions.length > 0) {
-            form.setFieldValue("status", statusOptions[0].value);
+        const currentStageId = form.getFieldValue("stage_id") ?? record?.stage_id ?? record?.status;
+        if (!currentStageId && stageOptions.length > 0) {
+            form.setFieldValue("stage_id", stageOptions[0].value);
             return;
         }
 
-        if (currentStatus) {
-            const nextStatus = coerceLeadStatusValue(currentStatus, statusOptions);
-            if (nextStatus !== currentStatus) {
-                form.setFieldValue("status", nextStatus);
+        if (currentStageId) {
+            const nextStageId = coerceLeadStageIdValue(currentStageId, leadStages);
+            if (String(nextStageId) !== String(currentStageId)) {
+                form.setFieldValue("stage_id", nextStageId);
             }
         }
-    }, [form, record?.status, statusOptions]);
+    }, [form, leadStages, record?.stage_id, record?.status, stageOptions]);
 
     useEffect(() => {
         if (!canViewAllLeads) {
@@ -112,9 +126,10 @@ export const ClienteEdit = () => {
     };
 
     const handleFinish = async (values: ClienteEditFormValues) => {
-        const { temperature, status, ...payload } = values;
-        const nextStatus = coerceLeadStatusValue(status ?? record?.status, statusOptions);
-        const automaticFromStatus = resolveAutomaticLeadTemperature(nextStatus);
+        const { temperature, stage_id, ...payload } = values;
+        const nextStageId = coerceLeadStageIdValue(stage_id ?? record?.stage_id ?? record?.status, leadStages);
+        const nextStage = findLeadStageById(leadStages, nextStageId);
+        const automaticFromStatus = resolveAutomaticLeadTemperature(nextStage?.nome);
         const nextTemperature = automaticFromStatus ? undefined : temperature;
 
         pendingTemperatureRef.current = nextTemperature;
@@ -126,15 +141,53 @@ export const ClienteEdit = () => {
         return formProps.onFinish?.(
             {
                 ...payload,
-                status: nextStatus,
+                tenant_id: tenantId || undefined,
+                stage_id: nextStageId,
+                status: nextStage?.nome || undefined,
                 responsavel: canViewAllLeads ? values.responsavel : ownerDisplayName,
             } as any,
         );
     };
 
+    if (recordError) {
+        return (
+            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+                <Alert
+                    type="error"
+                    showIcon
+                    message="Falha ao carregar lead"
+                    description={String(recordError?.message || "Nao foi possivel abrir o cadastro para edicao.")}
+                />
+            </Edit>
+        );
+    }
+
+    if (isRecordLoading && !record) {
+        return (
+            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+                <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                    <Spin tip="Carregando lead..." />
+                </div>
+            </Edit>
+        );
+    }
+
+    if (!record && !isRecordLoading) {
+        return (
+            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+                <Alert
+                    type="warning"
+                    showIcon
+                    message="Lead nao encontrado"
+                    description="O registro solicitado nao foi encontrado ou voce nao tem permissao de acesso."
+                />
+            </Edit>
+        );
+    }
+
     if (!canEditRecord && record) {
         return (
-            <Edit saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert
                     type="warning"
                     showIcon
@@ -146,7 +199,7 @@ export const ClienteEdit = () => {
     }
 
     return (
-        <Edit saveButtonProps={saveButtonProps}>
+        <Edit canDelete={canDeleteRecords} saveButtonProps={saveButtonProps}>
             <Form {...formProps} layout="vertical" onFinish={handleFinish}>
                 <Form.Item
                     label="Nome Completo"
@@ -206,11 +259,11 @@ export const ClienteEdit = () => {
                 </Form.Item>
 
                 <Form.Item
-                    label="Status da Negociacao"
-                    name="status"
-                    rules={[{ required: true, message: "Selecione o status." }]}
+                    label="Etapa do Funil"
+                    name="stage_id"
+                    rules={[{ required: true, message: "Selecione a etapa." }]}
                 >
-                    <Select options={statusOptions} />
+                    <Select options={stageOptions} />
                 </Form.Item>
 
                 <Form.Item

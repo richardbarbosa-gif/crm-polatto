@@ -17,11 +17,17 @@ import {
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
+import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { formatCpfCnpj } from "../../lib/formatters";
-import { uploadNewLeadDocument } from "../../lib/leadTimeline";
-import { buildLeadStatusOptions, coerceLeadStatusValue } from "../../lib/leadStatus";
+import { MAX_PDF_FILE_SIZE_BYTES, uploadNewLeadDocument } from "../../lib/leadTimeline";
+import {
+    buildLeadStageOptions,
+    buildLeadStages,
+    coerceLeadStageIdValue,
+    findLeadStageById,
+} from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -43,7 +49,7 @@ type ClienteCreateFormValues = {
     complemento?: string;
     conta_energia_media: number;
     responsavel?: string;
-    status: string;
+    stage_id: string;
     temperature?: LeadTemperature;
 };
 
@@ -51,6 +57,7 @@ const { Text, Title } = Typography;
 
 export const ClienteCreate = () => {
     const go = useGo();
+    const { tenantId } = useTenant();
     const { ownerDisplayName } = useCrmAccess();
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
     const pendingFilesRef = useRef<{
@@ -106,6 +113,7 @@ export const ClienteCreate = () => {
                             createdId,
                             pendingFiles.propostaFile,
                             "proposta",
+                            tenantId,
                             pendingFiles.enviadoPor,
                         ),
                     );
@@ -117,6 +125,7 @@ export const ClienteCreate = () => {
                             createdId,
                             pendingFiles.contaLuzFile,
                             "conta_luz",
+                            tenantId,
                             pendingFiles.enviadoPor,
                         ),
                     );
@@ -167,7 +176,8 @@ export const ClienteCreate = () => {
     });
 
     const stagesData = (stagesQuery?.data?.data as any[]) || [];
-    const statusOptions = useMemo(() => buildLeadStatusOptions(stagesData), [stagesData]);
+    const leadStages = useMemo(() => buildLeadStages(stagesData), [stagesData]);
+    const stageOptions = useMemo(() => buildLeadStageOptions(stagesData), [stagesData]);
     const responsavelOptions = useMemo(() => {
         const map = new Map<string, { label: string; value: string }>();
 
@@ -181,8 +191,9 @@ export const ClienteCreate = () => {
         return Array.from(map.values());
     }, [listaResponsaveis]);
 
-    const statusValue = Form.useWatch("status", form) as string | undefined;
-    const automaticTemperature = resolveAutomaticLeadTemperature(statusValue);
+    const stageValue = Form.useWatch("stage_id", form) as string | undefined;
+    const selectedStage = findLeadStageById(leadStages, stageValue);
+    const automaticTemperature = resolveAutomaticLeadTemperature(selectedStage?.nome);
 
     useEffect(() => {
         const carregarEquipe = async () => {
@@ -204,19 +215,19 @@ export const ClienteCreate = () => {
     }, []);
 
     useEffect(() => {
-        const currentStatus = form.getFieldValue("status");
-        if (!currentStatus && statusOptions.length > 0) {
-            form.setFieldValue("status", statusOptions[0].value);
+        const currentStageId = form.getFieldValue("stage_id");
+        if (!currentStageId && stageOptions.length > 0) {
+            form.setFieldValue("stage_id", stageOptions[0].value);
             return;
         }
 
-        if (currentStatus) {
-            const normalizedStatus = coerceLeadStatusValue(currentStatus, statusOptions);
-            if (normalizedStatus !== currentStatus) {
-                form.setFieldValue("status", normalizedStatus);
+        if (currentStageId) {
+            const normalizedStage = coerceLeadStageIdValue(currentStageId, leadStages);
+            if (normalizedStage !== currentStageId) {
+                form.setFieldValue("stage_id", normalizedStage);
             }
         }
-    }, [form, statusOptions]);
+    }, [form, leadStages, stageOptions]);
 
     useEffect(() => {
         // Novo lead sempre inicia sem responsavel pre-selecionado.
@@ -308,6 +319,13 @@ export const ClienteCreate = () => {
             return Upload.LIST_IGNORE;
         }
 
+        if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
+            message.warning(
+                `Arquivo acima do limite (${Math.floor(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB).`,
+            );
+            return Upload.LIST_IGNORE;
+        }
+
         if (tipo === "proposta") {
             setPropostaFile(file);
         } else {
@@ -319,8 +337,9 @@ export const ClienteCreate = () => {
 
     const handleFinish = async (values: ClienteCreateFormValues) => {
         const { temperature, ...payload } = values;
-        const status = coerceLeadStatusValue(values.status, statusOptions);
-        const automaticFromStatus = resolveAutomaticLeadTemperature(status);
+        const nextStageId = coerceLeadStageIdValue(values.stage_id, leadStages);
+        const nextStage = findLeadStageById(leadStages, nextStageId);
+        const automaticFromStatus = resolveAutomaticLeadTemperature(nextStage?.nome);
         const nextTemperature = automaticFromStatus ? undefined : temperature;
 
         pendingTemperatureRef.current = nextTemperature;
@@ -330,7 +349,13 @@ export const ClienteCreate = () => {
             enviadoPor: values.responsavel || ownerDisplayName,
         };
 
-        return formProps.onFinish?.({ ...payload, status, responsavel: values.responsavel } as any);
+        return formProps.onFinish?.({
+            ...payload,
+            tenant_id: tenantId || undefined,
+            stage_id: nextStageId,
+            status: nextStage?.nome || undefined,
+            responsavel: values.responsavel,
+        } as any);
     };
 
     const finalSaveButtonProps = {
@@ -461,11 +486,11 @@ export const ClienteCreate = () => {
                     </Col>
                     <Col xs={24} lg={6}>
                         <Form.Item
-                            label="Status Inicial"
-                            name="status"
-                            rules={[{ required: true, message: "Selecione o status inicial." }]}
+                            label="Etapa Inicial"
+                            name="stage_id"
+                            rules={[{ required: true, message: "Selecione a etapa inicial." }]}
                         >
-                            <Select size="large" options={statusOptions} />
+                            <Select size="large" options={stageOptions} />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>

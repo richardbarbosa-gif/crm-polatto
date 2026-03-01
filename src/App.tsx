@@ -36,6 +36,7 @@ import {
 import authProvider from "./authProvider";
 import { Header } from "./components/header";
 import { ColorModeContextProvider } from "./contexts/color-mode";
+import { RequireTenant, TenantProvider } from "./contexts/tenant";
 import { AgendaPage } from "./pages/agenda";
 import { BaseClientesPage } from "./pages/base-clientes";
 import { ClienteCreate, ClienteEdit, ClienteList, ClienteShow } from "./pages/clientes";
@@ -62,34 +63,58 @@ function App() {
                     <ConfigProvider
                         theme={{
                             token: {
-                                colorPrimary: "#4c8bf5", 
+                                colorPrimary: "#4c8bf5",
+                                colorPrimaryHover: "#3b82f6",
+                                colorPrimaryActive: "#2563eb",
                                 colorInfo: "#4c8bf5",
-                                colorSuccess: "#10b981", 
+                                colorSuccess: "#10b981",
                                 colorWarning: "#f59e0b",
                                 colorError: "#ef4444",
-                                borderRadius: 8, 
-                                fontFamily: "'Inter', 'Segoe UI', sans-serif",
+                                colorText: "#0f172a",
+                                colorTextSecondary: "#475569",
+                                colorBgLayout: "#f4f7fb",
+                                colorBgContainer: "#ffffff",
+                                colorBorder: "rgba(148,163,184,0.28)",
+                                borderRadius: 12,
+                                borderRadiusLG: 16,
+                                fontFamily: "'Manrope', 'Segoe UI', sans-serif",
                             },
                             components: {
                                 Layout: {
-                                    headerBg: "#ffffff", 
-                                    siderBg: "#0f172a", 
+                                    headerBg: "#0f172a",
+                                    siderBg: "#0f172a",
                                     triggerBg: "#0f172a",
-                                    bodyBg: "#f8fafc", 
+                                    bodyBg: "#f4f7fb",
                                 },
                                 Menu: {
                                     itemBg: "#0f172a",
                                     subMenuItemBg: "#0f172a",
-                                    itemColor: "#94a3b8", 
+                                    itemColor: "#94a3b8",
                                     itemHoverColor: "#ffffff",
                                     itemSelectedColor: "#ffffff",
-                                    itemSelectedBg: "#1e293b", 
+                                    itemSelectedBg: "#1e293b",
                                     iconSize: 18,
                                 },
-                                Button: { borderRadius: 8 },
-                                Card: { borderRadiusLG: 12 },
-                                Input: { borderRadius: 6 },
-                                Select: { borderRadius: 6 },
+                                Button: {
+                                    borderRadius: 12,
+                                    controlHeight: 40,
+                                    fontWeight: 600,
+                                },
+                                Card: {
+                                    borderRadiusLG: 16,
+                                },
+                                Input: { borderRadius: 12, controlHeight: 40 },
+                                Select: { borderRadius: 12, controlHeight: 40 },
+                                Table: {
+                                    headerBg: "#f8fafc",
+                                    headerColor: "#334155",
+                                },
+                                Modal: {
+                                    borderRadiusLG: 16,
+                                },
+                                Drawer: {
+                                    colorBgElevated: "#ffffff",
+                                },
                             },
                         }}
                     >
@@ -175,28 +200,46 @@ function App() {
                                     ]}
                                     options={{ syncWithLocation: true, warnWhenUnsavedChanges: true, projectId: "XZv4yn-qFPddw-0qWPSU" }}
                                 >
-                                    <Routes>
+                                    <TenantProvider>
+                                        <Routes>
                                         <Route
                                             element={
                                                 <Authenticated key="authenticated-inner" fallback={<CatchAllNavigate to="/login" />}>
-                                                    <ThemedLayout
+                                                    <RequireTenant>
+                                                        <ThemedLayout
                                                         Header={Header}
                                                         Sider={(props) => (
                                                             <ThemedSider
                                                                 {...props}
                                                                 fixed
                                                                 Title={({ collapsed }) => (
-                                                                    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", margin: "-16px", width: "calc(100% + 32px)", height: "64px", backgroundColor: "#0f172a", overflow: "hidden" }}>
-                                                                        <img src="/logo.png" alt="Polatto" style={{ width: collapsed ? "40px" : "100%", height: "100%", objectFit: "cover", transition: "all 0.3s ease" }} />
+                                                                    <div className="crm-sider-brand">
+                                                                        <img
+                                                                            src="/logo.png"
+                                                                            alt="Polatto"
+                                                                            className={
+                                                                                collapsed
+                                                                                    ? "crm-sider-brand-logo crm-sider-brand-logo-collapsed"
+                                                                                    : "crm-sider-brand-logo"
+                                                                            }
+                                                                        />
                                                                     </div>
                                                                 )}
                                                                 render={({ items, logout, collapsed }) => (
                                                                     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                                                                        <div style={{ flex: 1, overflowY: "auto" }}>{items}</div>
-                                                                        <div style={{ padding: "16px", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                                                                        <div className="crm-sider-nav">{items}</div>
+                                                                        <div className="crm-sider-footer">
                                                                             <Link to="/configuracoes">
-                                                                                <Button type="text" icon={<SettingOutlined style={{ color: "#94a3b8" }} />} style={{ width: "100%", color: "#94a3b8", textAlign: collapsed ? "center" : "left", display: "flex", alignItems: "center", justifyContent: collapsed ? "center" : "flex-start", padding: collapsed ? "0" : "4px 15px", marginBottom: "8px" }}>
-                                                                                    {!collapsed && <span style={{ marginLeft: "10px" }}>Configurações</span>}
+                                                                                <Button
+                                                                                    type="text"
+                                                                                    icon={<SettingOutlined />}
+                                                                                    className={
+                                                                                        collapsed
+                                                                                            ? "crm-sider-settings crm-sider-settings-collapsed"
+                                                                                            : "crm-sider-settings"
+                                                                                    }
+                                                                                >
+                                                                                    {!collapsed && <span>Configurações</span>}
                                                                                 </Button>
                                                                             </Link>
                                                                             <div>{logout}</div>
@@ -205,9 +248,10 @@ function App() {
                                                                 )}
                                                             />
                                                         )}
-                                                    >
-                                                        <Outlet />
-                                                    </ThemedLayout>
+                                                        >
+                                                            <Outlet />
+                                                        </ThemedLayout>
+                                                    </RequireTenant>
                                                 </Authenticated>
                                             }
                                         >
@@ -246,7 +290,8 @@ function App() {
                                             <Route path="/register" element={<AuthPage type="register" />} />
                                             <Route path="/forgot-password" element={<AuthPage type="forgotPassword" />} />
                                         </Route>
-                                    </Routes>
+                                        </Routes>
+                                    </TenantProvider>
                                     <RefineKbar />
                                     <UnsavedChangesNotifier />
                                     <DocumentTitleHandler />

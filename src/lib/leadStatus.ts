@@ -12,6 +12,11 @@ type LeadStatusOption = {
     label: string;
 };
 
+export type LeadStageOption = {
+    value: string;
+    label: string;
+};
+
 type StageRecord = {
     id?: string | number | null;
     nome?: string | null;
@@ -91,6 +96,14 @@ export const buildLeadStatusOptions = (
     return dedupedNames.map((nome) => ({ value: nome, label: nome }));
 };
 
+export const buildLeadStageOptions = (stagesData?: StageRecord[] | null): LeadStageOption[] => {
+    const stages = buildLeadStages(stagesData);
+    return stages.map((stage) => ({
+        value: String(stage.id),
+        label: stage.nome,
+    }));
+};
+
 export const buildLeadStages = (stagesData?: StageRecord[] | null): LeadStage[] => {
     const rawStages = Array.isArray(stagesData) ? stagesData : [];
     if (!rawStages.length) {
@@ -165,4 +178,45 @@ export const coerceLeadStatusValue = (
     }
 
     return value;
+};
+
+export const coerceLeadStageIdValue = (
+    value: string | number | null | undefined,
+    stages: LeadStage[],
+): string => {
+    const availableStages = stages.length ? stages : DEFAULT_LEAD_STAGES;
+    const fallback = String(availableStages[0]?.id || DEFAULT_LEAD_STAGES[0].id);
+
+    if (value === null || value === undefined || value === "") {
+        return fallback;
+    }
+
+    const asString = String(value);
+    const exact = availableStages.find((stage) => String(stage.id) === asString);
+    if (exact) {
+        return String(exact.id);
+    }
+
+    const normalizedValue = normalizeText(asString);
+    if (!normalizedValue) {
+        return fallback;
+    }
+
+    const byName = availableStages.find((stage) => normalizeText(stage.nome) === normalizedValue);
+    if (byName) {
+        return String(byName.id);
+    }
+
+    return fallback;
+};
+
+export const findLeadStageById = (
+    stages: LeadStage[],
+    stageId: string | number | null | undefined,
+): LeadStage | undefined => {
+    if (stageId === null || stageId === undefined || stageId === "") {
+        return undefined;
+    }
+    const candidate = String(stageId);
+    return stages.find((stage) => String(stage.id) === candidate);
 };

@@ -1,7 +1,11 @@
 import { useGetIdentity } from "@refinedev/core";
 import { useEffect, useMemo, useState } from "react";
+import { useTenant } from "../contexts/tenant";
 import { type CrmEmployee, fetchEmployeeByEmail, isManagerRole } from "../lib/crmEmployees";
 import { normalizeText } from "../lib/formatters";
+import { canDelete } from "../lib/permissions";
+
+const SYSTEM_ADMINS = ["richardbarbosa28@gmail.com"];
 
 type IdentityRecord = {
     email?: string | null;
@@ -86,6 +90,7 @@ export const matchesLeadOwner = (
 };
 
 export const useCrmAccess = () => {
+    const tenant = useTenant();
     const identityResult = useGetIdentity<IdentityRecord>() as any;
     const identity = (identityResult?.data || null) as IdentityRecord | null;
     const isIdentityLoading = Boolean(identityResult?.isLoading);
@@ -95,11 +100,16 @@ export const useCrmAccess = () => {
     const [isEmployeeLoading, setIsEmployeeLoading] = useState(false);
 
     const identityEmail = toStringValue(identity?.email);
+    const isSystemAdminIdentity = Boolean(
+        tenant?.isSystemAdmin ||
+            (identityEmail &&
+                SYSTEM_ADMINS.some((adminEmail) => adminEmail.toLowerCase() === identityEmail.toLowerCase())),
+    );
 
     useEffect(() => {
         let active = true;
 
-        if (!identityEmail) {
+        if (!identityEmail || isSystemAdminIdentity) {
             setEmployee(null);
             setEmployeeError(null);
             setIsEmployeeLoading(false);
@@ -138,7 +148,7 @@ export const useCrmAccess = () => {
         return () => {
             active = false;
         };
-    }, [identityEmail]);
+    }, [identityEmail, isSystemAdminIdentity]);
 
     const roleFromMetadata = useMemo(() => {
         return (
@@ -150,9 +160,11 @@ export const useCrmAccess = () => {
         );
     }, [identity]);
 
-    const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata;
+    const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata || toBusinessRole(tenant?.role);
     const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
-    const canViewAllLeads = hasExplicitRole && isManagerRole(roleCandidate);
+    const isSystemAdmin = isSystemAdminIdentity;
+    const canViewAllLeads = (hasExplicitRole && isManagerRole(roleCandidate)) || isSystemAdmin;
+    const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin);
 
     const ownerCandidates = useMemo(() => {
         const identityName =
@@ -185,10 +197,13 @@ export const useCrmAccess = () => {
         employee,
         employeeError,
         isLoadingAccess: isIdentityLoading || isEmployeeLoading,
+        isSystemAdmin,
+        tenantId: tenant?.tenantId || null,
         canViewAllLeads,
-        ownerDisplayName,
+        canDeleteRecords,
+        ownerDisplayName: isSystemAdmin ? "Admin do Sistema (Polatto)" : ownerDisplayName,
         ownerCandidates,
         ownerCandidatesNormalized,
-        roleCandidate,
+        roleCandidate: isSystemAdmin ? "superadmin" : roleCandidate,
     };
 };

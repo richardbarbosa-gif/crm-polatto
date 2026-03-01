@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useList, useUpdate } from "@refinedev/core";
-import { CreateButton, EditButton } from "@refinedev/antd";
+import { useGo, useList, useUpdate } from "@refinedev/core";
+import { CreateButton } from "@refinedev/antd";
 import { Drawer, Input, Modal, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
     AppstoreOutlined,
@@ -9,6 +9,7 @@ import {
     CheckCircleOutlined,
     DeleteOutlined,
     DollarCircleOutlined,
+    EditOutlined,
     EyeOutlined,
     PlusOutlined,
     SearchOutlined,
@@ -25,7 +26,11 @@ import {
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
-import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import {
+    getSupabaseErrorMessage,
+    isSupabaseMissingRelation,
+    isSupabasePolicyRecursion,
+} from "../../lib/supabaseErrors";
 import { addLeadActivity } from "../../lib/leadTimeline";
 import {
     type LeadTemperatureTag,
@@ -82,10 +87,26 @@ const getStatusTone = (
     return "info";
 };
 
+const DRAG_ACTIVATION_DISTANCE = 5;
+const DRAG_ACTIVATION_DELAY_MS = 250;
+
+type LeadPointerSession = {
+    leadId: string;
+    startX: number;
+    startY: number;
+    draggableElement: HTMLDivElement;
+    isInteractiveTarget: boolean;
+    hasDragged: boolean;
+    timerId: number | null;
+};
+
 export const ClienteList = () => {
+    const go = useGo();
     const {
         canViewAllLeads,
+        canDeleteRecords,
         isLoadingAccess,
+        tenantId,
         ownerCandidatesNormalized,
         ownerDisplayName,
     } = useCrmAccess();
@@ -111,9 +132,7 @@ export const ClienteList = () => {
     const [newStageColor, setNewStageColor] = useState("#5d9cec");
     const [isCreatingStage, setIsCreatingStage] = useState(false);
     const [stagePendingDelete, setStagePendingDelete] = useState<Stage | null>(null);
-    const [deleteDestinationStage, setDeleteDestinationStage] = useState<string | undefined>(
-        undefined,
-    );
+    const [deleteDestinationStage, setDeleteDestinationStage] = useState<string | undefined>(undefined);
     const [isDeletingStage, setIsDeletingStage] = useState(false);
     const [isBoardPanning, setIsBoardPanning] = useState(false);
     const boardRef = useRef<HTMLDivElement | null>(null);
@@ -123,6 +142,9 @@ export const ClienteList = () => {
         scrollLeft: number;
         scrollTop: number;
     } | null>(null);
+    const leadPointerSessionRef = useRef<LeadPointerSession | null>(null);
+    const boardScrollLeftSnapshotRef = useRef(0);
+    const shouldRestoreBoardScrollRef = useRef(false);
 
     const { query: clientesQuery } = useList({
         resource: "clientes",
@@ -139,6 +161,9 @@ export const ClienteList = () => {
     const { mutateAsync: updateLead } = useUpdate();
     const isLoading = clientesQuery?.isLoading || isLoadingAccess;
     const rawData = clientesQuery?.data?.data || [];
+    const clientesQueryError = (clientesQuery?.error || null) as any;
+    const hasClientesPolicyRecursion = isSupabasePolicyRecursion(clientesQueryError);
+    const clientesQueryErrorMessage = getSupabaseErrorMessage(clientesQueryError);
 
     const persistedStagesRaw = useMemo(() => {
         return ((stagesQuery?.data?.data as any[]) || []).filter((stage) => stage !== null);
@@ -220,7 +245,44 @@ export const ClienteList = () => {
         return DEFAULT_STAGE_BLUEPRINT.map((stage) => ({ ...stage, persisted: false }));
     }, [persistedStagesRaw]);
 
-    const stageNames = useMemo(() => stages.map((stage) => stage.nome), [stages]);
+    const stageIdSet = useMemo(() => new Set(stages.map((stage) => String(stage.id ?? ""))), [stages]);
+    const stageIdByName = useMemo(
+        () =>
+            new Map(stages.map((stage) => [normalizeText(stage.nome), String(stage.id ?? stage.nome)])),
+        [stages],
+    );
+    const stageById = useMemo(
+        () => new Map(stages.map((stage) => [String(stage.id ?? stage.nome), stage])),
+        [stages],
+    );
+
+    const resolveLeadStageId = (cliente: any): string => {
+        const rawStageId = cliente?.stage_id ?? cliente?.stageId;
+        if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
+            return String(rawStageId);
+        }
+
+        const normalizedStatus = normalizeText(cliente?.status);
+        if (!normalizedStatus) {
+            return "";
+        }
+
+        return stageIdByName.get(normalizedStatus) || "";
+    };
+
+    const resolveLeadStageName = (cliente: any): string => {
+        const stageId = resolveLeadStageId(cliente);
+        if (stageId && stageById.has(stageId)) {
+            return stageById.get(stageId)?.nome || cliente?.status || "Sem etapa";
+        }
+
+        if (typeof cliente?.status === "string" && cliente.status.trim()) {
+            return cliente.status.trim();
+        }
+
+        return "Sem etapa";
+    };
+
     const manageableStages = useMemo(
         () => stages.filter((stage) => stage.nome !== "Outros"),
         [stages],
@@ -229,29 +291,33 @@ export const ClienteList = () => {
 
     const stagesVisiveis = useMemo(() => {
         const possuiDesconhecidos = visibleData.some(
-            (cliente: any) => cliente.status && !stageNames.includes(cliente.status),
+            (cliente: any) => {
+                const stageId = resolveLeadStageId(cliente);
+                return !stageId || !stageIdSet.has(stageId);
+            },
         );
 
         if (!possuiDesconhecidos) return stages;
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [stageNames, stages, visibleData]);
+    }, [resolveLeadStageId, stageIdSet, stages]);
 
-    const leadCountByStatus = useMemo(() => {
+    const leadCountByStageId = useMemo(() => {
         return rawData.reduce<Record<string, number>>((acc, cliente: any) => {
-            if (!cliente?.status) {
+            const stageId = resolveLeadStageId(cliente);
+            if (!stageId) {
                 return acc;
             }
-            acc[cliente.status] = (acc[cliente.status] || 0) + 1;
+            acc[stageId] = (acc[stageId] || 0) + 1;
             return acc;
         }, {});
-    }, [rawData]);
+    }, [rawData, resolveLeadStageId]);
 
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) {
             return 0;
         }
-        return leadCountByStatus[stagePendingDelete.nome] || 0;
-    }, [leadCountByStatus, stagePendingDelete]);
+        return leadCountByStageId[String(stagePendingDelete.id ?? "")] || 0;
+    }, [leadCountByStageId, stagePendingDelete]);
 
     const deleteStageDestinationOptions = useMemo(() => {
         if (!stagePendingDelete) {
@@ -260,7 +326,7 @@ export const ClienteList = () => {
         return manageableStages
             .filter((stage) => stage.nome !== stagePendingDelete.nome)
             .map((stage) => ({
-                value: stage.nome,
+                value: String(stage.id ?? stage.nome),
                 label: stage.nome,
             }));
     }, [manageableStages, stagePendingDelete]);
@@ -289,6 +355,7 @@ export const ClienteList = () => {
         }
 
         const payload = DEFAULT_STAGE_BLUEPRINT.map((stage, index) => ({
+            tenant_id: tenantId || undefined,
             nome: stage.nome,
             cor: stage.cor || getStatusAccent(stage.nome),
             ordem: index + 1,
@@ -306,6 +373,10 @@ export const ClienteList = () => {
     };
 
     const openStageManager = async () => {
+        if (!canDeleteRecords) {
+            message.warning("Somente admin pode gerenciar colunas.");
+            return;
+        }
         const ready = await persistDefaultStagesIfNeeded();
         if (!ready) {
             return;
@@ -314,6 +385,11 @@ export const ClienteList = () => {
     };
 
     const handleCreateStage = async () => {
+        if (!canDeleteRecords) {
+            message.warning("Somente admin pode criar colunas.");
+            return;
+        }
+
         const nome = newStageName.trim();
         if (!nome) {
             message.warning("Informe o nome da coluna.");
@@ -340,6 +416,7 @@ export const ClienteList = () => {
             }, 0);
 
             const { error } = await supabaseClient.from("pipeline_stages").insert({
+                tenant_id: tenantId || undefined,
                 nome,
                 cor: newStageColor,
                 ordem: maxOrder + 1,
@@ -353,23 +430,32 @@ export const ClienteList = () => {
             setNewStageName("");
             setNewStageColor("#5d9cec");
             await stagesQuery?.refetch?.();
-        } catch {
-            message.error("Nao foi possivel criar a coluna.");
+        } catch (error: any) {
+            message.error("Erro: " + (error?.message || "Não foi possível criar a coluna."));
         } finally {
             setIsCreatingStage(false);
         }
     };
 
     const requestDeleteStage = (stage: Stage) => {
+        if (!canDeleteRecords) {
+            message.warning("Somente admin pode excluir colunas.");
+            return;
+        }
+
         if (!canDeleteAnyStage) {
             message.warning("Mantenha ao menos uma coluna no funil.");
             return;
         }
 
         setStagePendingDelete(stage);
-        const defaultDestination = manageableStages.find(
+        const defaultDestinationRaw = manageableStages.find(
             (item) => item.nome !== stage.nome,
-        )?.nome;
+        )?.id;
+        const defaultDestination =
+            defaultDestinationRaw === undefined || defaultDestinationRaw === null
+                ? undefined
+                : String(defaultDestinationRaw);
         setDeleteDestinationStage(defaultDestination);
     };
 
@@ -379,13 +465,19 @@ export const ClienteList = () => {
     };
 
     const confirmDeleteStage = async () => {
+        if (!canDeleteRecords) {
+            message.warning("Somente admin pode excluir colunas.");
+            return;
+        }
+
         if (!stagePendingDelete) {
             return;
         }
 
         if (
             leadsInPendingDeleteStage > 0 &&
-            (!deleteDestinationStage || deleteDestinationStage === stagePendingDelete.nome)
+            (!deleteDestinationStage ||
+                deleteDestinationStage === String(stagePendingDelete.id ?? ""))
         ) {
             message.warning("Selecione uma coluna destino para mover os leads.");
             return;
@@ -399,10 +491,15 @@ export const ClienteList = () => {
         setIsDeletingStage(true);
         try {
             if (leadsInPendingDeleteStage > 0 && deleteDestinationStage) {
+                const destinationStage = stageById.get(deleteDestinationStage);
                 const { error: moveError } = await supabaseClient
                     .from("clientes")
-                    .update({ status: deleteDestinationStage })
-                    .eq("status", stagePendingDelete.nome);
+                    .update({
+                        tenant_id: tenantId || undefined,
+                        stage_id: deleteDestinationStage,
+                        status: destinationStage?.nome || undefined,
+                    })
+                    .eq("stage_id", String(stagePendingDelete.id));
 
                 if (moveError) {
                     throw moveError;
@@ -451,7 +548,7 @@ export const ClienteList = () => {
             return (
                 normalizeText(cliente.nome).includes(texto) ||
                 normalizeText(cliente.telefone).includes(texto) ||
-                normalizeText(cliente.status).includes(texto)
+                normalizeText(resolveLeadStageName(cliente)).includes(texto)
             );
         });
     }, [
@@ -460,6 +557,7 @@ export const ClienteList = () => {
         searchText,
         temperaturaFiltro,
         temperatureRevision,
+        resolveLeadStageName,
     ]);
 
     const kpis = useMemo(() => {
@@ -468,19 +566,133 @@ export const ClienteList = () => {
             return acc + Number(curr.conta_energia_media || 0);
         }, 0);
         const fechados = clientesFiltrados.filter((cliente: any) =>
-            normalizeText(cliente.status).includes("fechado"),
+            normalizeText(resolveLeadStageName(cliente)).includes("fechado"),
         ).length;
         const taxaConversao = totalLeads > 0 ? ((fechados / totalLeads) * 100).toFixed(1) : "0";
 
         return { totalLeads, totalValor, taxaConversao };
-    }, [clientesFiltrados]);
+    }, [clientesFiltrados, resolveLeadStageName]);
+
+    const isInteractiveLeadTarget = (target: EventTarget | null) => {
+        if (!(target instanceof HTMLElement)) {
+            return false;
+        }
+
+        return Boolean(
+            target.closest(
+                "button, a, input, textarea, select, [role='button'], [data-no-card-open='true']",
+            ),
+        );
+    };
+
+    const clearLeadPointerSession = () => {
+        const session = leadPointerSessionRef.current;
+        if (!session) {
+            return;
+        }
+
+        if (session.timerId !== null) {
+            window.clearTimeout(session.timerId);
+        }
+
+        session.draggableElement.draggable = true;
+        leadPointerSessionRef.current = null;
+    };
+
+    const handleLeadPointerDown = (
+        event: React.PointerEvent<HTMLDivElement>,
+        leadId: string,
+    ) => {
+        if (!event.isPrimary || event.button !== 0 || isDragging) {
+            return;
+        }
+
+        clearLeadPointerSession();
+
+        const interactiveTarget = isInteractiveLeadTarget(event.target);
+        const draggableElement = event.currentTarget;
+        draggableElement.draggable = false;
+
+        const timerId = window.setTimeout(() => {
+            const activeSession = leadPointerSessionRef.current;
+            if (!activeSession || activeSession.leadId !== leadId) {
+                return;
+            }
+
+            activeSession.draggableElement.draggable = true;
+            activeSession.timerId = null;
+        }, DRAG_ACTIVATION_DELAY_MS);
+
+        leadPointerSessionRef.current = {
+            leadId,
+            startX: event.clientX,
+            startY: event.clientY,
+            draggableElement,
+            isInteractiveTarget: interactiveTarget,
+            hasDragged: false,
+            timerId,
+        };
+    };
+
+    const handleLeadPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        const session = leadPointerSessionRef.current;
+        if (!session) {
+            return;
+        }
+
+        const deltaX = event.clientX - session.startX;
+        const deltaY = event.clientY - session.startY;
+        const pointerDistance = Math.hypot(deltaX, deltaY);
+
+        if (pointerDistance < DRAG_ACTIVATION_DISTANCE) {
+            return;
+        }
+
+        if (session.timerId !== null) {
+            window.clearTimeout(session.timerId);
+            session.timerId = null;
+        }
+
+        session.draggableElement.draggable = true;
+    };
+
+    const handleLeadPointerUp = (event: React.PointerEvent<HTMLDivElement>, lead: any) => {
+        const session = leadPointerSessionRef.current;
+        if (!session || session.leadId !== String(lead.id)) {
+            return;
+        }
+
+        const deltaX = event.clientX - session.startX;
+        const deltaY = event.clientY - session.startY;
+        const pointerDistance = Math.hypot(deltaX, deltaY);
+        const shouldOpenLead =
+            !session.hasDragged &&
+            !session.isInteractiveTarget &&
+            pointerDistance < DRAG_ACTIVATION_DISTANCE;
+
+        clearLeadPointerSession();
+
+        if (shouldOpenLead) {
+            openLeadDrawer(lead);
+        }
+    };
 
     const handleDragStart = (event: React.DragEvent<HTMLDivElement>, id: string) => {
+        const activeSession = leadPointerSessionRef.current;
+        if (activeSession && activeSession.leadId === id) {
+            activeSession.hasDragged = true;
+            if (activeSession.timerId !== null) {
+                window.clearTimeout(activeSession.timerId);
+                activeSession.timerId = null;
+            }
+        }
+
         setDraggedItemId(id);
         setIsDragging(true);
         setActiveDropColumn(null);
         setIsBoardPanning(false);
         boardPanStartRef.current = null;
+        event.dataTransfer.setData("leadId", id);
         event.dataTransfer.effectAllowed = "move";
         event.currentTarget.style.opacity = "0.5";
         event.currentTarget.style.cursor = "grabbing";
@@ -489,6 +701,7 @@ export const ClienteList = () => {
     const handleDragEnd = (event: React.DragEvent<HTMLDivElement>) => {
         event.currentTarget.style.opacity = "1";
         event.currentTarget.style.cursor = "grab";
+        clearLeadPointerSession();
         setDraggedItemId(null);
         setIsDragging(false);
         setActiveDropColumn(null);
@@ -545,45 +758,81 @@ export const ClienteList = () => {
         setIsBoardPanning(false);
     };
 
-    const handleDragOver = (event: React.DragEvent<HTMLDivElement>, status: string) => {
+    const handleDragOver = (event: React.DragEvent<HTMLDivElement>, stageId: string) => {
         event.preventDefault();
         event.dataTransfer.dropEffect = "move";
-        if (activeDropColumn !== status) {
-            setActiveDropColumn(status);
+        if (activeDropColumn !== stageId) {
+            setActiveDropColumn(stageId);
         }
+    };
+
+    const snapshotBoardScrollLeft = () => {
+        const board = boardRef.current;
+        if (!board) {
+            return;
+        }
+
+        boardScrollLeftSnapshotRef.current = board.scrollLeft;
+        shouldRestoreBoardScrollRef.current = true;
+    };
+
+    const restoreBoardScrollLeft = () => {
+        if (!shouldRestoreBoardScrollRef.current) {
+            return;
+        }
+
+        const expectedScrollLeft = boardScrollLeftSnapshotRef.current;
+        window.requestAnimationFrame(() => {
+            const board = boardRef.current;
+            if (board) {
+                board.scrollLeft = expectedScrollLeft;
+            }
+            shouldRestoreBoardScrollRef.current = false;
+        });
     };
 
     const handleDrop = async (
         event: React.DragEvent<HTMLDivElement>,
-        novoStatus: string,
+        novoStageId: string,
     ) => {
         event.preventDefault();
+        snapshotBoardScrollLeft();
         setActiveDropColumn(null);
         setIsDragging(false);
 
-        if (!draggedItemId) return;
+        const leadId = draggedItemId || event.dataTransfer.getData("leadId");
+        if (!leadId) return;
 
-        const leadArrastado = visibleData.find((item: any) => item.id.toString() === draggedItemId);
+        const leadArrastado = visibleData.find((item: any) => item.id.toString() === leadId);
 
         if (!leadArrastado) {
             message.warning("Lead nao encontrado.");
             return;
         }
 
-        if (leadArrastado?.status === novoStatus) return;
+        const currentStageId = resolveLeadStageId(leadArrastado);
+        if (currentStageId === novoStageId) return;
+
+        const nextStage = stageById.get(novoStageId);
+        const nextStageName = nextStage?.nome || "Sem etapa";
+        const fromStageName = resolveLeadStageName(leadArrastado);
 
         try {
             await updateLead({
                 resource: "clientes",
-                id: draggedItemId,
-                values: { status: novoStatus },
+                id: leadId,
+                values: {
+                    tenant_id: tenantId || undefined,
+                    stage_id: novoStageId,
+                    status: nextStage?.nome || undefined,
+                },
                 successNotification: () => ({
-                    message: `Movido para ${novoStatus}`,
-                    description: "Status atualizado com sucesso.",
+                    message: `Movido para ${nextStageName}`,
+                    description: "Etapa atualizada com sucesso.",
                     type: "success",
                 }),
                 errorNotification: () => ({
-                    message: "Nao foi possivel atualizar o status",
+                    message: "Nao foi possivel atualizar a etapa",
                     description: "Tente novamente.",
                     type: "error",
                 }),
@@ -592,9 +841,10 @@ export const ClienteList = () => {
             const { error: historyError } = await supabaseClient
                 .from("cliente_status_history")
                 .insert({
+                    tenant_id: tenantId || undefined,
                     cliente_id: leadArrastado.id,
-                    de_status: leadArrastado.status,
-                    para_status: novoStatus,
+                    de_status: fromStageName,
+                    para_status: nextStageName,
                     movido_em: new Date().toISOString(),
                     movido_por: ownerDisplayName || null,
                 });
@@ -608,22 +858,36 @@ export const ClienteList = () => {
             if (leadArrastado.id !== undefined && leadArrastado.id !== null) {
                 await addLeadActivity({
                     leadId: String(leadArrastado.id),
+                    tenantId,
                     activityType: "status",
-                    title: "Mudanca de status",
-                    description: `${leadArrastado.status || "-"} -> ${novoStatus}`,
-                    fromStatus: leadArrastado.status || undefined,
-                    toStatus: novoStatus,
+                    title: "Mudanca de etapa",
+                    description: `${fromStageName} -> ${nextStageName}`,
+                    fromStatus: fromStageName,
+                    toStatus: nextStageName,
                     author: ownerDisplayName,
                 });
             }
         } catch {
             // Error notification is handled by refine.
+        } finally {
+            restoreBoardScrollLeft();
         }
     };
 
     const openLeadDrawer = (lead: any) => {
         setSelectedLeadId(lead.id);
         setIsLeadDrawerOpen(true);
+    };
+
+    const openLeadEdit = (leadId: string | number) => {
+        go({
+            to: `/clientes/edit/${leadId}`,
+            type: "push",
+        });
+    };
+
+    const stopLeadCardActionPropagation = (event: React.SyntheticEvent<HTMLElement>) => {
+        event.stopPropagation();
     };
 
     const closeLeadDrawer = () => {
@@ -650,6 +914,34 @@ export const ClienteList = () => {
         window.addEventListener("mouseup", handleMouseUp);
         return () => window.removeEventListener("mouseup", handleMouseUp);
     }, []);
+
+    useEffect(() => {
+        return () => {
+            clearLeadPointerSession();
+        };
+    }, []);
+
+    useEffect(() => {
+        const previousHtmlOverscrollX = document.documentElement.style.overscrollBehaviorX;
+        const previousBodyOverscrollX = document.body.style.overscrollBehaviorX;
+
+        document.documentElement.style.overscrollBehaviorX = "none";
+        document.body.style.overscrollBehaviorX = "none";
+
+        return () => {
+            document.documentElement.style.overscrollBehaviorX = previousHtmlOverscrollX;
+            document.body.style.overscrollBehaviorX = previousBodyOverscrollX;
+        };
+    }, []);
+
+    useEffect(() => {
+        if (viewType !== "kanban") {
+            shouldRestoreBoardScrollRef.current = false;
+            return;
+        }
+
+        restoreBoardScrollLeft();
+    }, [clientesQuery?.data?.data, stagesQuery?.data?.data, viewType]);
 
     if (isLoading) {
         return (
@@ -777,7 +1069,7 @@ export const ClienteList = () => {
                 >
                     Novo Lead
                 </CreateButton>
-                <Button icon={<SettingOutlined />} onClick={openStageManager}>
+                <Button icon={<SettingOutlined />} onClick={openStageManager} disabled={!canDeleteRecords}>
                     Colunas
                 </Button>
             </div>
@@ -827,6 +1119,25 @@ export const ClienteList = () => {
     );
 
     const KanbanView = () => {
+        if (clientesQueryError) {
+            return (
+                <div style={{ padding: 20 }}>
+                    <EmptyState
+                        title={
+                            hasClientesPolicyRecursion
+                                ? "Falha de policy RLS no Supabase"
+                                : "Nao foi possivel carregar os leads"
+                        }
+                        description={
+                            hasClientesPolicyRecursion
+                                ? "O erro indica recursao infinita em policy da tabela utilizadores_empresas. Os dados nao foram apagados; o acesso foi bloqueado pelo banco."
+                                : clientesQueryErrorMessage || "Revise as policies RLS e tente novamente."
+                        }
+                    />
+                </div>
+            );
+        }
+
         if (clientesFiltrados.length === 0) {
             return (
                 <div style={{ padding: 20 }}>
@@ -856,27 +1167,32 @@ export const ClienteList = () => {
                     cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
                     userSelect: isBoardPanning ? "none" : "auto",
                     scrollbarWidth: "none",
+                    overscrollBehavior: "none",
+                    touchAction: "none",
                 }}
             >
                 {stagesVisiveis.map((estagio) => {
+                    const stageColumnId = String(estagio.id ?? estagio.nome);
                     const clientesDaColuna = clientesFiltrados.filter((cliente: any) =>
                         estagio.nome === "Outros"
-                            ? cliente.status && !stageNames.includes(cliente.status)
-                            : cliente.status === estagio.nome,
+                            ? !resolveLeadStageId(cliente) || !stageIdSet.has(resolveLeadStageId(cliente))
+                            : resolveLeadStageId(cliente) === stageColumnId,
                     );
                     const totalColuna = clientesDaColuna.reduce((acc: number, curr: any) => {
                         return acc + Number(curr.conta_energia_media || 0);
                     }, 0);
 
                     const isDroppable = estagio.nome !== "Outros";
-                    const isDropActive = isDroppable && isDragging && activeDropColumn === estagio.nome;
+                    const isDropActive = isDroppable && isDragging && activeDropColumn === stageColumnId;
                     const accentColor = estagio.cor || getStatusAccent(estagio.nome);
 
                     return (
                         <div
-                            key={estagio.nome}
-                            onDragOver={isDroppable ? (event) => handleDragOver(event, estagio.nome) : undefined}
-                            onDrop={isDroppable ? (event) => handleDrop(event, estagio.nome) : undefined}
+                            key={stageColumnId}
+                            onDragOver={
+                                isDroppable ? (event) => handleDragOver(event, stageColumnId) : undefined
+                            }
+                            onDrop={isDroppable ? (event) => handleDrop(event, stageColumnId) : undefined}
                             style={{
                                 minWidth: "300px",
                                 maxWidth: "300px",
@@ -942,11 +1258,17 @@ export const ClienteList = () => {
                                             key={cliente.id}
                                             data-pan-ignore="true"
                                             draggable
+                                            onPointerDown={(event) =>
+                                                handleLeadPointerDown(event, String(cliente.id))
+                                            }
+                                            onPointerMove={handleLeadPointerMove}
+                                            onPointerUp={(event) => handleLeadPointerUp(event, cliente)}
+                                            onPointerCancel={clearLeadPointerSession}
                                             onDragStart={(event) =>
                                                 handleDragStart(event, cliente.id.toString())
                                             }
                                             onDragEnd={handleDragEnd}
-                                            style={{ cursor: "grab" }}
+                                            style={{ cursor: "grab", touchAction: "pan-y" }}
                                         >
                                             <Card
                                                 size="small"
@@ -959,17 +1281,29 @@ export const ClienteList = () => {
                                                 }}
                                                 bodyStyle={{ padding: "10px" }}
                                                 actions={[
-                                                    <EditButton
+                                                    <Button
                                                         key={`edit-${cliente.id}`}
-                                                        hideText
+                                                        icon={<EditOutlined />}
                                                         size="small"
-                                                        recordItemId={cliente.id}
-                                                    />,
+                                                        data-no-card-open="true"
+                                                        onPointerDown={stopLeadCardActionPropagation}
+                                                        onClick={(event) => {
+                                                            stopLeadCardActionPropagation(event);
+                                                            openLeadEdit(cliente.id);
+                                                        }}
+                                                    >
+                                                        Editar
+                                                    </Button>,
                                                     <Button
                                                         key={`show-${cliente.id}`}
                                                         icon={<EyeOutlined />}
                                                         size="small"
-                                                        onClick={() => openLeadDrawer(cliente)}
+                                                        data-no-card-open="true"
+                                                        onPointerDown={stopLeadCardActionPropagation}
+                                                        onClick={(event) => {
+                                                            stopLeadCardActionPropagation(event);
+                                                            openLeadDrawer(cliente);
+                                                        }}
                                                     >
                                                         Ver
                                                     </Button>,
@@ -1027,59 +1361,81 @@ export const ClienteList = () => {
 
     const ListView = () => (
         <div style={{ padding: "20px", backgroundColor: "#fff", height: "calc(100vh - 210px)" }}>
-            <Table
-                dataSource={clientesFiltrados}
-                rowKey="id"
-                size="middle"
-                pagination={{ pageSize: 12, position: ["bottomCenter"] }}
-                columns={[
-                    {
-                        title: "Nome do Lead",
-                        dataIndex: "nome",
-                        render: (text) => <b style={{ color: "#153046" }}>{text}</b>,
-                    },
-                    {
-                        title: "Status",
-                        dataIndex: "status",
-                        render: (status) => (
-                            <Badge tone={getStatusTone(status)}>{status || "Sem status"}</Badge>
-                        ),
-                    },
-                    {
-                        title: "Temperatura",
-                        key: "temperature",
-                        render: (_, record: any) => (
-                            <TemperatureBadge value={getClienteTemperature(record)} />
-                        ),
-                    },
-                    {
-                        title: "Responsavel",
-                        dataIndex: "responsavel",
-                        render: (value) => value || "-",
-                    },
-                    {
-                        title: "Valor",
-                        dataIndex: "conta_energia_media",
-                        render: (value) => formatCurrencyBRL(value, "R$ 0,00"),
-                    },
-                    { title: "Telefone", dataIndex: "telefone" },
-                    {
-                        title: "",
-                        render: (_, record: any) => (
-                            <Space>
-                                <Button
-                                    size="small"
-                                    icon={<EyeOutlined />}
-                                    onClick={() => openLeadDrawer(record)}
-                                >
-                                    Ver
-                                </Button>
-                                <EditButton hideText size="small" recordItemId={record.id} />
-                            </Space>
-                        ),
-                    },
-                ]}
-            />
+            {clientesQueryError ? (
+                <EmptyState
+                    title={
+                        hasClientesPolicyRecursion
+                            ? "Falha de policy RLS no Supabase"
+                            : "Nao foi possivel carregar os leads"
+                    }
+                    description={
+                        hasClientesPolicyRecursion
+                            ? "O erro indica recursao infinita em policy da tabela utilizadores_empresas. Os dados nao foram apagados; o acesso foi bloqueado pelo banco."
+                            : clientesQueryErrorMessage || "Revise as policies RLS e tente novamente."
+                    }
+                />
+            ) : (
+                <Table
+                    dataSource={clientesFiltrados}
+                    rowKey="id"
+                    size="middle"
+                    pagination={{ pageSize: 12, position: ["bottomCenter"] }}
+                    columns={[
+                        {
+                            title: "Nome do Lead",
+                            dataIndex: "nome",
+                            render: (text) => <b style={{ color: "#153046" }}>{text}</b>,
+                        },
+                        {
+                            title: "Etapa",
+                            key: "stage_id",
+                            render: (_, record: any) => {
+                                const stageName = resolveLeadStageName(record);
+                                return <Badge tone={getStatusTone(stageName)}>{stageName}</Badge>;
+                            },
+                        },
+                        {
+                            title: "Temperatura",
+                            key: "temperature",
+                            render: (_, record: any) => (
+                                <TemperatureBadge value={getClienteTemperature(record)} />
+                            ),
+                        },
+                        {
+                            title: "Responsavel",
+                            dataIndex: "responsavel",
+                            render: (value) => value || "-",
+                        },
+                        {
+                            title: "Valor",
+                            dataIndex: "conta_energia_media",
+                            render: (value) => formatCurrencyBRL(value, "R$ 0,00"),
+                        },
+                        { title: "Telefone", dataIndex: "telefone" },
+                        {
+                            title: "",
+                            render: (_, record: any) => (
+                                <Space>
+                                    <Button
+                                        size="small"
+                                        icon={<EyeOutlined />}
+                                        onClick={() => openLeadDrawer(record)}
+                                    >
+                                        Ver
+                                    </Button>
+                                    <Button
+                                        size="small"
+                                        icon={<EditOutlined />}
+                                        onClick={() => openLeadEdit(record.id)}
+                                    >
+                                        Editar
+                                    </Button>
+                                </Space>
+                            ),
+                        },
+                    ]}
+                />
+            )}
         </div>
     );
 
@@ -1090,15 +1446,36 @@ export const ClienteList = () => {
                 display: "flex",
                 flexDirection: "column",
                 backgroundColor: "#fff",
+                overflow: "hidden",
+                overscrollBehaviorX: "none",
+                overscrollBehaviorY: "none",
             }}
         >
             <KommoHeader />
-            <div style={{ flex: 1, backgroundColor: "#fff" }}>
+            <div
+                style={{
+                    flex: 1,
+                    backgroundColor: "#fff",
+                    overflow: "hidden",
+                    overscrollBehaviorX: "none",
+                    overscrollBehaviorY: "none",
+                }}
+            >
                 <style>{`
+                    body {
+                        overscroll-behavior-x: none;
+                    }
+
                     .crm-kanban-scroll::-webkit-scrollbar {
                         width: 0;
                         height: 0;
                         display: none;
+                    }
+
+                    .crm-kanban-scroll {
+                        overscroll-behavior-x: none;
+                        overscroll-behavior-y: none;
+                        touch-action: pan-y;
                     }
                 `}</style>
                 {viewType === "kanban" ? <KanbanView /> : <ListView />}
@@ -1182,7 +1559,7 @@ export const ClienteList = () => {
                                 <div>
                                     <Text strong>{stage.nome}</Text>
                                     <Text type="secondary" style={{ marginLeft: 8 }}>
-                                        {leadCountByStatus[stage.nome] || 0} leads
+                                        {leadCountByStageId[String(stage.id ?? "")] || 0} leads
                                     </Text>
                                 </div>
                             </div>
@@ -1191,7 +1568,7 @@ export const ClienteList = () => {
                                 danger
                                 icon={<DeleteOutlined />}
                                 onClick={() => requestDeleteStage(stage)}
-                                disabled={!canDeleteAnyStage || !stage.persisted}
+                                disabled={!canDeleteRecords || !canDeleteAnyStage || !stage.persisted}
                             >
                                 Excluir
                             </Button>
@@ -1209,7 +1586,7 @@ export const ClienteList = () => {
                 onCancel={cancelDeleteStage}
                 onOk={confirmDeleteStage}
                 okText="Excluir coluna"
-                okButtonProps={{ danger: true, loading: isDeletingStage }}
+                okButtonProps={{ danger: true, loading: isDeletingStage, disabled: !canDeleteRecords }}
                 cancelButtonProps={{ disabled: isDeletingStage }}
                 destroyOnClose
             >

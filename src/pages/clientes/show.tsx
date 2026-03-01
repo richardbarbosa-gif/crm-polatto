@@ -10,7 +10,8 @@ export const ClienteShow = () => {
     const showResult = useShow() as any;
     const { data, isLoading } = showResult.query || showResult;
     const record = data?.data;
-    const { canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } = useCrmAccess();
+    const { canDeleteRecords, canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } =
+        useCrmAccess();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const canAccessLead = useMemo(() => {
@@ -24,7 +25,7 @@ export const ClienteShow = () => {
     }, [canViewAllLeads, ownerCandidatesNormalized, record]);
 
     return (
-        <Show isLoading={isLoading} title="Detalhes do Cliente">
+        <Show canDelete={canDeleteRecords} isLoading={isLoading} title="Detalhes do Cliente">
             {!isLoading && !canAccessLead ? (
                 <Alert
                     type="warning"

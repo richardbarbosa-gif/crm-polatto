@@ -11,10 +11,13 @@ import {
     UserOutlined,
 } from "@ant-design/icons";
 import { DateField } from "@refinedev/antd";
+import { useList } from "@refinedev/core";
 import { Alert, Divider, Empty, Input, List, Select, Skeleton, Space, Timeline, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, TemperatureBadge } from "../../components/ui";
+import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
+import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -26,13 +29,16 @@ import {
     setLeadTemperature,
 } from "../../lib/leadTemperature";
 import {
+    MAX_PDF_FILE_SIZE_BYTES,
     type LeadStoredFile,
     type LeadTimelineEntry,
     addLeadActivity,
     fetchLeadTimeline,
     listLeadFiles,
+    softDeleteLeadDocument,
     uploadLeadPdf,
 } from "../../lib/leadTimeline";
+import { canDelete } from "../../lib/permissions";
 
 const { Title, Text } = Typography;
 
@@ -50,6 +56,7 @@ type LeadRecord = {
     email?: string | null;
     cpf_cnpj?: string | null;
     created_at?: string | null;
+    stage_id?: string | number | null;
     status?: string | null;
 };
 
@@ -94,6 +101,7 @@ export const LeadDetails = ({
     currentUserLabel,
     onScheduleVisit,
 }: LeadDetailsProps) => {
+    const { isSystemAdmin, role, tenantId } = useTenant();
     const [temperatureTag, setTemperatureTag] = useState<LeadTemperatureTag | undefined>(undefined);
     const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
     const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
@@ -103,11 +111,25 @@ export const LeadDetails = ({
     const [activityText, setActivityText] = useState("");
     const [isSavingActivity, setIsSavingActivity] = useState(false);
     const [uploadingKind, setUploadingKind] = useState<"proposta" | "conta_luz" | null>(null);
+    const [uploadStatusByKind, setUploadStatusByKind] = useState<
+        Partial<Record<"proposta" | "conta_luz", "enviando" | "processando" | "concluido">>
+    >({});
     const propostaInputRef = useRef<HTMLInputElement | null>(null);
     const contaInputRef = useRef<HTMLInputElement | null>(null);
 
-    const automaticTemperature = resolveAutomaticLeadTemperature(record?.status || undefined);
+    const { query: stagesQuery } = useList({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        sorters: [{ field: "ordem", order: "asc" }],
+    });
+    const stagesData = (stagesQuery?.data?.data as any[]) || [];
+    const leadStages = useMemo(() => buildLeadStages(stagesData), [stagesData]);
+    const currentStage = findLeadStageById(leadStages, record?.stage_id);
+    const stageDisplayName = currentStage?.nome || record?.status || "Sem etapa";
+
+    const automaticTemperature = resolveAutomaticLeadTemperature(stageDisplayName);
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
+    const canDeleteDocuments = canDelete(role, isSystemAdmin);
 
     useEffect(() => {
         setTemperatureTag(resolveLeadTemperature(record));
@@ -140,14 +162,19 @@ export const LeadDetails = ({
         setIsLoadingFiles(true);
         try {
             const storedFiles = await listLeadFiles(record.id);
-            setFiles(storedFiles);
+            setFiles(
+                storedFiles.map((file) => ({
+                    ...file,
+                    canDelete: canDeleteDocuments,
+                })),
+            );
         } catch (error: any) {
             setFiles([]);
             message.warning(error?.message || "Nao foi possivel listar arquivos anexados.");
         } finally {
             setIsLoadingFiles(false);
         }
-    }, [record?.id]);
+    }, [canDeleteDocuments, record?.id]);
 
     useEffect(() => {
         loadTimeline();
@@ -217,6 +244,7 @@ export const LeadDetails = ({
         try {
             const persisted = await addLeadActivity({
                 leadId: record.id,
+                tenantId,
                 activityType: activityType,
                 title: activityType === "ligacao" ? "Ligacao com lead" : "Nota manual",
                 description: activityText.trim(),
@@ -259,18 +287,38 @@ export const LeadDetails = ({
             return;
         }
 
-        if (!file.name.toLowerCase().endsWith(".pdf")) {
+        const isPdf =
+            file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
+        if (!isPdf) {
             message.warning("Envie apenas arquivos PDF.");
             return;
         }
 
+        if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
+            message.warning(
+                `Arquivo acima do limite (${Math.floor(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB).`,
+            );
+            return;
+        }
+
         setUploadingKind(kind);
+        setUploadStatusByKind((previous) => ({
+            ...previous,
+            [kind]: "enviando",
+        }));
         try {
             await uploadLeadPdf({
                 leadId: record.id,
                 file,
                 kind,
+                tenantId,
                 author: currentUserLabel,
+                onStatusChange: (status) => {
+                    setUploadStatusByKind((previous) => ({
+                        ...previous,
+                        [kind]: status,
+                    }));
+                },
             });
             message.success("Arquivo enviado com sucesso.");
             await Promise.all([loadFiles(), loadTimeline()]);
@@ -281,6 +329,32 @@ export const LeadDetails = ({
             );
         } finally {
             setUploadingKind(null);
+            setTimeout(() => {
+                setUploadStatusByKind((previous) => {
+                    const next = { ...previous };
+                    delete next[kind];
+                    return next;
+                });
+            }, 1200);
+        }
+    };
+
+    const handleDeleteFile = async (file: LeadStoredFile) => {
+        if (!canDeleteDocuments) {
+            message.warning("Apenas admin pode excluir documentos.");
+            return;
+        }
+
+        try {
+            await softDeleteLeadDocument({
+                documentId: file.id,
+                storagePath: file.caminhoStorage,
+                tenantId,
+            });
+            message.success("Documento excluido com sucesso.");
+            await Promise.all([loadFiles(), loadTimeline()]);
+        } catch (error: any) {
+            message.error(error?.message || "Nao foi possivel excluir o documento.");
         }
     };
 
@@ -306,7 +380,7 @@ export const LeadDetails = ({
                 }}
             >
                 <Space wrap>
-                    <Badge tone={getStatusTone(record.status)}>{record.status || "Novo Lead"}</Badge>
+                    <Badge tone={getStatusTone(stageDisplayName)}>{stageDisplayName}</Badge>
                     <TemperatureBadge value={temperatureTag} />
                     <Select
                         size="small"
@@ -488,6 +562,16 @@ export const LeadDetails = ({
                         Upload conta de luz
                     </Button>
                 </Space>
+                {uploadStatusByKind.proposta ? (
+                    <Text type="secondary" style={{ display: "block" }}>
+                        Proposta: {uploadStatusByKind.proposta}...
+                    </Text>
+                ) : null}
+                {uploadStatusByKind.conta_luz ? (
+                    <Text type="secondary" style={{ display: "block" }}>
+                        Conta de luz: {uploadStatusByKind.conta_luz}...
+                    </Text>
+                ) : null}
 
                 {isLoadingFiles ? (
                     <Skeleton active paragraph={{ rows: 2 }} />
@@ -497,28 +581,69 @@ export const LeadDetails = ({
                     <List
                         size="small"
                         dataSource={files}
-                        rowKey={(item) => item.path}
+                        rowKey={(item) => item.id}
                         renderItem={(item) => (
                             <List.Item
                                 actions={
                                     item.url
                                         ? [
                                               <a
-                                                  key={`open-${item.path}`}
+                                                  key={`open-${item.id}`}
                                                   href={item.url}
                                                   target="_blank"
                                                   rel="noreferrer"
                                               >
                                                   Abrir
                                               </a>,
+                                              ...(item.canDelete
+                                                  ? [
+                                                        <Button
+                                                            key={`delete-${item.id}`}
+                                                            type="link"
+                                                            danger
+                                                            size="small"
+                                                            onClick={() => handleDeleteFile(item)}
+                                                        >
+                                                            Excluir
+                                                        </Button>,
+                                                    ]
+                                                  : []),
                                           ]
-                                        : []
+                                        : item.canDelete
+                                          ? [
+                                                <Button
+                                                    key={`delete-${item.id}`}
+                                                    type="link"
+                                                    danger
+                                                    size="small"
+                                                    onClick={() => handleDeleteFile(item)}
+                                                >
+                                                    Excluir
+                                                </Button>,
+                                            ]
+                                          : []
                                 }
                             >
                                 <List.Item.Meta
                                     avatar={<FilePdfOutlined style={{ color: "#dc2626" }} />}
-                                    title={item.name}
-                                    description={item.path}
+                                    title={`${item.nomeArquivo} (v${item.versao})`}
+                                    description={
+                                        <Space direction="vertical" size={0}>
+                                            <Text type="secondary">
+                                                Tipo: {item.tipo} | Status: {item.status}
+                                            </Text>
+                                            <Text type="secondary">
+                                                Tamanho: {Math.max(1, Math.round(item.tamanhoBytes / 1024))} KB
+                                            </Text>
+                                            <Text type="secondary">
+                                                Enviado por: {item.enviadoPor || "-"} | Em:{" "}
+                                                {item.createdAt ? formatDateBR(item.createdAt, "-") : "-"}
+                                            </Text>
+                                            <Text type="secondary">
+                                                Storage: {item.caminhoStorage || "-"}
+                                            </Text>
+                                        </Space>
+                                    }
                                 />
                             </List.Item>
                         )}
