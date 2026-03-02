@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useGo, useList, useUpdate } from "@refinedev/core";
+import { useGo, useList, useUpdate, useCreate } from "@refinedev/core";
 import { CreateButton } from "@refinedev/antd";
 import { Drawer, Input, Modal, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
@@ -143,8 +143,9 @@ export const ClienteList = () => {
         scrollTop: number;
     } | null>(null);
     const leadPointerSessionRef = useRef<LeadPointerSession | null>(null);
-    const boardScrollLeftSnapshotRef = useRef(0);
-    const shouldRestoreBoardScrollRef = useRef(false);
+
+    const { mutateAsync: updateLead } = useUpdate();
+    const { mutateAsync: createStage } = useCreate(); // <-- NOVO: Força o cache do Refine a atualizar
 
     const { query: clientesQuery } = useList({
         resource: "clientes",
@@ -156,9 +157,9 @@ export const ClienteList = () => {
         resource: "pipeline_stages",
         pagination: { mode: "off" },
         sorters: [{ field: "ordem", order: "asc" }],
+        liveMode: "auto", // <-- NOVO: Atualiza colunas em tempo real automaticamente
     });
 
-    const { mutateAsync: updateLead } = useUpdate();
     const isLoading = clientesQuery?.isLoading || isLoadingAccess;
     const rawData = clientesQuery?.data?.data || [];
     const clientesQueryError = (clientesQuery?.error || null) as any;
@@ -178,8 +179,6 @@ export const ClienteList = () => {
             if (matchesLeadOwner(cliente.responsavel, ownerCandidatesNormalized)) {
                 return true;
             }
-
-            // Evita "salvou e sumiu" para quem acabou de cadastrar um lead.
             return isLeadRecentlyCreated(cliente.id);
         });
     }, [canViewAllLeads, ownerCandidatesNormalized, rawData]);
@@ -299,7 +298,7 @@ export const ClienteList = () => {
 
         if (!possuiDesconhecidos) return stages;
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [resolveLeadStageId, stageIdSet, stages]);
+    }, [resolveLeadStageId, stageIdSet, stages, visibleData]);
 
     const leadCountByStageId = useMemo(() => {
         return rawData.reduce<Record<string, number>>((acc, cliente: any) => {
@@ -364,7 +363,7 @@ export const ClienteList = () => {
         const { error } = await supabaseClient.from("pipeline_stages").insert(payload);
 
         if (error) {
-            message.error("Nao foi possivel preparar as colunas do funil.");
+            message.error("Não foi possível preparar as colunas do funil.");
             return false;
         }
 
@@ -384,7 +383,7 @@ export const ClienteList = () => {
         setIsStageManagerOpen(true);
     };
 
-    const handleCreateStage = async () => {
+   const handleCreateStage = async () => {
         if (!canDeleteRecords) {
             message.warning("Somente admin pode criar colunas.");
             return;
@@ -400,7 +399,7 @@ export const ClienteList = () => {
             (stage) => normalizeText(stage.nome) === normalizeText(nome),
         );
         if (duplicated) {
-            message.warning("Ja existe uma coluna com esse nome.");
+            message.warning("Já existe uma coluna com esse nome.");
             return;
         }
 
@@ -415,23 +414,34 @@ export const ClienteList = () => {
                 return Math.max(acc, Number(stage.ordem || 0));
             }, 0);
 
-            const { error } = await supabaseClient.from("pipeline_stages").insert({
-                tenant_id: tenantId || undefined,
-                nome,
-                cor: newStageColor,
-                ordem: maxOrder + 1,
+            // <-- NOVO: Usamos o mutateAsync do Refine para criar e atualizar a tela NA HORA
+            await createStage({
+                resource: "pipeline_stages",
+                values: {
+                    tenant_id: tenantId || undefined,
+                    nome: nome,
+                    title: nome, // <--- OLHA O AJUSTE AQUI SALVANDO O DIA!
+                    cor: newStageColor,
+                    ordem: maxOrder + 1,
+                },
+                successNotification: false,
             });
-
-            if (error) {
-                throw error;
-            }
 
             message.success(`Coluna "${nome}" criada com sucesso.`);
             setNewStageName("");
             setNewStageColor("#5d9cec");
+            
             await stagesQuery?.refetch?.();
+            
+            // Joga o scroll para a direita após um pequeno tempo
+            setTimeout(() => {
+                if (boardRef.current) {
+                    boardRef.current.scrollTo({ left: boardRef.current.scrollWidth + 1500, behavior: 'smooth' });
+                }
+            }, 600);
+
         } catch (error: any) {
-            message.error("Erro: " + (error?.message || "N�o foi poss�vel criar a coluna."));
+            message.error("Erro: " + (error?.message || "Não foi possível criar a coluna."));
         } finally {
             setIsCreatingStage(false);
         }
@@ -484,7 +494,7 @@ export const ClienteList = () => {
         }
 
         if (stagePendingDelete.id === undefined || stagePendingDelete.id === null) {
-            message.error("Nao foi possivel identificar a coluna para exclusao.");
+            message.error("Não foi possível identificar a coluna para exclusão.");
             return;
         }
 
@@ -515,12 +525,12 @@ export const ClienteList = () => {
                 throw deleteError;
             }
 
-            message.success(`Coluna "${stagePendingDelete.nome}" excluida.`);
+            message.success(`Coluna "${stagePendingDelete.nome}" excluída.`);
             cancelDeleteStage();
             await stagesQuery?.refetch?.();
             await clientesQuery?.refetch?.();
         } catch {
-            message.error("Nao foi possivel excluir a coluna.");
+            message.error("Não foi possível excluir a coluna.");
         } finally {
             setIsDeletingStage(false);
         }
@@ -599,7 +609,7 @@ export const ClienteList = () => {
         leadPointerSessionRef.current = null;
     };
 
-    const handleLeadPointerDown = (
+   const handleLeadPointerDown = (
         event: React.PointerEvent<HTMLDivElement>,
         leadId: string,
     ) => {
@@ -611,7 +621,8 @@ export const ClienteList = () => {
 
         const interactiveTarget = isInteractiveLeadTarget(event.target);
         const draggableElement = event.currentTarget;
-        draggableElement.draggable = false;
+        
+        // A linha que travava o drag (draggableElement.draggable = false) foi removida daqui!
 
         const timerId = window.setTimeout(() => {
             const activeSession = leadPointerSessionRef.current;
@@ -766,37 +777,11 @@ export const ClienteList = () => {
         }
     };
 
-    const snapshotBoardScrollLeft = () => {
-        const board = boardRef.current;
-        if (!board) {
-            return;
-        }
-
-        boardScrollLeftSnapshotRef.current = board.scrollLeft;
-        shouldRestoreBoardScrollRef.current = true;
-    };
-
-    const restoreBoardScrollLeft = () => {
-        if (!shouldRestoreBoardScrollRef.current) {
-            return;
-        }
-
-        const expectedScrollLeft = boardScrollLeftSnapshotRef.current;
-        window.requestAnimationFrame(() => {
-            const board = boardRef.current;
-            if (board) {
-                board.scrollLeft = expectedScrollLeft;
-            }
-            shouldRestoreBoardScrollRef.current = false;
-        });
-    };
-
     const handleDrop = async (
         event: React.DragEvent<HTMLDivElement>,
         novoStageId: string,
     ) => {
         event.preventDefault();
-        snapshotBoardScrollLeft();
         setActiveDropColumn(null);
         setIsDragging(false);
 
@@ -806,7 +791,7 @@ export const ClienteList = () => {
         const leadArrastado = visibleData.find((item: any) => item.id.toString() === leadId);
 
         if (!leadArrastado) {
-            message.warning("Lead nao encontrado.");
+            message.warning("Lead não encontrado.");
             return;
         }
 
@@ -832,7 +817,7 @@ export const ClienteList = () => {
                     type: "success",
                 }),
                 errorNotification: () => ({
-                    message: "Nao foi possivel atualizar a etapa",
+                    message: "Não foi possível atualizar a etapa",
                     description: "Tente novamente.",
                     type: "error",
                 }),
@@ -851,7 +836,7 @@ export const ClienteList = () => {
 
             if (historyError && !isSupabaseMissingRelation(historyError)) {
                 message.warning(
-                    "Status atualizado, mas nao foi possivel registrar no historico.",
+                    "Status atualizado, mas não foi possível registrar no histórico.",
                 );
             }
 
@@ -860,7 +845,7 @@ export const ClienteList = () => {
                     leadId: String(leadArrastado.id),
                     tenantId,
                     activityType: "status",
-                    title: "Mudanca de etapa",
+                    title: "Mudança de etapa",
                     description: `${fromStageName} -> ${nextStageName}`,
                     fromStatus: fromStageName,
                     toStatus: nextStageName,
@@ -869,8 +854,6 @@ export const ClienteList = () => {
             }
         } catch {
             // Error notification is handled by refine.
-        } finally {
-            restoreBoardScrollLeft();
         }
     };
 
@@ -934,14 +917,6 @@ export const ClienteList = () => {
         };
     }, []);
 
-    useEffect(() => {
-        if (viewType !== "kanban") {
-            shouldRestoreBoardScrollRef.current = false;
-            return;
-        }
-
-        restoreBoardScrollLeft();
-    }, [clientesQuery?.data?.data, stagesQuery?.data?.data, viewType]);
 
     if (isLoading) {
         return (
@@ -1027,7 +1002,7 @@ export const ClienteList = () => {
                         }}
                     />
                     <Select
-                        placeholder="Responsavel"
+                        placeholder="Responsável"
                         allowClear
                         value={responsavelFiltro}
                         onChange={(value) => setResponsavelFiltro(value)}
@@ -1077,7 +1052,7 @@ export const ClienteList = () => {
             {!canViewAllLeads ? (
                 <div style={{ padding: "0 20px 8px 20px" }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                        Visao restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
+                        Visão restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
                     </Text>
                 </div>
             ) : null}
@@ -1091,13 +1066,13 @@ export const ClienteList = () => {
                     }}
                 >
                     <StatCard
-                        title="Previsao de Receita"
+                        title="Previsão de Receita"
                         value={kpis.totalValor}
                         prefix={<DollarCircleOutlined style={{ color: "#4c8bf5" }} />}
                         accentColor="#4c8bf5"
                     />
                     <StatCard
-                        title="Conversao"
+                        title="Conversão"
                         value={kpis.taxaConversao}
                         suffix="%"
                         prefix={<CheckCircleOutlined style={{ color: "#38a169" }} />}
@@ -1112,13 +1087,13 @@ export const ClienteList = () => {
                     />
                 </div>
                 <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>
-                    Dica: clique e arraste no fundo do kanban para navegar como "maozinha".
+                    Dica: clique e arraste no fundo do kanban para navegar horizontalmente.
                 </Text>
             </div>
         </div>
     );
 
-    const KanbanView = () => {
+    const renderKanbanView = () => {
         if (clientesQueryError) {
             return (
                 <div style={{ padding: 20 }}>
@@ -1126,12 +1101,12 @@ export const ClienteList = () => {
                         title={
                             hasClientesPolicyRecursion
                                 ? "Falha de policy RLS no Supabase"
-                                : "Nao foi possivel carregar os leads"
+                                : "Não foi possível carregar os leads"
                         }
                         description={
                             hasClientesPolicyRecursion
-                                ? "O erro indica recursao infinita em policy da tabela utilizadores_empresas. Os dados nao foram apagados; o acesso foi bloqueado pelo banco."
-                                : clientesQueryErrorMessage || "Revise as policies RLS e tente novamente."
+                                ? "O erro indica recursão infinita em policy. O acesso foi bloqueado."
+                                : clientesQueryErrorMessage || "Revise as policies RLS."
                         }
                     />
                 </div>
@@ -1143,236 +1118,240 @@ export const ClienteList = () => {
                 <div style={{ padding: 20 }}>
                     <EmptyState
                         title="Nenhum lead para os filtros aplicados"
-                        description="Ajuste busca, responsavel ou temperatura."
+                        description="Ajuste busca, responsável ou temperatura."
                     />
                 </div>
             );
         }
 
         return (
-            <div
-                ref={boardRef}
-                className="crm-kanban-scroll"
-                onMouseDown={handleBoardMouseDown}
-                onMouseMove={handleBoardMouseMove}
-                onMouseUp={stopBoardPan}
-                onMouseLeave={stopBoardPan}
-                style={{
-                    display: "flex",
-                    overflow: "auto",
-                    height: "calc(100vh - 210px)",
-                    backgroundColor: "#fff",
-                    padding: "20px",
-                    gap: "10px",
-                    cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
-                    userSelect: isBoardPanning ? "none" : "auto",
-                    scrollbarWidth: "none",
-                    overscrollBehavior: "none",
-                    touchAction: "none",
-                }}
-            >
-                {stagesVisiveis.map((estagio) => {
-                    const stageColumnId = String(estagio.id ?? estagio.nome);
-                    const clientesDaColuna = clientesFiltrados.filter((cliente: any) =>
-                        estagio.nome === "Outros"
-                            ? !resolveLeadStageId(cliente) || !stageIdSet.has(resolveLeadStageId(cliente))
-                            : resolveLeadStageId(cliente) === stageColumnId,
-                    );
-                    const totalColuna = clientesDaColuna.reduce((acc: number, curr: any) => {
-                        return acc + Number(curr.conta_energia_media || 0);
-                    }, 0);
+            // <-- SOLUÇÃO DO SCROLL: Este contêiner é rigidamente preso à tela com position: absolute
+            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}>
+                <div
+                    ref={boardRef}
+                    className="crm-kanban-scroll"
+                    onMouseDown={handleBoardMouseDown}
+                    onMouseMove={handleBoardMouseMove}
+                    onMouseUp={stopBoardPan}
+                    onMouseLeave={stopBoardPan}
+                    style={{
+                        display: "flex",
+                        overflowX: "auto",
+                        overflowY: "hidden", 
+                        height: "100%", 
+                        backgroundColor: "#f7fafc", 
+                        padding: "20px",
+                        gap: "10px",
+                        cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
+                        userSelect: isBoardPanning ? "none" : "auto",
+                        scrollbarWidth: "thin", 
+                        touchAction: "pan-x",
+                    }}
+                >
+                    {stagesVisiveis.map((estagio) => {
+                        const stageColumnId = String(estagio.id ?? estagio.nome);
+                        const clientesDaColuna = clientesFiltrados.filter((cliente: any) =>
+                            estagio.nome === "Outros"
+                                ? !resolveLeadStageId(cliente) || !stageIdSet.has(resolveLeadStageId(cliente))
+                                : resolveLeadStageId(cliente) === stageColumnId,
+                        );
+                        const totalColuna = clientesDaColuna.reduce((acc: number, curr: any) => {
+                            return acc + Number(curr.conta_energia_media || 0);
+                        }, 0);
 
-                    const isDroppable = estagio.nome !== "Outros";
-                    const isDropActive = isDroppable && isDragging && activeDropColumn === stageColumnId;
-                    const accentColor = estagio.cor || getStatusAccent(estagio.nome);
+                        const isDroppable = estagio.nome !== "Outros";
+                        const isDropActive = isDroppable && isDragging && activeDropColumn === stageColumnId;
+                        const accentColor = estagio.cor || getStatusAccent(estagio.nome);
 
-                    return (
-                        <div
-                            key={stageColumnId}
-                            onDragOver={
-                                isDroppable ? (event) => handleDragOver(event, stageColumnId) : undefined
-                            }
-                            onDrop={isDroppable ? (event) => handleDrop(event, stageColumnId) : undefined}
-                            style={{
-                                minWidth: "300px",
-                                maxWidth: "300px",
-                                display: "flex",
-                                flexDirection: "column",
-                                alignSelf: "flex-start",
-                                borderRight: "1px solid #f0f0f0",
-                                padding: "0 10px",
-                                transition: "background 0.2s",
-                                backgroundColor: isDropActive ? "#f0f7ff" : "transparent",
-                                boxShadow: isDropActive ? "inset 0 0 0 1px #91caff" : "none",
-                                borderRadius: "6px",
-                            }}
-                        >
-                            <div style={{ paddingBottom: "15px", paddingTop: "5px", textAlign: "center" }}>
-                                <Text
-                                    strong
-                                    style={{
-                                        textTransform: "uppercase",
-                                        fontSize: "11px",
-                                        color: "#6e7c87",
-                                        display: "block",
-                                        marginBottom: "4px",
-                                    }}
-                                >
-                                    {estagio.nome}
-                                </Text>
-                                <Text style={{ fontSize: "10px", color: "#98a2b3" }}>
-                                    {clientesDaColuna.length} leads
-                                </Text>
-                                <Text style={{ fontSize: "10px", color: "#667085" }}>
-                                    {formatCurrencyBRL(totalColuna, "R$ 0,00")}
-                                </Text>
-                                <div
-                                    style={{
-                                        height: "3px",
-                                        width: "100%",
-                                        backgroundColor: accentColor,
-                                        marginTop: "6px",
-                                        borderRadius: "2px",
-                                    }}
-                                />
-                            </div>
-
-                            <div style={{ minHeight: "200px" }}>
-                                {clientesDaColuna.length === 0 ? (
-                                    <div
+                        return (
+                            <div
+                                key={stageColumnId}
+                                onDragOver={
+                                    isDroppable ? (event) => handleDragOver(event, stageColumnId) : undefined
+                                }
+                                onDrop={isDroppable ? (event) => handleDrop(event, stageColumnId) : undefined}
+                                style={{
+                                    minWidth: "320px", 
+                                    maxWidth: "320px",
+                                    height: "100%", 
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    padding: "0 10px",
+                                    transition: "background 0.2s",
+                                    backgroundColor: isDropActive ? "#f0f7ff" : "transparent",
+                                    boxShadow: isDropActive ? "inset 0 0 0 1px #91caff" : "none",
+                                    borderRadius: "8px",
+                                }}
+                            >
+                                <div style={{ paddingBottom: "15px", paddingTop: "5px", textAlign: "center" }}>
+                                    <Text
+                                        strong
                                         style={{
-                                            border: "1px dashed #e2e8f0",
-                                            borderRadius: "6px",
-                                            padding: "12px",
-                                            textAlign: "center",
-                                            color: "#98a2b3",
+                                            textTransform: "uppercase",
                                             fontSize: "12px",
-                                            marginTop: "6px",
+                                            color: "#192a3e",
+                                            display: "block",
+                                            marginBottom: "4px",
                                         }}
                                     >
-                                        {isDropActive ? "Solte aqui" : "Sem leads"}
+                                        {estagio.nome}
+                                    </Text>
+                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', fontSize: "11px", color: "#667085" }}>
+                                        <Text style={{ fontSize: "11px", color: "#667085" }}>{clientesDaColuna.length} leads</Text>
+                                        <span>•</span>
+                                        <Text style={{ fontSize: "11px", color: "#667085" }}>{formatCurrencyBRL(totalColuna, "R$ 0,00")}</Text>
                                     </div>
-                                ) : (
-                                    clientesDaColuna.map((cliente: any) => (
+                                    <div
+                                        style={{
+                                            height: "4px",
+                                            width: "100%",
+                                            backgroundColor: accentColor,
+                                            marginTop: "10px",
+                                            borderRadius: "2px",
+                                            opacity: 0.8
+                                        }}
+                                    />
+                                </div>
+
+                                <div 
+                                    className="kanban-column-content"
+                                    style={{ 
+                                        flex: 1, 
+                                        overflowY: "auto", 
+                                        overflowX: "hidden",
+                                        paddingRight: "5px", 
+                                        paddingBottom: "20px",
+                                        minHeight: 0 // <-- Junto com o absolute no pai, isso cria a barra interna definitiva.
+                                    }}
+                                >
+                                    {clientesDaColuna.length === 0 ? (
                                         <div
-                                            key={cliente.id}
-                                            data-pan-ignore="true"
-                                            draggable
-                                            onPointerDown={(event) =>
-                                                handleLeadPointerDown(event, String(cliente.id))
-                                            }
-                                            onPointerMove={handleLeadPointerMove}
-                                            onPointerUp={(event) => handleLeadPointerUp(event, cliente)}
-                                            onPointerCancel={clearLeadPointerSession}
-                                            onDragStart={(event) =>
-                                                handleDragStart(event, cliente.id.toString())
-                                            }
-                                            onDragEnd={handleDragEnd}
-                                            style={{ cursor: "grab", touchAction: "pan-y" }}
+                                            style={{
+                                                border: "1px dashed #e2e8f0",
+                                                borderRadius: "8px",
+                                                padding: "20px 12px",
+                                                textAlign: "center",
+                                                color: "#98a2b3",
+                                                fontSize: "13px",
+                                                marginTop: "6px",
+                                            }}
                                         >
-                                            <Card
-                                                size="small"
-                                                interactive
-                                                style={{
-                                                    marginBottom: "10px",
-                                                    borderLeft: `3px solid ${accentColor}`,
-                                                    cursor: "grab",
-                                                    userSelect: "none",
-                                                }}
-                                                bodyStyle={{ padding: "10px" }}
-                                                actions={[
-                                                    <Button
-                                                        key={`edit-${cliente.id}`}
-                                                        icon={<EditOutlined />}
-                                                        size="small"
-                                                        data-no-card-open="true"
-                                                        onPointerDown={stopLeadCardActionPropagation}
-                                                        onClick={(event) => {
-                                                            stopLeadCardActionPropagation(event);
-                                                            openLeadEdit(cliente.id);
-                                                        }}
-                                                    >
-                                                        Editar
-                                                    </Button>,
-                                                    <Button
-                                                        key={`show-${cliente.id}`}
-                                                        icon={<EyeOutlined />}
-                                                        size="small"
-                                                        data-no-card-open="true"
-                                                        onPointerDown={stopLeadCardActionPropagation}
-                                                        onClick={(event) => {
-                                                            stopLeadCardActionPropagation(event);
-                                                            openLeadDrawer(cliente);
-                                                        }}
-                                                    >
-                                                        Ver
-                                                    </Button>,
-                                                ]}
-                                            >
-                                                <div style={{ marginBottom: "6px" }}>
-                                                    <Text
-                                                        strong
-                                                        style={{ color: "#192a3e", fontSize: "13px" }}
-                                                    >
-                                                        {cliente.nome}
-                                                    </Text>
-                                                </div>
-                                                <div style={{ marginBottom: "6px" }}>
-                                                    <TemperatureBadge
-                                                        value={getClienteTemperature(cliente)}
-                                                    />
-                                                </div>
-                                                <div
-                                                    style={{
-                                                        display: "flex",
-                                                        flexDirection: "column",
-                                                        gap: "2px",
-                                                    }}
-                                                >
-                                                    {cliente.conta_energia_media > 0 && (
-                                                        <Text style={{ fontSize: "12px", color: "#555" }}>
-                                                            {formatCurrencyBRL(
-                                                                cliente.conta_energia_media,
-                                                                "R$ 0,00",
-                                                            )}
-                                                        </Text>
-                                                    )}
-                                                    {cliente.responsavel && (
-                                                        <Text style={{ fontSize: "10px", color: "#667085" }}>
-                                                            Resp: {cliente.responsavel}
-                                                        </Text>
-                                                    )}
-                                                    <Text style={{ fontSize: "10px", color: "#a0aec0" }}>
-                                                        {formatDateBR(cliente.created_at, "-")}
-                                                    </Text>
-                                                </div>
-                                            </Card>
+                                            {isDropActive ? "Solte o lead aqui" : "Sem leads nesta etapa"}
                                         </div>
-                                    ))
-                                )}
-                                <div style={{ height: "24px" }} />
+                                    ) : (
+                                        clientesDaColuna.map((cliente: any) => (
+                                            <div
+                                                key={cliente.id}
+                                                data-pan-ignore="true"
+                                                draggable
+                                                onPointerDown={(event) =>
+                                                    handleLeadPointerDown(event, String(cliente.id))
+                                                }
+                                                onPointerMove={handleLeadPointerMove}
+                                                onPointerUp={(event) => handleLeadPointerUp(event, cliente)}
+                                                onPointerCancel={clearLeadPointerSession}
+                                                onDragStart={(event) =>
+                                                    handleDragStart(event, cliente.id.toString())
+                                                }
+                                                onDragEnd={handleDragEnd}
+                                                style={{ cursor: "grab", touchAction: "pan-y" }}
+                                            >
+                                                <Card
+                                                    size="small"
+                                                    interactive
+                                                    style={{
+                                                        marginBottom: "12px",
+                                                        borderLeft: `4px solid ${accentColor}`,
+                                                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                                                        cursor: "grab",
+                                                        userSelect: "none",
+                                                    }}
+                                                    bodyStyle={{ padding: "12px" }}
+                                                    actions={[
+                                                        <Button
+                                                            key={`edit-${cliente.id}`}
+                                                            icon={<EditOutlined />}
+                                                            size="small"
+                                                            data-no-card-open="true"
+                                                            onPointerDown={stopLeadCardActionPropagation}
+                                                            onClick={(event) => {
+                                                                stopLeadCardActionPropagation(event);
+                                                                openLeadEdit(cliente.id);
+                                                            }}
+                                                        >
+                                                            Editar
+                                                        </Button>,
+                                                        <Button
+                                                            key={`show-${cliente.id}`}
+                                                            icon={<EyeOutlined />}
+                                                            size="small"
+                                                            data-no-card-open="true"
+                                                            onPointerDown={stopLeadCardActionPropagation}
+                                                            onClick={(event) => {
+                                                                stopLeadCardActionPropagation(event);
+                                                                openLeadDrawer(cliente);
+                                                            }}
+                                                        >
+                                                            Ver
+                                                        </Button>,
+                                                    ]}
+                                                >
+                                                    <div style={{ marginBottom: "8px" }}>
+                                                        <Text
+                                                            strong
+                                                            style={{ color: "#192a3e", fontSize: "14px" }}
+                                                        >
+                                                            {cliente.nome}
+                                                        </Text>
+                                                    </div>
+                                                    <div style={{ marginBottom: "8px" }}>
+                                                        <TemperatureBadge
+                                                            value={getClienteTemperature(cliente)}
+                                                        />
+                                                    </div>
+                                                    <div
+                                                        style={{
+                                                            display: "flex",
+                                                            flexDirection: "column",
+                                                            gap: "4px",
+                                                        }}
+                                                    >
+                                                        {cliente.conta_energia_media > 0 && (
+                                                            <Text style={{ fontSize: "13px", color: "#4a5568", fontWeight: 500 }}>
+                                                                {formatCurrencyBRL(
+                                                                    cliente.conta_energia_media,
+                                                                    "R$ 0,00",
+                                                                )}
+                                                            </Text>
+                                                        )}
+                                                        {cliente.responsavel && (
+                                                            <Text style={{ fontSize: "11px", color: "#718096" }}>
+                                                                Resp: {cliente.responsavel}
+                                                            </Text>
+                                                        )}
+                                                        <Text style={{ fontSize: "11px", color: "#a0aec0" }}>
+                                                            {formatDateBR(cliente.created_at, "-")}
+                                                        </Text>
+                                                    </div>
+                                                </Card>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })}
+                </div>
             </div>
         );
     };
 
-    const ListView = () => (
-        <div style={{ padding: "20px", backgroundColor: "#fff", height: "calc(100vh - 210px)" }}>
+    const renderListView = () => (
+        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, padding: "20px", backgroundColor: "#fff", overflowY: "auto" }}>
             {clientesQueryError ? (
                 <EmptyState
-                    title={
-                        hasClientesPolicyRecursion
-                            ? "Falha de policy RLS no Supabase"
-                            : "Nao foi possivel carregar os leads"
-                    }
-                    description={
-                        hasClientesPolicyRecursion
-                            ? "O erro indica recursao infinita em policy da tabela utilizadores_empresas. Os dados nao foram apagados; o acesso foi bloqueado pelo banco."
-                            : clientesQueryErrorMessage || "Revise as policies RLS e tente novamente."
-                    }
+                    title="Erro ao carregar leads"
+                    description={clientesQueryErrorMessage || "Revise as policies RLS."}
                 />
             ) : (
                 <Table
@@ -1402,7 +1381,7 @@ export const ClienteList = () => {
                             ),
                         },
                         {
-                            title: "Responsavel",
+                            title: "Responsável",
                             dataIndex: "responsavel",
                             render: (value) => value || "-",
                         },
@@ -1446,39 +1425,48 @@ export const ClienteList = () => {
                 display: "flex",
                 flexDirection: "column",
                 backgroundColor: "#fff",
-                overflow: "hidden",
-                overscrollBehaviorX: "none",
-                overscrollBehaviorY: "none",
+                overflow: "hidden", 
             }}
         >
             <KommoHeader />
             <div
                 style={{
                     flex: 1,
-                    backgroundColor: "#fff",
-                    overflow: "hidden",
-                    overscrollBehaviorX: "none",
-                    overscrollBehaviorY: "none",
+                    overflow: "hidden", 
+                    position: "relative" // <-- Fundamental para o position absolute dos filhos funcionar
                 }}
             >
                 <style>{`
-                    body {
-                        overscroll-behavior-x: none;
-                    }
-
                     .crm-kanban-scroll::-webkit-scrollbar {
-                        width: 0;
-                        height: 0;
-                        display: none;
+                        height: 8px;
+                    }
+                    .crm-kanban-scroll::-webkit-scrollbar-track {
+                        background: #f7fafc; 
+                    }
+                    .crm-kanban-scroll::-webkit-scrollbar-thumb {
+                        background: #cbd5e0; 
+                        border-radius: 4px;
+                    }
+                    .crm-kanban-scroll::-webkit-scrollbar-thumb:hover {
+                        background: #a0aec0; 
                     }
 
-                    .crm-kanban-scroll {
-                        overscroll-behavior-x: none;
-                        overscroll-behavior-y: none;
-                        touch-action: pan-y;
+                    .kanban-column-content::-webkit-scrollbar {
+                        width: 6px;
+                    }
+                    .kanban-column-content::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    .kanban-column-content::-webkit-scrollbar-thumb {
+                        background: #e2e8f0;
+                        border-radius: 3px;
+                    }
+                    .kanban-column-content::-webkit-scrollbar-thumb:hover {
+                        background: #cbd5e0;
                     }
                 `}</style>
-                {viewType === "kanban" ? <KanbanView /> : <ListView />}
+                
+                {viewType === "kanban" ? renderKanbanView() : renderListView()}
             </div>
 
             <Modal
@@ -1490,7 +1478,7 @@ export const ClienteList = () => {
                 destroyOnClose
             >
                 <Text type="secondary">
-                    Crie ou exclua colunas para adaptar o pipeline ao tipo de negocio.
+                    Crie ou exclua colunas para adaptar o pipeline ao tipo de negócio.
                 </Text>
                 <div
                     style={{
@@ -1576,7 +1564,7 @@ export const ClienteList = () => {
                     ))}
                 </div>
                 {!canDeleteAnyStage ? (
-                    <Text type="secondary">E necessario manter ao menos uma coluna no funil.</Text>
+                    <Text type="secondary">É necessário manter ao menos uma coluna no funil.</Text>
                 ) : null}
             </Modal>
 
