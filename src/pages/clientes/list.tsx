@@ -1144,7 +1144,8 @@ export const ClienteList = () => {
                         gap: "10px",
                         cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
                         userSelect: isBoardPanning ? "none" : "auto",
-                        scrollbarWidth: "thin", 
+                        scrollbarWidth: "none",
+                        msOverflowStyle: "none",
                         touchAction: "pan-x",
                     }}
                 >
@@ -1219,6 +1220,8 @@ export const ClienteList = () => {
                                         flex: 1, 
                                         overflowY: "auto", 
                                         overflowX: "hidden",
+                                        scrollbarWidth: "none",
+                                        msOverflowStyle: "none",
                                         paddingRight: "5px", 
                                         paddingBottom: "20px",
                                         minHeight: 0 // <-- Junto com o absolute no pai, isso cria a barra interna definitiva.
@@ -1438,31 +1441,13 @@ export const ClienteList = () => {
             >
                 <style>{`
                     .crm-kanban-scroll::-webkit-scrollbar {
-                        height: 8px;
-                    }
-                    .crm-kanban-scroll::-webkit-scrollbar-track {
-                        background: #f7fafc; 
-                    }
-                    .crm-kanban-scroll::-webkit-scrollbar-thumb {
-                        background: #cbd5e0; 
-                        border-radius: 4px;
-                    }
-                    .crm-kanban-scroll::-webkit-scrollbar-thumb:hover {
-                        background: #a0aec0; 
+                        width: 0;
+                        height: 0;
                     }
 
                     .kanban-column-content::-webkit-scrollbar {
-                        width: 6px;
-                    }
-                    .kanban-column-content::-webkit-scrollbar-track {
-                        background: transparent;
-                    }
-                    .kanban-column-content::-webkit-scrollbar-thumb {
-                        background: #e2e8f0;
-                        border-radius: 3px;
-                    }
-                    .kanban-column-content::-webkit-scrollbar-thumb:hover {
-                        background: #cbd5e0;
+                        width: 0;
+                        height: 0;
                     }
                 `}</style>
                 
