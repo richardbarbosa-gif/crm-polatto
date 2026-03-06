@@ -363,8 +363,10 @@ export const AgendaPage = () => {
 
     if (isError) {
         return (
-            <div style={{ padding: 20 }}>
-                <Typography.Title level={2}>Agenda</Typography.Title>
+            <div className="crm-page-shell">
+                <Typography.Title level={2} className="crm-page-header-title">
+                    Agenda
+                </Typography.Title>
                 <Alert
                     type="error"
                     showIcon
@@ -385,10 +387,26 @@ export const AgendaPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
-            <Typography.Title level={2}>Agenda</Typography.Title>
+        <div className="crm-page-shell">
+            <div className="crm-page-header">
+                <div>
+                    <Typography.Title level={2} className="crm-page-header-title">
+                        Agenda
+                    </Typography.Title>
+                    <Typography.Text className="crm-page-header-subtitle">
+                        Organize visitas, contatos e pendencias com visao diaria e mensal.
+                    </Typography.Text>
+                </div>
+                <Button
+                    type="primary"
+                    icon={<CalendarOutlined />}
+                    onClick={() => abrirModalNovoAgendamento(dayjs())}
+                >
+                    Novo agendamento
+                </Button>
+            </div>
 
-            <Card>
+            <Card className="crm-card crm-agenda-calendar-card">
                 <Calendar
                     dateCellRender={dateCellRender}
                     onSelect={handleDateSelect}
@@ -434,14 +452,7 @@ export const AgendaPage = () => {
 
                             return (
                                 <List.Item
-                                    style={{
-                                        cursor: "pointer",
-                                        border: "1px solid #e4e9f1",
-                                        borderRadius: 12,
-                                        padding: "12px 14px",
-                                        marginBottom: 10,
-                                        background: "#fcfdff",
-                                    }}
+                                    className="crm-agenda-day-item"
                                     onClick={() => abrirDrawerTarefa(tarefa)}
                                     actions={[
                                         <Button
@@ -523,7 +534,7 @@ export const AgendaPage = () => {
                 {!tarefaEmFoco ? (
                     <Empty description="Nenhuma tarefa selecionada." />
                 ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div className="crm-agenda-drawer-stack">
                         {(() => {
                             const clienteLabel = getClienteLabel(
                                 tarefaEmFoco.cliente_id,
@@ -549,17 +560,7 @@ export const AgendaPage = () => {
                                     </div>
 
                                     {canUpdateExecutionStatus ? (
-                                        <div
-                                            style={{
-                                                display: "flex",
-                                                flexDirection: "column",
-                                                gap: 6,
-                                                border: "1px solid #e4e9f1",
-                                                borderRadius: 12,
-                                                padding: 12,
-                                                background: "#fafcff",
-                                            }}
-                                        >
+                                        <div className="crm-agenda-treatment">
                                             <Typography.Text strong>
                                                 Tratativa da atividade
                                             </Typography.Text>

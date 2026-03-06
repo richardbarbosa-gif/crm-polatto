@@ -262,7 +262,7 @@ export const BaseClientesPage = () => {
             title: "Acoes",
             key: "acoes",
             render: (_, record) => (
-                <Space wrap>
+                <Space wrap className="crm-base-table-actions">
                     <Button size="small" onClick={() => navigate(`/clientes/show/${record.id}`)}>
                         Ver detalhes
                     </Button>
@@ -288,7 +288,7 @@ export const BaseClientesPage = () => {
 
     if (isLoading || isLoadingAccess) {
         return (
-            <div style={{ padding: 20 }}>
+            <div className="crm-page-shell">
                 <SkeletonCard cards={3} />
                 <Card style={{ marginTop: 16 }}>
                     <SkeletonRow rows={8} />
@@ -298,22 +298,14 @@ export const BaseClientesPage = () => {
     }
 
     return (
-        <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-            <div
-                style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    gap: 12,
-                    flexWrap: "wrap",
-                }}
-            >
+        <div className="crm-page-shell">
+            <div className="crm-page-header">
                 <div>
-                    <Typography.Title level={3} style={{ marginBottom: 4 }}>
+                    <Typography.Title level={3} className="crm-page-header-title">
                         Base de Clientes
                     </Typography.Title>
-                    <Typography.Text type="secondary">
-                        Clientes com oportunidades fechadas
+                    <Typography.Text className="crm-page-header-subtitle">
+                        Carteira de clientes com oportunidades fechadas e historico de contato.
                     </Typography.Text>
                     {!canViewAllLeads ? (
                         <div>
@@ -328,13 +320,7 @@ export const BaseClientesPage = () => {
                 </Button>
             </div>
 
-            <div
-                style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                    gap: 12,
-                }}
-            >
+            <div className="crm-kpi-grid">
                 <StatCard
                     title="Total de clientes"
                     value={clientesFiltrados.length}
@@ -355,16 +341,8 @@ export const BaseClientesPage = () => {
                 />
             </div>
 
-            <Card>
-                <div
-                    style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 10,
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                    }}
-                >
+            <Card className="crm-card">
+                <div className="crm-toolbar">
                     <Input.Search
                         placeholder="Buscar por nome, telefone ou email"
                         value={searchText}
@@ -372,7 +350,7 @@ export const BaseClientesPage = () => {
                         allowClear
                         style={{ width: 360, maxWidth: "100%" }}
                     />
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                    <div className="crm-toolbar-group">
                         <Select
                             placeholder="Responsavel"
                             allowClear
@@ -424,7 +402,7 @@ export const BaseClientesPage = () => {
             ) : null}
 
             {!errorMessage && clientesFiltrados.length > 0 ? (
-                <Card>
+                <Card className="crm-card">
                     <Table
                         rowKey="id"
                         dataSource={clientesFiltrados}

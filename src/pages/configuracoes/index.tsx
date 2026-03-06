@@ -1,59 +1,107 @@
-import { Typography, Tabs, Card, Switch, Select, Divider } from "antd";
-import { SettingOutlined, GlobalOutlined, BgColorsOutlined, BellOutlined } from "@ant-design/icons";
+import {
+    BellOutlined,
+    BgColorsOutlined,
+    GlobalOutlined,
+    SettingOutlined,
+} from "@ant-design/icons";
+import { Card, Divider, Select, Switch, Tabs, Typography } from "antd";
 
 const { Title, Text } = Typography;
 
+const sectionTitleStyle = { margin: 0 };
+
 export const ConfiguracoesPage = () => {
     return (
-        <div style={{ padding: "24px", maxWidth: "900px", margin: "0 auto" }}>
-            <Title level={2} style={{ marginBottom: "24px", color: '#1e293b' }}>
-                <SettingOutlined style={{ marginRight: '10px', color: '#64748b' }} />
-                Configurações do Sistema
-            </Title>
-            
-            <Card bordered={false} style={{ borderRadius: "12px", boxShadow: "0 4px 12px rgba(0,0,0,0.03)" }}>
+        <div className="crm-page-shell crm-config-page">
+            <div className="crm-page-header">
+                <div>
+                    <Title level={2} className="crm-page-header-title">
+                        <SettingOutlined style={{ marginRight: 10, color: "#64748b" }} />
+                        Configuracoes
+                    </Title>
+                    <Text className="crm-page-header-subtitle">
+                        Preferencias visuais e operacionais do CRM para o seu time.
+                    </Text>
+                </div>
+            </div>
+
+            <Card bordered={false} className="crm-card">
                 <Tabs
-                    defaultActiveKey="1"
+                    defaultActiveKey="geral"
                     tabPosition="left"
                     items={[
                         {
-                            key: "1",
-                            label: <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><GlobalOutlined /> Geral</span>,
+                            key: "geral",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <GlobalOutlined /> Geral
+                                </span>
+                            ),
                             children: (
-                                <div style={{ padding: "0 16px" }}>
-                                    <Title level={4}>Preferências Regionais</Title>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Preferencias regionais
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Defina idioma e fuso para padronizar datas, horarios e mensagens.
+                                    </Text>
+                                    <div className="crm-config-row">
                                         <div>
-                                            <Text strong style={{ display: 'block', marginBottom: '8px' }}>Idioma do Sistema</Text>
-                                            <Select defaultValue="pt-BR" style={{ width: 200 }} options={[{ value: 'pt-BR', label: 'Português (Brasil)' }, { value: 'en-US', label: 'English (US)' }, { value: 'es-ES', label: 'Español' }]} />
+                                            <Text strong>Idioma do sistema</Text>
                                         </div>
+                                        <Select
+                                            defaultValue="pt-BR"
+                                            style={{ width: 240 }}
+                                            options={[
+                                                { value: "pt-BR", label: "Portugues (Brasil)" },
+                                                { value: "en-US", label: "English (US)" },
+                                                { value: "es-ES", label: "Espanol" },
+                                            ]}
+                                        />
+                                    </div>
+                                    <div className="crm-config-row">
                                         <div>
-                                            <Text strong style={{ display: 'block', marginBottom: '8px' }}>Fuso Horário</Text>
-                                            <Select defaultValue="utc-3" style={{ width: 200 }} options={[{ value: 'utc-3', label: 'Brasília (UTC-3)' }]} />
+                                            <Text strong>Fuso horario</Text>
                                         </div>
+                                        <Select
+                                            defaultValue="utc-3"
+                                            style={{ width: 240 }}
+                                            options={[{ value: "utc-3", label: "Brasilia (UTC-3)" }]}
+                                        />
                                     </div>
                                 </div>
                             ),
                         },
                         {
-                            key: "2",
-                            label: <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><BgColorsOutlined /> Aparência</span>,
+                            key: "aparencia",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <BgColorsOutlined /> Aparencia
+                                </span>
+                            ),
                             children: (
-                                <div style={{ padding: "0 16px" }}>
-                                    <Title level={4}>Interface e Tema</Title>
-                                    <Divider />
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '400px' }}>
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Interface e tema
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Ajustes de leitura e contraste para o dia a dia comercial.
+                                    </Text>
+                                    <div className="crm-config-row">
                                         <div>
-                                            <Text strong style={{ display: 'block' }}>Modo Noturno (Dark Mode)</Text>
-                                            <Text type="secondary">Escurece a interface para ambientes com pouca luz.</Text>
+                                            <Text strong>Modo noturno</Text>
+                                            <Text type="secondary" style={{ display: "block" }}>
+                                                Escurece a interface para ambientes de baixa luz.
+                                            </Text>
                                         </div>
                                         <Switch />
                                     </div>
-                                    <Divider />
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '400px' }}>
+                                    <div className="crm-config-row">
                                         <div>
-                                            <Text strong style={{ display: 'block' }}>Cores de Alto Contraste</Text>
-                                            <Text type="secondary">Melhora a legibilidade do Kanban.</Text>
+                                            <Text strong>Alto contraste</Text>
+                                            <Text type="secondary" style={{ display: "block" }}>
+                                                Melhora a legibilidade de cards, funil e tabelas.
+                                            </Text>
                                         </div>
                                         <Switch defaultChecked />
                                     </div>
@@ -61,23 +109,39 @@ export const ConfiguracoesPage = () => {
                             ),
                         },
                         {
-                            key: "3",
-                            label: <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><BellOutlined /> Notificações</span>,
+                            key: "notificacoes",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <BellOutlined /> Notificacoes
+                                </span>
+                            ),
                             children: (
-                                <div style={{ padding: "0 16px" }}>
-                                    <Title level={4}>Alertas do CRM</Title>
-                                    <Divider />
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '400px', marginBottom: '16px' }}>
-                                        <Text strong>Som ao receber novo lead</Text>
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Alertas do CRM
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Configure avisos para manter o time atento ao pipeline.
+                                    </Text>
+                                    <div className="crm-config-row">
+                                        <div>
+                                            <Text strong>Som ao receber novo lead</Text>
+                                        </div>
                                         <Switch defaultChecked />
                                     </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', maxWidth: '400px' }}>
-                                        <Text strong>Avisos de tarefas atrasadas</Text>
+                                    <div className="crm-config-row">
+                                        <div>
+                                            <Text strong>Avisos de tarefas atrasadas</Text>
+                                        </div>
                                         <Switch defaultChecked />
                                     </div>
+                                    <Divider style={{ margin: "10px 0 0" }} />
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Essas preferencias sao locais da interface nesta etapa.
+                                    </Text>
                                 </div>
                             ),
-                        }
+                        },
                     ]}
                 />
             </Card>

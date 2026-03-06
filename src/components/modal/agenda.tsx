@@ -264,9 +264,10 @@ export const TaskFormModal = ({
             okText={mode === "edit" ? "Salvar alteracoes" : "Salvar agendamento"}
             cancelText="Cancelar"
             confirmLoading={isSaving}
+            okButtonProps={{ className: "crm-focusable" }}
             destroyOnClose
         >
-            <Form form={form} layout="vertical" preserve={false}>
+            <Form form={form} layout="vertical" preserve={false} className="crm-form-row-tight">
                 {isClienteLocked ? (
                     <>
                         <Form.Item
@@ -304,7 +305,7 @@ export const TaskFormModal = ({
                     <Input placeholder="Ex: Visita tecnica, ligacao de alinhamento..." />
                 </Form.Item>
 
-                <div style={{ display: "flex", gap: 10 }}>
+                <div className="crm-toolbar-group">
                     <Form.Item label="Tipo" name="tipo" style={{ flex: 1 }}>
                         <Select options={TIPO_OPTIONS} />
                     </Form.Item>

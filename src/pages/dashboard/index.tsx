@@ -72,35 +72,30 @@ export const DashboardPage = () => {
     }
 
     return (
-        <div style={{ padding: "20px" }}>
-            <Title level={2} style={{ marginBottom: 30 }}>
-                Visao geral - Polatto Solar
-            </Title>
+        <div className="crm-page-shell">
+            <div className="crm-page-header">
+                <div>
+                    <Title level={2} className="crm-page-header-title">
+                        Dashboard comercial
+                    </Title>
+                    <Text className="crm-page-header-subtitle">
+                        Visao executiva do funil e da performance do time no periodo atual.
+                    </Text>
+                </div>
+            </div>
 
             <Row gutter={[16, 16]}>
                 <Col xs={24} sm={12} lg={6}>
-                    <Card
-                        bordered={false}
-                        style={{
-                            background: "linear-gradient(135deg, #001529 0%, #003a70 100%)",
-                            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                        }}
-                    >
-                        <Statistic
-                            title={<span style={{ color: "#bdc3c7" }}>Pipeline (mensal)</span>}
-                            value={receitaPipeline}
-                            precision={2}
-                            valueStyle={{ color: "#ffd166", fontWeight: "bold", fontSize: "28px" }}
-                            prefix={<DollarCircleOutlined />}
-                        />
-                        <Text style={{ color: "#bdc3c7", fontSize: "12px" }}>
-                            Soma das contas em negociacao
+                    <Card bordered={false} className="crm-card crm-dashboard-hero">
+                        <Statistic title="Pipeline estimado" value={receitaPipeline} precision={2} prefix={<DollarCircleOutlined />} />
+                        <Text style={{ color: "rgba(219,234,254,0.86)", fontSize: "12px" }}>
+                            Soma das oportunidades ativas
                         </Text>
                     </Card>
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                    <Card bordered={false}>
+                    <Card bordered={false} className="crm-card">
                         <Statistic
                             title="Leads ativos"
                             value={totalLeads}
@@ -111,7 +106,7 @@ export const DashboardPage = () => {
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                    <Card bordered={false}>
+                    <Card bordered={false} className="crm-card">
                         <Statistic
                             title="Taxa de conversao"
                             value={conversao}
@@ -125,7 +120,7 @@ export const DashboardPage = () => {
                 </Col>
 
                 <Col xs={24} sm={12} lg={6}>
-                    <Card bordered={false}>
+                    <Card bordered={false} className="crm-card">
                         <Statistic
                             title="Vendas realizadas"
                             value={qtdVendas}
@@ -136,10 +131,10 @@ export const DashboardPage = () => {
                 </Col>
             </Row>
 
-            <Row gutter={[16, 16]} style={{ marginTop: "24px" }}>
+            <Row gutter={[16, 16]}>
                 <Col xs={24} lg={16}>
-                    <Card title="Saude do funil" bordered={false}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                    <Card title="Saude do funil" bordered={false} className="crm-card">
+                        <div className="crm-dashboard-funnel-row">
                             <div>
                                 <Text strong>Novos leads ({porStatus.novo})</Text>
                                 <Progress
@@ -177,24 +172,22 @@ export const DashboardPage = () => {
                 </Col>
 
                 <Col xs={24} lg={8}>
-                    <Card title="Destaques" bordered={false}>
+                    <Card title="Destaques operacionais" bordered={false} className="crm-card">
                         <Space direction="vertical" size="large" style={{ width: "100%" }}>
-                            <div
-                                style={{
-                                    padding: "10px",
-                                    background: "#f0f5ff",
-                                    borderRadius: "8px",
-                                }}
-                            >
+                            <div className="crm-soft-block">
                                 <Text strong>Meta do mes</Text>
                                 <Text style={{ display: "block", marginBottom: 5 }}>
                                     Faltam {Math.max(10 - qtdVendas, 0)} para a meta.
                                 </Text>
-                                <Progress percent={(qtdVendas / 10) * 100} size="small" status="active" />
+                                <Progress
+                                    percent={Math.min((qtdVendas / 10) * 100, 100)}
+                                    size="small"
+                                    status="active"
+                                />
                             </div>
                             <div>
                                 <Text type="secondary">Resumo rapido:</Text>
-                                <ul style={{ paddingLeft: 20, marginTop: 5, color: "#555" }}>
+                                <ul className="crm-dashboard-highlight-list">
                                     <li>
                                         Voce tem <b>{porStatus.visita}</b> visitas para fazer.
                                     </li>

@@ -19,10 +19,20 @@ import {
     Typography,
     message,
 } from "antd";
+import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import {
+    loadEmployeeGoals,
+    saveEmployeeGoal,
+    type EmployeeGoalRecord,
+} from "../../lib/employeeGoals";
 import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
-import { buildOwnerPerformance, type InsightClienteRecord } from "../../lib/insights";
+import {
+    buildOwnerPerformance,
+    isDateInMonth,
+    type InsightClienteRecord,
+} from "../../lib/insights";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
@@ -34,8 +44,6 @@ type EmployeeRecord = {
     full_name: string;
     email?: string | null;
     role?: string | null;
-    monthly_goal_value?: number | null;
-    monthly_goal_count?: number | null;
     active?: boolean | null;
     created_at?: string | null;
 };
@@ -47,6 +55,14 @@ type EmployeeFormValues = {
     monthly_goal_value?: number;
     monthly_goal_count?: number;
     active?: boolean;
+};
+
+type EnrichedEmployeeRecord = EmployeeRecord & {
+    atualValor: number;
+    atualGanhos: number;
+    monthly_goal_value: number;
+    monthly_goal_count: number;
+    valueProgress: number;
 };
 
 const matchOwnerPerformance = (
@@ -76,8 +92,6 @@ const toEmployeeRecord = (row: any, sourceTable: EmployeeSourceTable): EmployeeR
             full_name: row.nome || "Sem nome",
             email: row.email || null,
             role: row.cargo || null,
-            monthly_goal_value: Number(row.monthly_goal_value || 0),
-            monthly_goal_count: Number(row.monthly_goal_count || 0),
             active: row.ativo !== false,
             created_at: row.created_at || null,
         };
@@ -88,8 +102,6 @@ const toEmployeeRecord = (row: any, sourceTable: EmployeeSourceTable): EmployeeR
         full_name: row.full_name || "Sem nome",
         email: row.email || null,
         role: row.role || null,
-        monthly_goal_value: Number(row.monthly_goal_value || 0),
-        monthly_goal_count: Number(row.monthly_goal_count || 0),
         active: row.active !== false,
         created_at: row.created_at || null,
     };
@@ -98,6 +110,7 @@ const toEmployeeRecord = (row: any, sourceTable: EmployeeSourceTable): EmployeeR
 export const InsightsEmployeesPage = () => {
     const [form] = Form.useForm<EmployeeFormValues>();
     const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
+    const [goals, setGoals] = useState<EmployeeGoalRecord[]>([]);
     const [isLoadingEmployees, setIsLoadingEmployees] = useState<boolean>(true);
     const [isSaving, setIsSaving] = useState<boolean>(false);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -105,6 +118,10 @@ export const InsightsEmployeesPage = () => {
     const [schemaMissing, setSchemaMissing] = useState<boolean>(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [sourceTable, setSourceTable] = useState<EmployeeSourceTable>("funcionarios");
+
+    const monthRef = useMemo(() => dayjs().startOf("month"), []);
+    const monthStart = useMemo(() => monthRef.format("YYYY-MM-DD"), [monthRef]);
+    const supportsGoalCount = sourceTable === "crm_employees";
 
     const clientesResult = useList<InsightClienteRecord>({
         resource: "clientes",
@@ -116,6 +133,7 @@ export const InsightsEmployeesPage = () => {
     const loadEmployees = useCallback(async () => {
         setIsLoadingEmployees(true);
         setErrorMessage(null);
+
         try {
             const current = await supabaseClient
                 .from("funcionarios")
@@ -123,8 +141,12 @@ export const InsightsEmployeesPage = () => {
                 .order("created_at", { ascending: false });
 
             if (!current.error) {
+                const currentGoals = await loadEmployeeGoals("current", monthStart);
                 setSourceTable("funcionarios");
-                setEmployees(((current.data || []) as any[]).map((row) => toEmployeeRecord(row, "funcionarios")));
+                setEmployees(
+                    ((current.data || []) as any[]).map((row) => toEmployeeRecord(row, "funcionarios")),
+                );
+                setGoals(currentGoals);
                 setSchemaMissing(false);
                 return;
             }
@@ -142,46 +164,71 @@ export const InsightsEmployeesPage = () => {
                 throw legacy.error;
             }
 
+            const legacyGoals = await loadEmployeeGoals("legacy", monthStart);
             setSourceTable("crm_employees");
-            setEmployees(((legacy.data || []) as any[]).map((row) => toEmployeeRecord(row, "crm_employees")));
+            setEmployees(
+                ((legacy.data || []) as any[]).map((row) => toEmployeeRecord(row, "crm_employees")),
+            );
+            setGoals(legacyGoals);
             setSchemaMissing(false);
         } catch (error: any) {
             if (isSupabaseMissingRelation(error)) {
                 setSchemaMissing(true);
                 setEmployees([]);
+                setGoals([]);
             } else {
                 setErrorMessage(error?.message || "Falha ao carregar funcionarios.");
             }
         } finally {
             setIsLoadingEmployees(false);
         }
-    }, []);
+    }, [monthStart]);
 
     useEffect(() => {
         loadEmployees();
     }, [loadEmployees]);
 
-    const ownerRows = useMemo(() => buildOwnerPerformance(clientes), [clientes]);
+    const currentMonthClientes = useMemo(() => {
+        return clientes.filter((cliente) => isDateInMonth(cliente.created_at, monthRef));
+    }, [clientes, monthRef]);
 
-    const enrichedEmployees = useMemo(() => {
+    const ownerRows = useMemo(
+        () => buildOwnerPerformance(currentMonthClientes),
+        [currentMonthClientes],
+    );
+
+    const goalsByEmployee = useMemo(() => {
+        const map = new Map<string, EmployeeGoalRecord>();
+
+        goals.forEach((goal) => {
+            if (!map.has(goal.employee_id)) {
+                map.set(goal.employee_id, goal);
+            }
+        });
+
+        return map;
+    }, [goals]);
+
+    const enrichedEmployees = useMemo<EnrichedEmployeeRecord[]>(() => {
         return employees.map((employee) => {
             const owner = matchOwnerPerformance(ownerRows, employee.full_name);
+            const goal = goalsByEmployee.get(employee.id);
             const atualValor = owner?.valor || 0;
             const atualGanhos = owner?.ganhos || 0;
-            const goalValue = Number(employee.monthly_goal_value || 0);
-            const goalCount = Number(employee.monthly_goal_count || 0);
+            const goalValue = Number(goal?.target_value || 0);
+            const goalCount = Number(goal?.target_wins || 0);
             const valueProgress = goalValue > 0 ? (atualValor / goalValue) * 100 : 0;
-            const winProgress = goalCount > 0 ? (atualGanhos / goalCount) * 100 : 0;
 
             return {
                 ...employee,
                 atualValor,
                 atualGanhos,
+                monthly_goal_value: goalValue,
+                monthly_goal_count: goalCount,
                 valueProgress,
-                winProgress,
             };
         });
-    }, [employees, ownerRows]);
+    }, [employees, goalsByEmployee, ownerRows]);
 
     const summary = useMemo(() => {
         const active = enrichedEmployees.filter((employee) => employee.active !== false).length;
@@ -193,43 +240,63 @@ export const InsightsEmployeesPage = () => {
             (acc, employee) => acc + Number(employee.atualValor || 0),
             0,
         );
-        const avgProgress =
-            enrichedEmployees.length > 0
-                ? enrichedEmployees.reduce((acc, employee) => acc + employee.valueProgress, 0) /
-                  enrichedEmployees.length
-                : 0;
+        const goalCoverage = totalGoal > 0 ? (totalRevenue / totalGoal) * 100 : 0;
 
-        return { active, totalGoal, totalRevenue, avgProgress };
+        return { active, totalGoal, totalRevenue, goalCoverage };
     }, [enrichedEmployees]);
+
+    const closeModal = useCallback(() => {
+        setIsModalOpen(false);
+        setEditingEmployee(null);
+        form.resetFields();
+    }, [form]);
 
     const openCreateModal = () => {
         setEditingEmployee(null);
+        setIsModalOpen(true);
+    };
+
+    const openEditModal = (employee: EmployeeRecord) => {
+        setEditingEmployee(employee);
+        setIsModalOpen(true);
+    };
+
+    useEffect(() => {
+        if (!isModalOpen) {
+            return;
+        }
+
+        if (editingEmployee) {
+            const goal = goalsByEmployee.get(editingEmployee.id);
+            form.setFieldsValue({
+                full_name: editingEmployee.full_name,
+                email: editingEmployee.email || "",
+                role: editingEmployee.role || "",
+                monthly_goal_value: Number(goal?.target_value || 0),
+                monthly_goal_count: Number(goal?.target_wins || 0),
+                active: editingEmployee.active !== false,
+            });
+            return;
+        }
+
         form.resetFields();
         form.setFieldsValue({
             active: true,
             monthly_goal_value: 0,
             monthly_goal_count: 0,
         });
-        setIsModalOpen(true);
-    };
-
-    const openEditModal = (employee: EmployeeRecord) => {
-        setEditingEmployee(employee);
-        form.setFieldsValue({
-            full_name: employee.full_name,
-            email: employee.email || "",
-            role: employee.role || "",
-            monthly_goal_value: Number(employee.monthly_goal_value || 0),
-            monthly_goal_count: Number(employee.monthly_goal_count || 0),
-            active: employee.active !== false,
-        });
-        setIsModalOpen(true);
-    };
+    }, [editingEmployee, form, goalsByEmployee, isModalOpen]);
 
     const handleSave = async () => {
+        const isEditing = Boolean(editingEmployee?.id);
+        const goalCount = supportsGoalCount
+            ? Number(form.getFieldValue("monthly_goal_count") || 0)
+            : 0;
+
         try {
             setIsSaving(true);
             const values = await form.validateFields();
+            let employeeId = editingEmployee?.id || null;
 
             if (sourceTable === "funcionarios") {
                 const payload = {
@@ -244,12 +311,29 @@ export const InsightsEmployeesPage = () => {
                         .from("funcionarios")
                         .update(payload)
                         .eq("id", editingEmployee.id);
-                    if (error) throw error;
-                    message.success("Funcionario atualizado.");
+                    if (error) {
+                        throw error;
+                    }
                 } else {
-                    const { error } = await supabaseClient.from("funcionarios").insert(payload);
-                    if (error) throw error;
-                    message.success("Funcionario criado.");
+                    const { data, error } = await supabaseClient
+                        .from("funcionarios")
+                        .insert(payload)
+                        .select("id")
+                        .single();
+
+                    if (error) {
+                        throw error;
+                    }
+
+                    employeeId = data?.id ? String(data.id) : null;
+                }
+
+                if (employeeId) {
+                    await saveEmployeeGoal("current", {
+                        employee_id: employeeId,
+                        goal_month: monthStart,
+                        target_value: Number(values.monthly_goal_value || 0),
+                    });
                 }
             } else {
                 const payload = {
@@ -257,7 +341,7 @@ export const InsightsEmployeesPage = () => {
                     email: values.email?.trim() || null,
                     role: values.role?.trim() || null,
                     monthly_goal_value: Number(values.monthly_goal_value || 0),
-                    monthly_goal_count: Number(values.monthly_goal_count || 0),
+                    monthly_goal_count: goalCount,
                     active: values.active !== false,
                     updated_at: new Date().toISOString(),
                 };
@@ -267,23 +351,44 @@ export const InsightsEmployeesPage = () => {
                         .from("crm_employees")
                         .update(payload)
                         .eq("id", editingEmployee.id);
-                    if (error) throw error;
-                    message.success("Funcionario atualizado.");
+                    if (error) {
+                        throw error;
+                    }
                 } else {
-                    const { error } = await supabaseClient.from("crm_employees").insert({
-                        ...payload,
-                        created_at: new Date().toISOString(),
+                    const { data, error } = await supabaseClient
+                        .from("crm_employees")
+                        .insert({
+                            ...payload,
+                            created_at: new Date().toISOString(),
+                        })
+                        .select("id")
+                        .single();
+
+                    if (error) {
+                        throw error;
+                    }
+
+                    employeeId = data?.id ? String(data.id) : null;
+                }
+
+                if (employeeId) {
+                    await saveEmployeeGoal("legacy", {
+                        employee_id: employeeId,
+                        goal_month: monthStart,
+                        target_value: Number(values.monthly_goal_value || 0),
+                        target_wins: goalCount,
                     });
-                    if (error) throw error;
-                    message.success("Funcionario criado.");
                 }
             }
 
-            setIsModalOpen(false);
-            setEditingEmployee(null);
+            message.success(isEditing ? "Funcionario atualizado." : "Funcionario criado.");
+            closeModal();
             await loadEmployees();
         } catch (error: any) {
-            if (error?.errorFields) return;
+            if (error?.errorFields) {
+                return;
+            }
+
             message.error(error?.message || "Nao foi possivel salvar o funcionario.");
         } finally {
             setIsSaving(false);
@@ -298,7 +403,7 @@ export const InsightsEmployeesPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Funcionarios"
-                subtitle={`Cadastro do time comercial com metas e produtividade vinculada ao CRM. Fonte: ${sourceTable}.`}
+                subtitle={`Cadastro do time comercial com metas do mes e produtividade vinculada ao CRM. Fonte: ${sourceTable}.`}
                 extra={
                     <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
                         Novo funcionario
@@ -308,7 +413,7 @@ export const InsightsEmployeesPage = () => {
 
             <IntroCard
                 title="Gestao de equipe e performance"
-                description="Mapeie quem esta batendo meta, quem precisa de coaching e qual carteira gera mais resultado."
+                description="Receita, progresso e metas usam o mesmo recorte do mes atual para conversar com a aba de metas."
             />
 
             {schemaMissing ? (
@@ -344,22 +449,25 @@ export const InsightsEmployeesPage = () => {
                         subtitle={formatCurrencyBRL(summary.totalGoal, "R$ 0,00")}
                     />
                     <StatCard
-                        title="Receita atribuida"
+                        title="Receita do mes"
                         value={summary.totalRevenue}
                         prefix={<UserOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         subtitle={formatCurrencyBRL(summary.totalRevenue, "R$ 0,00")}
                     />
                     <StatCard
-                        title="Atingimento medio"
-                        value={Number(summary.avgProgress.toFixed(1))}
+                        title="Cobertura da meta"
+                        value={Number(summary.goalCoverage.toFixed(1))}
                         suffix="%"
                         accentColor="#0f766e"
                         valueStyle={{ color: "#115e59" }}
                     />
                 </div>
 
-                <Card title="Equipe comercial">
+                <Card
+                    title="Equipe comercial"
+                    extra={<Typography.Text type="secondary">Base do mes atual</Typography.Text>}
+                >
                     {enrichedEmployees.length === 0 ? (
                         <EmptyState
                             title="Nenhum funcionario cadastrado"
@@ -376,7 +484,7 @@ export const InsightsEmployeesPage = () => {
                             columns={[
                                 {
                                     title: "Funcionario",
-                                    render: (_, record: EmployeeRecord) => (
+                                    render: (_, record: EnrichedEmployeeRecord) => (
                                         <Space direction="vertical" size={0}>
                                             <Typography.Text strong>{record.full_name}</Typography.Text>
                                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -387,12 +495,12 @@ export const InsightsEmployeesPage = () => {
                                 },
                                 {
                                     title: "Contato",
-                                    render: (_, record: EmployeeRecord) => record.email || "-",
+                                    render: (_, record: EnrichedEmployeeRecord) => record.email || "-",
                                 },
                                 {
                                     title: "Status",
                                     width: 110,
-                                    render: (_, record: EmployeeRecord) =>
+                                    render: (_, record: EnrichedEmployeeRecord) =>
                                         record.active === false ? (
                                             <Tag color="default">Inativo</Tag>
                                         ) : (
@@ -402,24 +510,24 @@ export const InsightsEmployeesPage = () => {
                                 {
                                     title: "Ganhos",
                                     width: 80,
-                                    render: (_, record: any) => record.atualGanhos || 0,
+                                    render: (_, record: EnrichedEmployeeRecord) => record.atualGanhos || 0,
                                 },
                                 {
                                     title: "Receita",
                                     width: 130,
-                                    render: (_, record: any) =>
+                                    render: (_, record: EnrichedEmployeeRecord) =>
                                         formatCurrencyBRL(record.atualValor, "R$ 0,00"),
                                 },
                                 {
                                     title: "Meta (R$)",
                                     width: 140,
-                                    render: (_, record: EmployeeRecord) =>
+                                    render: (_, record: EnrichedEmployeeRecord) =>
                                         formatCurrencyBRL(record.monthly_goal_value || 0, "R$ 0,00"),
                                 },
                                 {
                                     title: "Progresso",
                                     width: 190,
-                                    render: (_, record: any) => (
+                                    render: (_, record: EnrichedEmployeeRecord) => (
                                         <Progress
                                             percent={Number(record.valueProgress.toFixed(1))}
                                             size="small"
@@ -430,7 +538,7 @@ export const InsightsEmployeesPage = () => {
                                 {
                                     title: "",
                                     width: 120,
-                                    render: (_, record: EmployeeRecord) => (
+                                    render: (_, record: EnrichedEmployeeRecord) => (
                                         <Button size="small" onClick={() => openEditModal(record)}>
                                             Editar
                                         </Button>
@@ -445,7 +553,7 @@ export const InsightsEmployeesPage = () => {
             <Modal
                 title={editingEmployee ? "Editar funcionario" : "Novo funcionario"}
                 open={isModalOpen}
-                onCancel={() => setIsModalOpen(false)}
+                onCancel={closeModal}
                 onOk={handleSave}
                 confirmLoading={isSaving}
                 okText={editingEmployee ? "Salvar alteracoes" : "Criar funcionario"}
@@ -470,13 +578,15 @@ export const InsightsEmployeesPage = () => {
                         <Form.Item label="Meta mensal (R$)" name="monthly_goal_value" style={{ flex: 1 }}>
                             <InputNumber min={0} style={{ width: "100%" }} />
                         </Form.Item>
-                        <Form.Item
-                            label="Meta de fechamentos"
-                            name="monthly_goal_count"
-                            style={{ flex: 1 }}
-                        >
-                            <InputNumber min={0} style={{ width: "100%" }} />
-                        </Form.Item>
+                        {supportsGoalCount ? (
+                            <Form.Item
+                                label="Meta de fechamentos"
+                                name="monthly_goal_count"
+                                style={{ flex: 1 }}
+                            >
+                                <InputNumber min={0} style={{ width: "100%" }} />
+                            </Form.Item>
+                        ) : null}
                     </Space>
                     <Form.Item label="Ativo" name="active" valuePropName="checked">
                         <Switch />

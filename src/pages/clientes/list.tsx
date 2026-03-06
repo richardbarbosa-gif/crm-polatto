@@ -927,43 +927,18 @@ export const ClienteList = () => {
     }
 
     const KommoHeader = () => (
-        <div
-            style={{
-                backgroundColor: "#fff",
-                borderBottom: "1px solid #e0e0e0",
-                paddingBottom: "10px",
-            }}
-        >
-            <div
-                style={{
-                    padding: "10px 20px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    minHeight: "60px",
-                    gap: 10,
-                    flexWrap: "wrap",
-                }}
-            >
+        <div className="crm-opportunities-header">
+            <div className="crm-opportunities-header-main">
                 <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-                    <Title
-                        level={4}
-                        style={{ margin: 0, color: "#153046", letterSpacing: "-0.5px" }}
-                    >
-                        LTD
+                    <Title level={4} className="crm-opportunities-title">
+                        Oportunidades
                     </Title>
-                    <div
-                        style={{
-                            display: "flex",
-                            gap: "5px",
-                            borderLeft: "1px solid #eee",
-                            paddingLeft: "15px",
-                        }}
-                    >
+                    <div className="crm-view-toggle">
                         <Tooltip title="Kanban">
                             <Button
                                 type="text"
                                 icon={<AppstoreOutlined />}
+                                aria-label="Exibir em kanban"
                                 style={{
                                     color: viewType === "kanban" ? "#3182ce" : "#a0aec0",
                                     background:
@@ -976,6 +951,7 @@ export const ClienteList = () => {
                             <Button
                                 type="text"
                                 icon={<BarsOutlined />}
+                                aria-label="Exibir em lista"
                                 style={{
                                     color: viewType === "list" ? "#3182ce" : "#a0aec0",
                                     background: viewType === "list" ? "#ebf8ff" : "transparent",
@@ -986,12 +962,13 @@ export const ClienteList = () => {
                     </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div className="crm-opportunities-filters">
                     <Input
                         placeholder="Busca e filtro"
                         prefix={<SearchOutlined style={{ color: "#a0aec0" }} />}
                         value={searchText}
                         onChange={(event) => setSearchText(event.target.value)}
+                        aria-label="Buscar lead"
                         style={{
                             width: "230px",
                             backgroundColor: "#f0f2f5",
@@ -1006,6 +983,7 @@ export const ClienteList = () => {
                         allowClear
                         value={responsavelFiltro}
                         onChange={(value) => setResponsavelFiltro(value)}
+                        aria-label="Filtrar por responsavel"
                         options={responsaveisDisponiveis.map((responsavel) => ({
                             value: responsavel,
                             label: responsavel,
@@ -1016,6 +994,7 @@ export const ClienteList = () => {
                     <Select
                         value={temperaturaFiltro}
                         onChange={(value) => setTemperaturaFiltro(value)}
+                        aria-label="Filtrar por temperatura"
                         style={{ width: "170px" }}
                         options={[
                             { value: "todas", label: "Temperatura: Todas" },
@@ -1034,17 +1013,16 @@ export const ClienteList = () => {
                 <CreateButton
                     type="primary"
                     icon={<PlusOutlined />}
-                    style={{
-                        backgroundColor: "#4c8bf5",
-                        fontWeight: 600,
-                        borderRadius: "8px",
-                        fontSize: "12px",
-                        textTransform: "uppercase",
-                    }}
+                    className="crm-focusable"
                 >
                     Novo Lead
                 </CreateButton>
-                <Button icon={<SettingOutlined />} onClick={openStageManager} disabled={!canDeleteRecords}>
+                <Button
+                    icon={<SettingOutlined />}
+                    onClick={openStageManager}
+                    disabled={!canDeleteRecords}
+                    aria-label="Gerenciar colunas"
+                >
                     Colunas
                 </Button>
             </div>
@@ -1057,22 +1035,16 @@ export const ClienteList = () => {
                 </div>
             ) : null}
 
-            <div style={{ padding: "0 20px", marginTop: "5px" }}>
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                        gap: 12,
-                    }}
-                >
+            <div className="crm-opportunities-kpis">
+                <div className="crm-kpi-grid">
                     <StatCard
-                        title="Previsão de Receita"
+                        title="Previsao de receita"
                         value={kpis.totalValor}
                         prefix={<DollarCircleOutlined style={{ color: "#4c8bf5" }} />}
                         accentColor="#4c8bf5"
                     />
                     <StatCard
-                        title="Conversão"
+                        title="Conversao"
                         value={kpis.taxaConversao}
                         suffix="%"
                         prefix={<CheckCircleOutlined style={{ color: "#38a169" }} />}
@@ -1129,24 +1101,14 @@ export const ClienteList = () => {
             <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}>
                 <div
                     ref={boardRef}
-                    className="crm-kanban-scroll"
+                    className="crm-kanban-scroll crm-kanban-board"
                     onMouseDown={handleBoardMouseDown}
                     onMouseMove={handleBoardMouseMove}
                     onMouseUp={stopBoardPan}
                     onMouseLeave={stopBoardPan}
                     style={{
-                        display: "flex",
-                        overflowX: "auto",
-                        overflowY: "hidden", 
-                        height: "100%", 
-                        backgroundColor: "#f7fafc", 
-                        padding: "20px",
-                        gap: "10px",
                         cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
                         userSelect: isBoardPanning ? "none" : "auto",
-                        scrollbarWidth: "none",
-                        msOverflowStyle: "none",
-                        touchAction: "pan-x",
                     }}
                 >
                     {stagesVisiveis.map((estagio) => {
@@ -1171,33 +1133,19 @@ export const ClienteList = () => {
                                     isDroppable ? (event) => handleDragOver(event, stageColumnId) : undefined
                                 }
                                 onDrop={isDroppable ? (event) => handleDrop(event, stageColumnId) : undefined}
+                                className={`crm-kanban-column ${isDropActive ? "crm-kanban-column-drop-active" : ""}`}
                                 style={{
-                                    minWidth: "320px", 
-                                    maxWidth: "320px",
-                                    height: "100%", 
-                                    display: "flex",
-                                    flexDirection: "column",
-                                    padding: "0 10px",
-                                    transition: "background 0.2s",
-                                    backgroundColor: isDropActive ? "#f0f7ff" : "transparent",
-                                    boxShadow: isDropActive ? "inset 0 0 0 1px #91caff" : "none",
-                                    borderRadius: "8px",
+                                    backgroundColor: isDropActive ? "rgba(37, 99, 235, 0.08)" : undefined,
                                 }}
                             >
-                                <div style={{ paddingBottom: "15px", paddingTop: "5px", textAlign: "center" }}>
+                                <div className="crm-kanban-column-head">
                                     <Text
                                         strong
-                                        style={{
-                                            textTransform: "uppercase",
-                                            fontSize: "12px",
-                                            color: "#192a3e",
-                                            display: "block",
-                                            marginBottom: "4px",
-                                        }}
+                                        className="crm-kanban-column-title"
                                     >
                                         {estagio.nome}
                                     </Text>
-                                    <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', fontSize: "11px", color: "#667085" }}>
+                                    <div className="crm-kanban-column-stats">
                                         <Text style={{ fontSize: "11px", color: "#667085" }}>{clientesDaColuna.length} leads</Text>
                                         <span>•</span>
                                         <Text style={{ fontSize: "11px", color: "#667085" }}>{formatCurrencyBRL(totalColuna, "R$ 0,00")}</Text>
@@ -1215,30 +1163,13 @@ export const ClienteList = () => {
                                 </div>
 
                                 <div 
-                                    className="kanban-column-content"
+                                    className="crm-kanban-column-content"
                                     style={{ 
-                                        flex: 1, 
-                                        overflowY: "auto", 
-                                        overflowX: "hidden",
-                                        scrollbarWidth: "none",
-                                        msOverflowStyle: "none",
-                                        paddingRight: "5px", 
-                                        paddingBottom: "20px",
                                         minHeight: 0 // <-- Junto com o absolute no pai, isso cria a barra interna definitiva.
                                     }}
                                 >
                                     {clientesDaColuna.length === 0 ? (
-                                        <div
-                                            style={{
-                                                border: "1px dashed #e2e8f0",
-                                                borderRadius: "8px",
-                                                padding: "20px 12px",
-                                                textAlign: "center",
-                                                color: "#98a2b3",
-                                                fontSize: "13px",
-                                                marginTop: "6px",
-                                            }}
-                                        >
+                                        <div className="crm-kanban-empty">
                                             {isDropActive ? "Solte o lead aqui" : "Sem leads nesta etapa"}
                                         </div>
                                     ) : (
@@ -1262,12 +1193,9 @@ export const ClienteList = () => {
                                                 <Card
                                                     size="small"
                                                     interactive
+                                                    className="crm-lead-card"
                                                     style={{
-                                                        marginBottom: "12px",
                                                         borderLeft: `4px solid ${accentColor}`,
-                                                        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                                                        cursor: "grab",
-                                                        userSelect: "none",
                                                     }}
                                                     bodyStyle={{ padding: "12px" }}
                                                     actions={[
@@ -1302,7 +1230,7 @@ export const ClienteList = () => {
                                                     <div style={{ marginBottom: "8px" }}>
                                                         <Text
                                                             strong
-                                                            style={{ color: "#192a3e", fontSize: "14px" }}
+                                                            className="crm-lead-card-title"
                                                         >
                                                             {cliente.nome}
                                                         </Text>
@@ -1312,13 +1240,7 @@ export const ClienteList = () => {
                                                             value={getClienteTemperature(cliente)}
                                                         />
                                                     </div>
-                                                    <div
-                                                        style={{
-                                                            display: "flex",
-                                                            flexDirection: "column",
-                                                            gap: "4px",
-                                                        }}
-                                                    >
+                                                    <div className="crm-lead-card-meta">
                                                         {cliente.conta_energia_media > 0 && (
                                                             <Text style={{ fontSize: "13px", color: "#4a5568", fontWeight: 500 }}>
                                                                 {formatCurrencyBRL(
@@ -1350,7 +1272,7 @@ export const ClienteList = () => {
     };
 
     const renderListView = () => (
-        <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, padding: "20px", backgroundColor: "#fff", overflowY: "auto" }}>
+        <div className="crm-list-shell">
             {clientesQueryError ? (
                 <EmptyState
                     title="Erro ao carregar leads"
@@ -1422,15 +1344,7 @@ export const ClienteList = () => {
     );
 
     return (
-        <div
-            style={{
-                height: "100vh",
-                display: "flex",
-                flexDirection: "column",
-                backgroundColor: "#fff",
-                overflow: "hidden", 
-            }}
-        >
+        <div className="crm-opportunities-page">
             <KommoHeader />
             <div
                 style={{
@@ -1439,18 +1353,6 @@ export const ClienteList = () => {
                     position: "relative" // <-- Fundamental para o position absolute dos filhos funcionar
                 }}
             >
-                <style>{`
-                    .crm-kanban-scroll::-webkit-scrollbar {
-                        width: 0;
-                        height: 0;
-                    }
-
-                    .kanban-column-content::-webkit-scrollbar {
-                        width: 0;
-                        height: 0;
-                    }
-                `}</style>
-                
                 {viewType === "kanban" ? renderKanbanView() : renderListView()}
             </div>
 

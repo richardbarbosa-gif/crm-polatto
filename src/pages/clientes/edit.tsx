@@ -1,6 +1,6 @@
 import { Edit, useForm } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
-import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
+import { Alert, Card, Col, Form, Input, InputNumber, Row, Select, Spin, Typography } from "antd";
 import { useEffect, useMemo, useRef } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
@@ -32,6 +32,8 @@ type ClienteEditFormValues = {
     stage_id?: string;
     temperature?: LeadTemperature;
 };
+
+const { Text, Title } = Typography;
 
 export const ClienteEdit = () => {
     const { tenantId } = useTenant();
@@ -200,95 +202,128 @@ export const ClienteEdit = () => {
 
     return (
         <Edit canDelete={canDeleteRecords} saveButtonProps={saveButtonProps}>
-            <Form {...formProps} layout="vertical" onFinish={handleFinish}>
-                <Form.Item
-                    label="Nome Completo"
-                    name="nome"
-                    rules={[
-                        {
-                            required: true,
-                            message: "Por favor, insira o nome do cliente.",
-                        },
-                    ]}
-                >
-                    <Input />
-                </Form.Item>
+            <Form {...formProps} layout="vertical" onFinish={handleFinish} className="crm-form-row-tight">
+                <div className="crm-form-section">
+                    <Title level={5} className="crm-form-section-title">
+                        Dados do cliente
+                    </Title>
+                    <Text type="secondary" className="crm-form-section-subtitle">
+                        Atualize informacoes cadastrais e contatos.
+                    </Text>
+                    <Row gutter={16}>
+                        <Col xs={24} lg={12}>
+                            <Form.Item
+                                label="Nome completo"
+                                name="nome"
+                                rules={[
+                                    {
+                                        required: true,
+                                        message: "Por favor, insira o nome do cliente.",
+                                    },
+                                ]}
+                            >
+                                <Input />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={12}>
+                            <Form.Item
+                                label="E-mail"
+                                name="email"
+                                rules={[
+                                    {
+                                        required: true,
+                                        message: "Por favor, insira o e-mail.",
+                                    },
+                                ]}
+                            >
+                                <Input />
+                            </Form.Item>
+                        </Col>
+                    </Row>
 
-                <Form.Item
-                    label="E-mail"
-                    name="email"
-                    rules={[
-                        {
-                            required: true,
-                            message: "Por favor, insira o e-mail.",
-                        },
-                    ]}
-                >
-                    <Input />
-                </Form.Item>
+                    <Row gutter={16}>
+                        <Col xs={24} lg={8}>
+                            <Form.Item label="Telefone / WhatsApp" name="telefone">
+                                <Input />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={8}>
+                            <Form.Item label="CPF ou CNPJ" name="cpf_cnpj">
+                                <Input
+                                    maxLength={18}
+                                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                                    onChange={handleCpfCnpjChange}
+                                />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={8}>
+                            <Form.Item label="Responsavel" name="responsavel">
+                                <Input
+                                    placeholder="Ex.: Joao / Equipe Comercial"
+                                    disabled={!canViewAllLeads}
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
 
-                <Form.Item label="Telefone / WhatsApp" name="telefone">
-                    <Input />
-                </Form.Item>
+                    <Form.Item label="Endereco de instalacao" name="endereco_instalacao">
+                        <Input />
+                    </Form.Item>
+                </div>
 
-                <Form.Item label="CPF ou CNPJ" name="cpf_cnpj">
-                    <Input
-                        maxLength={18}
-                        placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                        onChange={handleCpfCnpjChange}
-                    />
-                </Form.Item>
-
-                <Form.Item label="Endereco de Instalacao" name="endereco_instalacao">
-                    <Input />
-                </Form.Item>
-
-                <Form.Item label="Media da Conta de Energia (R$)" name="conta_energia_media">
-                    <InputNumber
-                        style={{ width: "220px" }}
-                        formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                        parser={(value) => value!.replace(/[^\d.-]/g, "")}
-                    />
-                </Form.Item>
-
-                <Form.Item label="Responsavel" name="responsavel">
-                    <Input
-                        placeholder="Ex.: Joao / Equipe Comercial"
-                        disabled={!canViewAllLeads}
-                    />
-                </Form.Item>
-
-                <Form.Item
-                    label="Etapa do Funil"
-                    name="stage_id"
-                    rules={[{ required: true, message: "Selecione a etapa." }]}
-                >
-                    <Select options={stageOptions} />
-                </Form.Item>
-
-                <Form.Item
-                    label="Temperatura"
-                    name="temperature"
-                    extra={
-                        automaticTemperature
-                            ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
-                            : "Manual para leads em aberto."
-                    }
-                >
-                    <Select
-                        allowClear
-                        placeholder={
-                            automaticTemperature
-                                ? "Temperatura automatica por status"
-                                : "Selecione"
-                        }
-                        disabled={Boolean(automaticTemperature)}
-                        options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
-                            value: option.value,
-                            label: <TemperatureBadge value={option.value} />,
-                        }))}
-                    />
-                </Form.Item>
+                <Card size="small" className="crm-card">
+                    <Title level={5} style={{ margin: 0 }}>
+                        Dados do funil
+                    </Title>
+                    <Text type="secondary" style={{ display: "block", marginBottom: 12, fontSize: 12 }}>
+                        Informacoes comerciais usadas para status, receita e prioridade.
+                    </Text>
+                    <Row gutter={16}>
+                        <Col xs={24} lg={8}>
+                            <Form.Item label="Media da conta (R$)" name="conta_energia_media">
+                                <InputNumber
+                                    style={{ width: "100%" }}
+                                    formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
+                                    parser={(value) => value!.replace(/[^\d.-]/g, "")}
+                                />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={8}>
+                            <Form.Item
+                                label="Etapa do funil"
+                                name="stage_id"
+                                rules={[{ required: true, message: "Selecione a etapa." }]}
+                            >
+                                <Select options={stageOptions} />
+                            </Form.Item>
+                        </Col>
+                        <Col xs={24} lg={8}>
+                            <Form.Item
+                                label="Temperatura"
+                                name="temperature"
+                                extra={
+                                    automaticTemperature
+                                        ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
+                                        : "Manual para leads em aberto."
+                                }
+                            >
+                                <Select
+                                    allowClear
+                                    placeholder={
+                                        automaticTemperature
+                                            ? "Temperatura automatica por status"
+                                            : "Selecione"
+                                    }
+                                    disabled={Boolean(automaticTemperature)}
+                                    options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
+                                        value: option.value,
+                                        label: <TemperatureBadge value={option.value} />,
+                                    }))}
+                                />
+                            </Form.Item>
+                        </Col>
+                    </Row>
+                </Card>
             </Form>
         </Edit>
     );
