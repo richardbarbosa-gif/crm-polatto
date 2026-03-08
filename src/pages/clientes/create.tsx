@@ -48,7 +48,7 @@ type ClienteCreateFormValues = {
     numero: string;
     complemento?: string;
     conta_energia_media: number;
-    responsavel?: string;
+    responsavel_id?: string; // Alterado para ID
     stage_id: string;
     temperature?: LeadTemperature;
 };
@@ -203,7 +203,7 @@ export const ClienteCreate = () => {
                     .filter((emp) => emp.ativo && emp.nome && !emp.nome.includes("@"))
                     .map((emp) => ({
                         label: emp.nome,
-                        value: emp.nome,
+                        value: String(emp.id), // Agora guardamos o ID como valor do Select
                     }));
                 setListaResponsaveis(opcoes);
             } catch {
@@ -230,8 +230,7 @@ export const ClienteCreate = () => {
     }, [form, leadStages, stageOptions]);
 
     useEffect(() => {
-        // Novo lead sempre inicia sem responsavel pre-selecionado.
-        form.setFieldValue("responsavel", undefined);
+        form.setFieldValue("responsavel_id", undefined);
     }, [form]);
 
     useEffect(() => {
@@ -292,27 +291,15 @@ export const ClienteCreate = () => {
     };
 
     const toUploadFileList = (file: File | null, uid: string): UploadFile[] => {
-        if (!file) {
-            return [];
-        }
-
-        return [
-            {
-                uid,
-                name: file.name,
-                status: "done",
-                size: file.size,
-                type: file.type,
-            },
-        ];
+        if (!file) return [];
+        return [{ uid, name: file.name, status: "done", size: file.size, type: file.type }];
     };
 
     const handleBeforeUpload = (
         tipo: "proposta" | "conta_luz",
         file: File,
     ): false | typeof Upload.LIST_IGNORE => {
-        const isPdf =
-            file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
 
         if (!isPdf) {
             message.warning("Somente arquivos PDF sao permitidos.");
@@ -320,33 +307,32 @@ export const ClienteCreate = () => {
         }
 
         if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
-            message.warning(
-                `Arquivo acima do limite (${Math.floor(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB).`,
-            );
+            message.warning(`Arquivo acima do limite (${Math.floor(MAX_PDF_FILE_SIZE_BYTES / (1024 * 1024))}MB).`);
             return Upload.LIST_IGNORE;
         }
 
-        if (tipo === "proposta") {
-            setPropostaFile(file);
-        } else {
-            setContaLuzFile(file);
-        }
+        if (tipo === "proposta") setPropostaFile(file);
+        else setContaLuzFile(file);
 
         return false;
     };
 
     const handleFinish = async (values: ClienteCreateFormValues) => {
-        const { temperature, ...payload } = values;
+        const { temperature, responsavel_id, ...payload } = values;
         const nextStageId = coerceLeadStageIdValue(values.stage_id, leadStages);
         const nextStage = findLeadStageById(leadStages, nextStageId);
         const automaticFromStatus = resolveAutomaticLeadTemperature(nextStage?.nome);
         const nextTemperature = automaticFromStatus ? undefined : temperature;
 
+        // Recupera o nome do responsável a partir do ID para preencher a coluna de texto
+        const responsavelSelecionado = responsavelOptions.find(opt => opt.value === responsavel_id);
+        const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : ownerDisplayName;
+
         pendingTemperatureRef.current = nextTemperature;
         pendingFilesRef.current = {
             propostaFile,
             contaLuzFile,
-            enviadoPor: values.responsavel || ownerDisplayName,
+            enviadoPor: responsavelNome,
         };
 
         return formProps.onFinish?.({
@@ -354,7 +340,8 @@ export const ClienteCreate = () => {
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
             status: nextStage?.nome || undefined,
-            responsavel: values.responsavel,
+            responsavel: responsavelNome, // Salva o nome para retrocompatibilidade
+            responsavel_id: responsavel_id, // Salva o UUID para o novo motor de relatórios
         } as any);
     };
 
@@ -366,13 +353,7 @@ export const ClienteCreate = () => {
 
     const selectPais = (
         <Form.Item name="ddi" noStyle initialValue="+55">
-            <Select
-                style={{ width: 100 }}
-                onChange={(value) => {
-                    setPaisSelecionado(value);
-                    form.setFieldValue("telefone", "");
-                }}
-            >
+            <Select style={{ width: 100 }} onChange={(value) => { setPaisSelecionado(value); form.setFieldValue("telefone", ""); }}>
                 <Select.Option value="+55">+55</Select.Option>
                 <Select.Option value="+1">+1</Select.Option>
                 <Select.Option value="+351">+351</Select.Option>
@@ -382,61 +363,34 @@ export const ClienteCreate = () => {
 
     return (
         <Create saveButtonProps={finalSaveButtonProps} title="Novo Cliente Solar">
-            <Form {...formProps} layout="vertical" onFinish={handleFinish} className="crm-form-row-tight">
-                <div className="crm-form-section">
-                    <Title level={5} className="crm-form-section-title">
-                        Dados do cliente
-                    </Title>
-                    <Text type="secondary" className="crm-form-section-subtitle">
-                        Informacoes de identificacao e contato principal.
-                    </Text>
-                    <Row gutter={20}>
-                        <Col xs={24} lg={12}>
-                            <Form.Item label="Nome completo" name="nome" rules={[{ required: true }]}>
-                                <Input size="large" />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={12}>
-                            <Form.Item label="CPF ou CNPJ" name="cpf_cnpj" rules={[{ required: true }]}>
-                                <Input
-                                    size="large"
-                                    maxLength={18}
-                                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                                    onChange={handleCpfCnpjChange}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+            <Form {...formProps} layout="vertical" onFinish={handleFinish}>
+                <Row gutter={20}>
+                    <Col xs={24} lg={12}>
+                        <Form.Item label="Nome Completo" name="nome" rules={[{ required: true }]}>
+                            <Input size="large" />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={12}>
+                        <Form.Item label="CPF ou CNPJ" name="cpf_cnpj" rules={[{ required: true }]}>
+                            <Input size="large" maxLength={18} placeholder="000.000.000-00 ou 00.000.000/0000-00" onChange={handleCpfCnpjChange} />
+                        </Form.Item>
+                    </Col>
+                </Row>
 
-                    <Row gutter={20}>
-                        <Col xs={24} lg={12}>
-                            <Form.Item
-                                label="WhatsApp / Telefone"
-                                name="telefone"
-                                rules={[{ required: true }]}
-                            >
-                                <Input
-                                    addonBefore={selectPais}
-                                    size="large"
-                                    onChange={handlePhoneChange}
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={12}>
-                            <Form.Item label="E-mail" name="email">
-                                <Input size="large" />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-                </div>
+                <Row gutter={20}>
+                    <Col xs={24} lg={12}>
+                        <Form.Item label="WhatsApp / Telefone" name="telefone" rules={[{ required: true }]}>
+                            <Input addonBefore={selectPais} size="large" onChange={handlePhoneChange} />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={12}>
+                        <Form.Item label="E-mail" name="email">
+                            <Input size="large" />
+                        </Form.Item>
+                    </Col>
+                </Row>
 
-                <div className="crm-form-section">
-                    <Title level={5} className="crm-form-section-title">
-                        Endereco de instalacao
-                    </Title>
-                    <Text type="secondary" className="crm-form-section-subtitle">
-                        Informe o CEP para preenchimento assistido do logradouro.
-                    </Text>
+                <div style={{ background: "#f8f9fa", padding: "15px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #ddd" }}>
                     <Row gutter={15}>
                         <Col xs={24} lg={5}>
                             <Form.Item label="CEP" name="cep" rules={[{ required: true }]}>
@@ -444,11 +398,7 @@ export const ClienteCreate = () => {
                             </Form.Item>
                         </Col>
                         <Col xs={24} lg={13}>
-                            <Form.Item
-                                label="Logradouro"
-                                name="endereco_instalacao"
-                                rules={[{ required: true }]}
-                            >
+                            <Form.Item label="Logradouro" name="endereco_instalacao" rules={[{ required: true }]}>
                                 <Input readOnly />
                             </Form.Item>
                         </Col>
@@ -458,145 +408,65 @@ export const ClienteCreate = () => {
                             </Form.Item>
                         </Col>
                         <Col xs={24} lg={3}>
-                            <Form.Item label="Complemento" name="complemento">
+                            <Form.Item label="Compl." name="complemento">
                                 <Input />
                             </Form.Item>
                         </Col>
                     </Row>
                 </div>
 
-                <div className="crm-form-section">
-                    <Title level={5} className="crm-form-section-title">
-                        Dados comerciais
-                    </Title>
-                    <Text type="secondary" className="crm-form-section-subtitle">
-                        Defina valor estimado, responsavel e etapa inicial do funil.
-                    </Text>
-                    <Row gutter={20}>
-                        <Col xs={24} lg={6}>
-                            <Form.Item
-                                label="Media da conta (R$)"
-                                name="conta_energia_media"
-                                rules={[{ required: true }]}
-                            >
-                                <InputNumber
-                                    style={{ width: "100%" }}
-                                    size="large"
-                                    formatter={(value) => `R$ ${value}`}
-                                    parser={(value) => value!.replace("R$ ", "")}
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={6}>
-                            <Form.Item
-                                label="Responsavel"
-                                name="responsavel"
-                                rules={[{ required: true, message: "Obrigatorio" }]}
-                            >
-                                <Select
-                                    showSearch
-                                    allowClear
-                                    placeholder="Selecione a equipe"
-                                    size="large"
-                                    options={responsavelOptions}
-                                    filterOption={(input, option) =>
-                                        (option?.label ?? "").toLowerCase().includes(input.toLowerCase())
-                                    }
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={6}>
-                            <Form.Item
-                                label="Etapa inicial"
-                                name="stage_id"
-                                rules={[{ required: true, message: "Selecione a etapa inicial." }]}
-                            >
-                                <Select size="large" options={stageOptions} />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={6}>
-                            <Form.Item
-                                label="Temperatura"
-                                name="temperature"
-                                extra={
-                                    automaticTemperature
-                                        ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
-                                        : "Manual para leads em aberto."
-                                }
-                            >
-                                <Select
-                                    size="large"
-                                    allowClear
-                                    placeholder={
-                                        automaticTemperature
-                                            ? "Temperatura automatica por status"
-                                            : "Selecione"
-                                    }
-                                    disabled={Boolean(automaticTemperature)}
-                                    options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
-                                        value: option.value,
-                                        label: <TemperatureBadge value={option.value} />,
-                                    }))}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-                </div>
+                <Row gutter={20}>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Media da Conta (R$)" name="conta_energia_media" rules={[{ required: true }]}>
+                            <InputNumber style={{ width: "100%" }} size="large" formatter={(value) => `R$ ${value}`} parser={(value) => value!.replace("R$ ", "")} />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Responsavel" name="responsavel_id" rules={[{ required: true, message: "Obrigatorio" }]}>
+                            <Select
+                                showSearch
+                                allowClear
+                                placeholder="Selecione a equipe"
+                                size="large"
+                                options={responsavelOptions}
+                                filterOption={(input, option) => (option?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Etapa Inicial" name="stage_id" rules={[{ required: true, message: "Selecione a etapa inicial." }]}>
+                            <Select size="large" options={stageOptions} />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Temperatura" name="temperature" extra={automaticTemperature ? `Automatica: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}` : "Manual para leads abertos."}>
+                            <Select size="large" allowClear placeholder={automaticTemperature ? "Temperatura automatica" : "Selecione"} disabled={Boolean(automaticTemperature)} options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({ value: option.value, label: <TemperatureBadge value={option.value} /> }))} />
+                        </Form.Item>
+                    </Col>
+                </Row>
 
-                <Card
-                    size="small"
-                    className="crm-card"
-                    style={{ marginTop: 8 }}
-                >
-                    <Title level={5} style={{ margin: 0 }}>
-                        Documentos iniciais do lead
-                    </Title>
-                    <Text type="secondary">
-                        Opcional no cadastro: anexe proposta e/ou conta de luz em PDF.
-                    </Text>
+                <Card size="small" style={{ marginTop: 8, borderRadius: 10, border: "1px solid #e5e7eb", background: "#f8fafc" }}>
+                    <Title level={5} style={{ margin: 0 }}>Documentos iniciais do lead</Title>
+                    <Text type="secondary">Opcional no cadastro: anexe proposta e/ou conta de luz em PDF.</Text>
 
                     <Row gutter={20} style={{ marginTop: 12 }}>
                         <Col xs={24} lg={12}>
                             <Form.Item label="Proposta comercial (PDF)">
-                                <Upload
-                                    accept=".pdf,application/pdf"
-                                    maxCount={1}
-                                    beforeUpload={(file) => handleBeforeUpload("proposta", file)}
-                                    fileList={toUploadFileList(propostaFile, "proposta")}
-                                    onRemove={() => {
-                                        setPropostaFile(null);
-                                        return true;
-                                    }}
-                                    disabled={isUploadingFiles}
-                                >
+                                <Upload accept=".pdf,application/pdf" maxCount={1} beforeUpload={(file) => handleBeforeUpload("proposta", file)} fileList={toUploadFileList(propostaFile, "proposta")} onRemove={() => { setPropostaFile(null); return true; }} disabled={isUploadingFiles}>
                                     <Button icon={<UploadOutlined />}>Selecionar proposta</Button>
                                 </Upload>
                             </Form.Item>
                         </Col>
                         <Col xs={24} lg={12}>
                             <Form.Item label="Conta de luz (PDF)">
-                                <Upload
-                                    accept=".pdf,application/pdf"
-                                    maxCount={1}
-                                    beforeUpload={(file) => handleBeforeUpload("conta_luz", file)}
-                                    fileList={toUploadFileList(contaLuzFile, "conta_luz")}
-                                    onRemove={() => {
-                                        setContaLuzFile(null);
-                                        return true;
-                                    }}
-                                    disabled={isUploadingFiles}
-                                >
+                                <Upload accept=".pdf,application/pdf" maxCount={1} beforeUpload={(file) => handleBeforeUpload("conta_luz", file)} fileList={toUploadFileList(contaLuzFile, "conta_luz")} onRemove={() => { setContaLuzFile(null); return true; }} disabled={isUploadingFiles}>
                                     <Button icon={<UploadOutlined />}>Selecionar conta de luz</Button>
                                 </Upload>
                             </Form.Item>
                         </Col>
                     </Row>
 
-                    {isUploadingFiles ? (
-                        <Text type="secondary">
-                            Enviando documentos para o repositório oficial do lead...
-                        </Text>
-                    ) : null}
+                    {isUploadingFiles ? <Text type="secondary">Enviando documentos para o repositório oficial do lead...</Text> : null}
                 </Card>
             </Form>
         </Create>

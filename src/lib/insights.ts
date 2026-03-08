@@ -7,6 +7,7 @@ export interface InsightClienteRecord {
     nome?: string | null;
     status?: string | null;
     responsavel?: string | null;
+    responsavel_id?: string | null;
     conta_energia_media?: string | number | null;
     created_at?: string | null;
     updated_at?: string | null;
@@ -34,6 +35,7 @@ export interface InsightStatusHistoryRecord {
 }
 
 export type OwnerPerformance = {
+    owner_id: string | null;
     owner: string;
     total: number;
     ganhos: number;
@@ -57,14 +59,8 @@ export const isLostStatus = (status?: string | null): boolean => {
 
 export const isOpenStatus = (status?: string | null): boolean => {
     const value = normalizeText(status);
-    if (!value) {
-        return true;
-    }
-
-    if (isWonStatus(value) || isLostStatus(value)) {
-        return false;
-    }
-
+    if (!value) return true;
+    if (isWonStatus(value) || isLostStatus(value)) return false;
     return OPEN_STATUS_TERMS.some((term) => value.includes(term));
 };
 
@@ -73,36 +69,20 @@ export const getInsightValue = (value: unknown): number => {
 };
 
 export const toSafeDayjs = (value?: string | Date | null): Dayjs | null => {
-    if (!value) {
-        return null;
-    }
-
+    if (!value) return null;
     const parsed = dayjs(value);
     return parsed.isValid() ? parsed : null;
 };
 
-export const isDateInLastDays = (
-    value: string | Date | null | undefined,
-    days: number,
-    now = dayjs(),
-): boolean => {
+export const isDateInLastDays = (value: string | Date | null | undefined, days: number, now = dayjs()): boolean => {
     const parsed = toSafeDayjs(value);
-    if (!parsed) {
-        return false;
-    }
-
+    if (!parsed) return false;
     return parsed.isAfter(now.subtract(days, "day"));
 };
 
-export const isDateInMonth = (
-    value: string | Date | null | undefined,
-    monthRef: Dayjs,
-): boolean => {
+export const isDateInMonth = (value: string | Date | null | undefined, monthRef: Dayjs): boolean => {
     const parsed = toSafeDayjs(value);
-    if (!parsed) {
-        return false;
-    }
-
+    if (!parsed) return false;
     return parsed.isSame(monthRef, "month");
 };
 
@@ -112,10 +92,7 @@ export const getMonthStart = (monthRef: Dayjs): string => {
 
 export const getMonthKey = (value?: string | Date | null): string | null => {
     const parsed = toSafeDayjs(value);
-    if (!parsed) {
-        return null;
-    }
-
+    if (!parsed) return null;
     return parsed.format("YYYY-MM");
 };
 
@@ -128,14 +105,15 @@ export const toOwnerLabel = (value?: string | null): string => {
     return normalized ? (value?.trim() || "Sem responsavel") : "Sem responsavel";
 };
 
-export const buildOwnerPerformance = (
-    clientes: InsightClienteRecord[],
-): OwnerPerformance[] => {
+export const buildOwnerPerformance = (clientes: InsightClienteRecord[]): OwnerPerformance[] => {
     const map = new Map<string, OwnerPerformance>();
 
     clientes.forEach((cliente) => {
-        const key = toOwnerKey(cliente.responsavel);
+        // Mágica: Usa o ID se existir. Se não, faz fallback para o texto antigo.
+        const key = cliente.responsavel_id ? String(cliente.responsavel_id) : toOwnerKey(cliente.responsavel);
+        
         const current = map.get(key) || {
+            owner_id: cliente.responsavel_id ? String(cliente.responsavel_id) : null,
             owner: toOwnerLabel(cliente.responsavel),
             total: 0,
             ganhos: 0,
@@ -161,63 +139,31 @@ export const buildOwnerPerformance = (
     return Array.from(map.values()).sort((first, second) => second.valor - first.valor);
 };
 
-export const getTaskSituation = (
-    dueDate?: string | null,
-    now = dayjs(),
-    executionStatus: TaskExecutionStatus = "pendente",
-): TaskSituation => {
+export const getTaskSituation = (dueDate?: string | null, now = dayjs(), executionStatus: TaskExecutionStatus = "pendente"): TaskSituation => {
     const due = toSafeDayjs(dueDate);
-    if (!due) {
-        return "futura";
-    }
-
+    if (!due) return "futura";
     if (due.isBefore(now, "minute")) {
-        if (executionStatus !== "pendente") {
-            return "tratada";
-        }
+        if (executionStatus !== "pendente") return "tratada";
         return "atrasada";
     }
-
-    if (due.isSame(now, "day")) {
-        return "hoje";
-    }
-
-    if (due.isBefore(now.add(2, "day"), "day")) {
-        return "proxima";
-    }
-
+    if (due.isSame(now, "day")) return "hoje";
+    if (due.isBefore(now.add(2, "day"), "day")) return "proxima";
     return "futura";
 };
 
 export const isTaskOverdue = (dueDate?: string | null, now = dayjs()): boolean => {
     const due = toSafeDayjs(dueDate);
-    if (!due) {
-        return false;
-    }
-
+    if (!due) return false;
     return due.isBefore(now, "minute");
 };
 
-export const sortByDateDesc = <T>(
-    records: T[],
-    dateSelector: (record: T) => string | null | undefined,
-): T[] => {
+export const sortByDateDesc = <T>(records: T[], dateSelector: (record: T) => string | null | undefined): T[] => {
     return [...records].sort((first, second) => {
         const firstDate = toSafeDayjs(dateSelector(first));
         const secondDate = toSafeDayjs(dateSelector(second));
-
-        if (!firstDate && !secondDate) {
-            return 0;
-        }
-
-        if (!firstDate) {
-            return 1;
-        }
-
-        if (!secondDate) {
-            return -1;
-        }
-
+        if (!firstDate && !secondDate) return 0;
+        if (!firstDate) return 1;
+        if (!secondDate) return -1;
         return secondDate.valueOf() - firstDate.valueOf();
     });
 };

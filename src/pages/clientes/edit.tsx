@@ -1,9 +1,10 @@
 import { Edit, useForm } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
-import { Alert, Card, Col, Form, Input, InputNumber, Row, Select, Spin, Typography } from "antd";
-import { useEffect, useMemo, useRef } from "react";
+import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
+import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj } from "../../lib/formatters";
 import {
@@ -28,18 +29,16 @@ type ClienteEditFormValues = {
     cpf_cnpj?: string;
     endereco_instalacao?: string;
     conta_energia_media?: number;
-    responsavel?: string;
+    responsavel_id?: string; // Alterado para suportar o Select
     stage_id?: string;
     temperature?: LeadTemperature;
 };
 
-const { Text, Title } = Typography;
-
 export const ClienteEdit = () => {
     const { tenantId } = useTenant();
     const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
-    const { canDeleteRecords, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } =
-        useCrmAccess();
+    const { canDeleteRecords, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
+    const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
 
     const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({
         onMutationSuccess: (data) => {
@@ -80,12 +79,39 @@ export const ClienteEdit = () => {
     const automaticTemperature = resolveAutomaticLeadTemperature(selectedStage?.nome);
 
     useEffect(() => {
-        if (!record?.id) {
-            return;
-        }
+        const carregarEquipe = async () => {
+            try {
+                const { employees } = await fetchEmployeesDirectory();
+                const opcoes = employees
+                    .filter((emp) => emp.nome && !emp.nome.includes("@"))
+                    .map((emp) => ({
+                        label: emp.nome,
+                        value: String(emp.id),
+                    }));
+                setListaResponsaveis(opcoes);
+            } catch {
+                setListaResponsaveis([]);
+            }
+        };
+
+        carregarEquipe();
+    }, []);
+
+    useEffect(() => {
+        if (!record?.id) return;
 
         form.setFieldValue("temperature", resolveEditableLeadTemperature(record));
-    }, [form, record]);
+
+        // Magia para preencher o Select corretamente mesmo se o lead for antigo (sem ID ainda)
+        if (record.responsavel_id) {
+            form.setFieldValue("responsavel_id", String(record.responsavel_id));
+        } else if (record.responsavel && listaResponsaveis.length > 0) {
+            const match = listaResponsaveis.find(opt => opt.label.toLowerCase() === record.responsavel.toLowerCase());
+            if (match) {
+                form.setFieldValue("responsavel_id", match.value);
+            }
+        }
+    }, [form, record, listaResponsaveis]);
 
     useEffect(() => {
         if (automaticTemperature) {
@@ -109,17 +135,8 @@ export const ClienteEdit = () => {
     }, [form, leadStages, record?.stage_id, record?.status, stageOptions]);
 
     useEffect(() => {
-        if (!canViewAllLeads) {
-            form.setFieldValue("responsavel", ownerDisplayName);
-        }
-    }, [canViewAllLeads, form, ownerDisplayName]);
-
-    useEffect(() => {
         const currentDocument = form.getFieldValue("cpf_cnpj");
-        if (!currentDocument) {
-            return;
-        }
-
+        if (!currentDocument) return;
         form.setFieldValue("cpf_cnpj", formatCpfCnpj(currentDocument));
     }, [form, record?.cpf_cnpj]);
 
@@ -128,11 +145,15 @@ export const ClienteEdit = () => {
     };
 
     const handleFinish = async (values: ClienteEditFormValues) => {
-        const { temperature, stage_id, ...payload } = values;
+        const { temperature, stage_id, responsavel_id, ...payload } = values;
         const nextStageId = coerceLeadStageIdValue(stage_id ?? record?.stage_id ?? record?.status, leadStages);
         const nextStage = findLeadStageById(leadStages, nextStageId);
         const automaticFromStatus = resolveAutomaticLeadTemperature(nextStage?.nome);
         const nextTemperature = automaticFromStatus ? undefined : temperature;
+
+        // Recupera o nome correto baseado no ID selecionado
+        const responsavelSelecionado = listaResponsaveis.find(opt => opt.value === responsavel_id);
+        const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : (record?.responsavel || ownerDisplayName);
 
         pendingTemperatureRef.current = nextTemperature;
 
@@ -140,26 +161,20 @@ export const ClienteEdit = () => {
             setLeadTemperature(record.id, nextTemperature);
         }
 
-        return formProps.onFinish?.(
-            {
-                ...payload,
-                tenant_id: tenantId || undefined,
-                stage_id: nextStageId,
-                status: nextStage?.nome || undefined,
-                responsavel: canViewAllLeads ? values.responsavel : ownerDisplayName,
-            } as any,
-        );
+        return formProps.onFinish?.({
+            ...payload,
+            tenant_id: tenantId || undefined,
+            stage_id: nextStageId,
+            status: nextStage?.nome || undefined,
+            responsavel: canViewAllLeads ? responsavelNome : record?.responsavel, // Salva o nome
+            responsavel_id: canViewAllLeads ? responsavel_id : record?.responsavel_id, // Salva o UUID
+        } as any);
     };
 
     if (recordError) {
         return (
             <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
-                <Alert
-                    type="error"
-                    showIcon
-                    message="Falha ao carregar lead"
-                    description={String(recordError?.message || "Nao foi possivel abrir o cadastro para edicao.")}
-                />
+                <Alert type="error" showIcon message="Falha ao carregar lead" description={String(recordError?.message || "Nao foi possivel abrir o cadastro para edicao.")} />
             </Edit>
         );
     }
@@ -177,12 +192,7 @@ export const ClienteEdit = () => {
     if (!record && !isRecordLoading) {
         return (
             <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Lead nao encontrado"
-                    description="O registro solicitado nao foi encontrado ou voce nao tem permissao de acesso."
-                />
+                <Alert type="warning" showIcon message="Lead nao encontrado" description="O registro solicitado nao foi encontrado ou voce nao tem permissao de acesso." />
             </Edit>
         );
     }
@@ -190,140 +200,56 @@ export const ClienteEdit = () => {
     if (!canEditRecord && record) {
         return (
             <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Acesso restrito"
-                    description="Este lead nao esta vinculado ao seu usuario."
-                />
+                <Alert type="warning" showIcon message="Acesso restrito" description="Este lead nao esta vinculado ao seu usuario." />
             </Edit>
         );
     }
 
     return (
         <Edit canDelete={canDeleteRecords} saveButtonProps={saveButtonProps}>
-            <Form {...formProps} layout="vertical" onFinish={handleFinish} className="crm-form-row-tight">
-                <div className="crm-form-section">
-                    <Title level={5} className="crm-form-section-title">
-                        Dados do cliente
-                    </Title>
-                    <Text type="secondary" className="crm-form-section-subtitle">
-                        Atualize informacoes cadastrais e contatos.
-                    </Text>
-                    <Row gutter={16}>
-                        <Col xs={24} lg={12}>
-                            <Form.Item
-                                label="Nome completo"
-                                name="nome"
-                                rules={[
-                                    {
-                                        required: true,
-                                        message: "Por favor, insira o nome do cliente.",
-                                    },
-                                ]}
-                            >
-                                <Input />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={12}>
-                            <Form.Item
-                                label="E-mail"
-                                name="email"
-                                rules={[
-                                    {
-                                        required: true,
-                                        message: "Por favor, insira o e-mail.",
-                                    },
-                                ]}
-                            >
-                                <Input />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+            <Form {...formProps} layout="vertical" onFinish={handleFinish}>
+                <Form.Item label="Nome Completo" name="nome" rules={[{ required: true, message: "Por favor, insira o nome do cliente." }]}>
+                    <Input />
+                </Form.Item>
 
-                    <Row gutter={16}>
-                        <Col xs={24} lg={8}>
-                            <Form.Item label="Telefone / WhatsApp" name="telefone">
-                                <Input />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                            <Form.Item label="CPF ou CNPJ" name="cpf_cnpj">
-                                <Input
-                                    maxLength={18}
-                                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                                    onChange={handleCpfCnpjChange}
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                            <Form.Item label="Responsavel" name="responsavel">
-                                <Input
-                                    placeholder="Ex.: Joao / Equipe Comercial"
-                                    disabled={!canViewAllLeads}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                <Form.Item label="E-mail" name="email" rules={[{ required: true, message: "Por favor, insira o e-mail." }]}>
+                    <Input />
+                </Form.Item>
 
-                    <Form.Item label="Endereco de instalacao" name="endereco_instalacao">
-                        <Input />
-                    </Form.Item>
-                </div>
+                <Form.Item label="Telefone / WhatsApp" name="telefone">
+                    <Input />
+                </Form.Item>
 
-                <Card size="small" className="crm-card">
-                    <Title level={5} style={{ margin: 0 }}>
-                        Dados do funil
-                    </Title>
-                    <Text type="secondary" style={{ display: "block", marginBottom: 12, fontSize: 12 }}>
-                        Informacoes comerciais usadas para status, receita e prioridade.
-                    </Text>
-                    <Row gutter={16}>
-                        <Col xs={24} lg={8}>
-                            <Form.Item label="Media da conta (R$)" name="conta_energia_media">
-                                <InputNumber
-                                    style={{ width: "100%" }}
-                                    formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")}
-                                    parser={(value) => value!.replace(/[^\d.-]/g, "")}
-                                />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                            <Form.Item
-                                label="Etapa do funil"
-                                name="stage_id"
-                                rules={[{ required: true, message: "Selecione a etapa." }]}
-                            >
-                                <Select options={stageOptions} />
-                            </Form.Item>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                            <Form.Item
-                                label="Temperatura"
-                                name="temperature"
-                                extra={
-                                    automaticTemperature
-                                        ? `Automatica pelo status: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
-                                        : "Manual para leads em aberto."
-                                }
-                            >
-                                <Select
-                                    allowClear
-                                    placeholder={
-                                        automaticTemperature
-                                            ? "Temperatura automatica por status"
-                                            : "Selecione"
-                                    }
-                                    disabled={Boolean(automaticTemperature)}
-                                    options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({
-                                        value: option.value,
-                                        label: <TemperatureBadge value={option.value} />,
-                                    }))}
-                                />
-                            </Form.Item>
-                        </Col>
-                    </Row>
-                </Card>
+                <Form.Item label="CPF ou CNPJ" name="cpf_cnpj">
+                    <Input maxLength={18} placeholder="000.000.000-00 ou 00.000.000/0000-00" onChange={handleCpfCnpjChange} />
+                </Form.Item>
+
+                <Form.Item label="Endereco de Instalacao" name="endereco_instalacao">
+                    <Input />
+                </Form.Item>
+
+                <Form.Item label="Media da Conta de Energia (R$)" name="conta_energia_media">
+                    <InputNumber style={{ width: "220px" }} formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")} parser={(value) => value!.replace(/[^\d.-]/g, "")} />
+                </Form.Item>
+
+                <Form.Item label="Responsavel" name="responsavel_id">
+                    <Select
+                        showSearch
+                        allowClear
+                        placeholder="Selecione a equipe"
+                        options={listaResponsaveis}
+                        disabled={!canViewAllLeads}
+                        filterOption={(input, option) => (option?.label ?? "").toLowerCase().includes(input.toLowerCase())}
+                    />
+                </Form.Item>
+
+                <Form.Item label="Etapa do Funil" name="stage_id" rules={[{ required: true, message: "Selecione a etapa." }]}>
+                    <Select options={stageOptions} />
+                </Form.Item>
+
+                <Form.Item label="Temperatura" name="temperature" extra={automaticTemperature ? `Automatica: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}` : "Manual para leads em aberto."}>
+                    <Select allowClear placeholder={automaticTemperature ? "Temperatura automatica" : "Selecione"} disabled={Boolean(automaticTemperature)} options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({ value: option.value, label: <TemperatureBadge value={option.value} /> }))} />
+                </Form.Item>
             </Form>
         </Edit>
     );
