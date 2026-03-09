@@ -1,5 +1,5 @@
-import { useTable } from "@refinedev/antd";
-import { Table, Typography, Tag, Button, Card } from "antd";
+import { useTable, EditButton } from "@refinedev/antd"; // <--- EditButton importado
+import { Table, Typography, Tag, Button, Card, Space } from "antd"; // <--- Space importado
 import { PlusOutlined, TeamOutlined } from "@ant-design/icons";
 
 const { Title } = Typography;
@@ -27,6 +27,14 @@ export const EquipeList = () => {
                     <Table.Column dataIndex="nome" title="Nome" />
                     <Table.Column dataIndex="email" title="E-mail" />
                     <Table.Column dataIndex="cargo" title="Cargo" />
+                    
+                    {/* <--- NOVA COLUNA DE META ---> */}
+                    <Table.Column 
+                        dataIndex="meta" 
+                        title="Meta" 
+                        render={(value) => value ? value : "-"} 
+                    />
+
                     <Table.Column
                         dataIndex="ativo"
                         title="Status"
@@ -34,6 +42,17 @@ export const EquipeList = () => {
                             <Tag color={value ? "green" : "red"} style={{ borderRadius: '4px' }}>
                                 {value ? "Ativo" : "Inativo"}
                             </Tag>
+                        )}
+                    />
+
+                    {/* <--- NOVA COLUNA DE AÇÕES (CORRIGE O BUG DA EDIÇÃO EM BRANCO) ---> */}
+                    <Table.Column
+                        title="Ações"
+                        dataIndex="id"
+                        render={(_, record: any) => (
+                            <Space>
+                                <EditButton hideText size="small" recordItemId={record.id} />
+                            </Space>
                         )}
                     />
                 </Table>

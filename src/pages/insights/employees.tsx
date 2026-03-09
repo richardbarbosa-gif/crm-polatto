@@ -1,9 +1,16 @@
-import { PlusOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
+import {
+    PlusOutlined,
+    TeamOutlined,
+    TrophyOutlined,
+    UserOutlined,
+} from "@ant-design/icons";
+import { useList } from "@refinedev/core";
 import {
     Form,
     Input,
     InputNumber,
     Modal,
+    Progress,
     Skeleton,
     Space,
     Switch,
@@ -15,7 +22,8 @@ import {
 import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
+import { buildOwnerPerformance, type InsightClienteRecord } from "../../lib/insights";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
@@ -27,19 +35,65 @@ type EmployeeRecord = {
     full_name: string;
     email?: string | null;
     role?: string | null;
+    monthly_goal_value?: number | null;
+    monthly_goal_count?: number | null;
     active?: boolean | null;
     created_at?: string | null;
-    current_target_value?: number; // Trazemos a meta do mês atual de volta para a visão!
-    current_target_wins?: number;
 };
 
 type EmployeeFormValues = {
     full_name: string;
     email?: string;
     role?: string;
+    monthly_goal_value?: number;
+    monthly_goal_count?: number;
     active?: boolean;
-    target_value?: number;
-    target_wins?: number;
+};
+
+const matchOwnerPerformance = (
+    ownerRows: ReturnType<typeof buildOwnerPerformance>,
+    employeeName: string,
+) => {
+    const employeeKey = normalizeText(employeeName);
+    if (!employeeKey) return null;
+
+    return (
+        ownerRows.find((owner) => normalizeText(owner.owner) === employeeKey) ||
+        ownerRows.find(
+            (owner) =>
+                normalizeText(owner.owner).includes(employeeKey) ||
+                employeeKey.includes(normalizeText(owner.owner)),
+        ) ||
+        null
+    );
+};
+
+const toEmployeeRecord = (row: any, sourceTable: EmployeeSourceTable, metaDoMes?: any): EmployeeRecord => {
+    if (sourceTable === "funcionarios") {
+        return {
+            id: String(row.id),
+            full_name: row.nome || "Sem nome",
+            email: row.email || null,
+            role: row.cargo || null,
+            // AQUI O SEGREDO: Puxamos a meta cruzada da tabela "metas"
+            monthly_goal_value: metaDoMes ? Number(metaDoMes.valor_meta) : 0,
+            monthly_goal_count: metaDoMes ? Number(metaDoMes.target_wins || 0) : 0,
+            active: row.ativo !== false,
+            created_at: row.created_at || null,
+        };
+    }
+
+    // Legado
+    return {
+        id: String(row.id),
+        full_name: row.full_name || "Sem nome",
+        email: row.email || null,
+        role: row.role || null,
+        monthly_goal_value: Number(row.monthly_goal_value || 0),
+        monthly_goal_count: Number(row.monthly_goal_count || 0),
+        active: row.active !== false,
+        created_at: row.created_at || null,
+    };
 };
 
 export const InsightsEmployeesPage = () => {
@@ -53,35 +107,40 @@ export const InsightsEmployeesPage = () => {
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [sourceTable, setSourceTable] = useState<EmployeeSourceTable>("funcionarios");
 
+    const clientesResult = useList<InsightClienteRecord>({
+        resource: "clientes",
+        pagination: { mode: "off" },
+    }) as any;
+    const clientesQuery = clientesResult.query || clientesResult;
+    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
+
     const loadEmployees = useCallback(async () => {
         setIsLoadingEmployees(true);
         setErrorMessage(null);
         try {
-            const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
-
             const current = await supabaseClient
                 .from("funcionarios")
                 .select("*")
                 .order("created_at", { ascending: false });
 
             if (!current.error) {
-                // Busca as metas do mês atual para mostrar na tabela!
-                const goalsRes = await supabaseClient.from("metas").select("*").eq("mes_referencia", monthStart);
-                const goalsData = goalsRes.data || [];
-
                 setSourceTable("funcionarios");
+                
+                // BUSCA AS METAS DO MÊS ATUAL PARA MOSTRAR NA TABELA
+                const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
+                const metas = await supabaseClient
+                    .from("metas")
+                    .select("*")
+                    .eq("mes_referencia", monthStart);
+                
+                const metasMap = new Map();
+                if (!metas.error && metas.data) {
+                    metas.data.forEach(m => metasMap.set(m.funcionario_id, m));
+                }
+
                 setEmployees(((current.data || []) as any[]).map((row) => {
-                    const goal = goalsData.find((g: any) => String(g.funcionario_id) === String(row.id));
-                    return {
-                        id: String(row.id),
-                        full_name: row.nome || "Sem nome",
-                        email: row.email || null,
-                        role: row.cargo || null,
-                        active: row.ativo !== false,
-                        created_at: row.created_at || null,
-                        current_target_value: goal ? Number(goal.valor_meta || 0) : 0,
-                        current_target_wins: goal ? Number(goal.target_wins || 0) : 0,
-                    };
+                    const metaDoFuncionario = metasMap.get(row.id);
+                    return toEmployeeRecord(row, "funcionarios", metaDoFuncionario);
                 }));
                 setSchemaMissing(false);
                 return;
@@ -91,38 +150,24 @@ export const InsightsEmployeesPage = () => {
                 throw current.error;
             }
 
-            // Fallback
             const legacy = await supabaseClient
                 .from("crm_employees")
                 .select("*")
                 .order("created_at", { ascending: false });
 
-            if (legacy.error) throw legacy.error;
-
-            const legacyGoalsRes = await supabaseClient.from("crm_goals").select("*").eq("goal_month", monthStart);
-            const legacyGoalsData = legacyGoalsRes.data || [];
+            if (legacy.error) {
+                throw legacy.error;
+            }
 
             setSourceTable("crm_employees");
-            setEmployees(((legacy.data || []) as any[]).map((row) => {
-                const goal = legacyGoalsData.find((g: any) => String(g.employee_id) === String(row.id));
-                return {
-                    id: String(row.id),
-                    full_name: row.full_name || "Sem nome",
-                    email: row.email || null,
-                    role: row.role || null,
-                    active: row.active !== false,
-                    created_at: row.created_at || null,
-                    current_target_value: goal ? Number(goal.target_value || 0) : 0,
-                    current_target_wins: goal ? Number(goal.target_wins || 0) : 0,
-                };
-            }));
+            setEmployees(((legacy.data || []) as any[]).map((row) => toEmployeeRecord(row, "crm_employees")));
             setSchemaMissing(false);
         } catch (error: any) {
             if (isSupabaseMissingRelation(error)) {
                 setSchemaMissing(true);
                 setEmployees([]);
             } else {
-                setErrorMessage(error?.message || "Falha ao carregar funcionários.");
+                setErrorMessage(error?.message || "Falha ao carregar funcionarios.");
             }
         } finally {
             setIsLoadingEmployees(false);
@@ -133,8 +178,48 @@ export const InsightsEmployeesPage = () => {
         loadEmployees();
     }, [loadEmployees]);
 
-    // A SOLUÇÃO DO BUG DO FORMULÁRIO EM BRANCO ESTÁ AQUI:
-    // O formulário agora espera o modal abrir para preencher os dados corretamente.
+    const ownerRows = useMemo(() => buildOwnerPerformance(clientes), [clientes]);
+
+    const enrichedEmployees = useMemo(() => {
+        return employees.map((employee) => {
+            const owner = matchOwnerPerformance(ownerRows, employee.full_name);
+            const atualValor = owner?.valor || 0;
+            const atualGanhos = owner?.ganhos || 0;
+            const goalValue = Number(employee.monthly_goal_value || 0);
+            const goalCount = Number(employee.monthly_goal_count || 0);
+            const valueProgress = goalValue > 0 ? (atualValor / goalValue) * 100 : 0;
+            const winProgress = goalCount > 0 ? (atualGanhos / goalCount) * 100 : 0;
+
+            return {
+                ...employee,
+                atualValor,
+                atualGanhos,
+                valueProgress,
+                winProgress,
+            };
+        });
+    }, [employees, ownerRows]);
+
+    const summary = useMemo(() => {
+        const active = enrichedEmployees.filter((employee) => employee.active !== false).length;
+        const totalGoal = enrichedEmployees.reduce(
+            (acc, employee) => acc + Number(employee.monthly_goal_value || 0),
+            0,
+        );
+        const totalRevenue = enrichedEmployees.reduce(
+            (acc, employee) => acc + Number(employee.atualValor || 0),
+            0,
+        );
+        const avgProgress =
+            enrichedEmployees.length > 0
+                ? enrichedEmployees.reduce((acc, employee) => acc + employee.valueProgress, 0) /
+                  enrichedEmployees.length
+                : 0;
+
+        return { active, totalGoal, totalRevenue, avgProgress };
+    }, [enrichedEmployees]);
+
+    // CORREÇÃO 1: Garante que os dados preencham o formulário APÓS o Modal renderizar
     useEffect(() => {
         if (isModalOpen) {
             if (editingEmployee) {
@@ -142,26 +227,20 @@ export const InsightsEmployeesPage = () => {
                     full_name: editingEmployee.full_name,
                     email: editingEmployee.email || "",
                     role: editingEmployee.role || "",
+                    monthly_goal_value: Number(editingEmployee.monthly_goal_value || 0),
+                    monthly_goal_count: Number(editingEmployee.monthly_goal_count || 0),
                     active: editingEmployee.active !== false,
-                    target_value: editingEmployee.current_target_value || 0,
-                    target_wins: editingEmployee.current_target_wins || 0,
                 });
             } else {
                 form.resetFields();
                 form.setFieldsValue({
                     active: true,
-                    target_value: 0,
-                    target_wins: 0,
+                    monthly_goal_value: 0,
+                    monthly_goal_count: 0,
                 });
             }
         }
     }, [isModalOpen, editingEmployee, form]);
-
-    const summary = useMemo(() => {
-        const active = employees.filter((employee) => employee.active !== false).length;
-        const total = employees.length;
-        return { active, total };
-    }, [employees]);
 
     const openCreateModal = () => {
         setEditingEmployee(null);
@@ -177,77 +256,93 @@ export const InsightsEmployeesPage = () => {
         try {
             setIsSaving(true);
             const values = await form.validateFields();
-            const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
 
             if (sourceTable === "funcionarios") {
-                const payload = {
+                const payloadFuncionario = {
                     nome: values.full_name.trim(),
                     email: values.email?.trim() || null,
                     cargo: values.role?.trim() || null,
                     ativo: values.active !== false,
                 };
 
-                let savedEmployeeId = editingEmployee?.id;
+                let currentEmployeeId = editingEmployee?.id;
 
-                // 1. Salva os dados do RH
-                if (savedEmployeeId) {
-                    const { error } = await supabaseClient.from("funcionarios").update(payload).eq("id", savedEmployeeId);
+                // 1. Salva os dados na tabela 'funcionarios'
+                if (currentEmployeeId) {
+                    const { error } = await supabaseClient
+                        .from("funcionarios")
+                        .update(payloadFuncionario)
+                        .eq("id", currentEmployeeId);
                     if (error) throw error;
                 } else {
-                    const { data, error } = await supabaseClient.from("funcionarios").insert(payload).select("id").single();
+                    const { data, error } = await supabaseClient
+                        .from("funcionarios")
+                        .insert(payloadFuncionario)
+                        .select("id")
+                        .single();
                     if (error) throw error;
-                    savedEmployeeId = String(data?.id);
+                    currentEmployeeId = data.id;
                 }
 
-                // 2. Salva a Meta (Integrando os painéis!)
-                if (savedEmployeeId) {
-                    await supabaseClient.from("metas").upsert({
-                        funcionario_id: savedEmployeeId,
-                        mes_referencia: monthStart,
-                        valor_meta: values.target_value || 0,
-                        target_wins: values.target_wins || 0
-                    }, { onConflict: "funcionario_id,mes_referencia" });
+                // 2. CORREÇÃO 2: Salva a Meta na tabela 'metas' (Seguro contra erros de banco)
+                if (currentEmployeeId) {
+                    const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
+                    
+                    const checkMeta = await supabaseClient
+                        .from("metas")
+                        .select("id")
+                        .eq("funcionario_id", currentEmployeeId)
+                        .eq("mes_referencia", monthStart)
+                        .maybeSingle();
+
+                    if (checkMeta.data?.id) {
+                        await supabaseClient
+                            .from("metas")
+                            .update({ valor_meta: Number(values.monthly_goal_value || 0) })
+                            .eq("id", checkMeta.data.id);
+                    } else {
+                        await supabaseClient
+                            .from("metas")
+                            .insert({
+                                funcionario_id: currentEmployeeId,
+                                mes_referencia: monthStart,
+                                valor_meta: Number(values.monthly_goal_value || 0)
+                            });
+                    }
                 }
 
-                message.success("Funcionário e metas atualizados!");
+                message.success(editingEmployee ? "Funcionário e metas atualizados." : "Funcionário criado com sucesso.");
             } else {
-                // Legado
                 const payload = {
                     full_name: values.full_name.trim(),
                     email: values.email?.trim() || null,
                     role: values.role?.trim() || null,
+                    monthly_goal_value: Number(values.monthly_goal_value || 0),
+                    monthly_goal_count: Number(values.monthly_goal_count || 0),
                     active: values.active !== false,
                     updated_at: new Date().toISOString(),
                 };
 
-                let savedEmployeeId = editingEmployee?.id;
-
-                if (savedEmployeeId) {
-                    await supabaseClient.from("crm_employees").update(payload).eq("id", savedEmployeeId);
+                if (editingEmployee?.id) {
+                    const { error } = await supabaseClient
+                        .from("crm_employees")
+                        .update(payload)
+                        .eq("id", editingEmployee.id);
+                    if (error) throw error;
+                    message.success("Funcionário atualizado.");
                 } else {
-                    const { data, error } = await supabaseClient.from("crm_employees").insert({
+                    const { error } = await supabaseClient.from("crm_employees").insert({
                         ...payload,
                         created_at: new Date().toISOString(),
-                    }).select("id").single();
+                    });
                     if (error) throw error;
-                    savedEmployeeId = String(data?.id);
+                    message.success("Funcionário criado.");
                 }
-
-                if (savedEmployeeId) {
-                    await supabaseClient.from("crm_goals").upsert({
-                        employee_id: savedEmployeeId,
-                        goal_month: monthStart,
-                        target_value: values.target_value || 0,
-                        target_wins: values.target_wins || 0
-                    }, { onConflict: "employee_id,goal_month" });
-                }
-
-                message.success("Funcionário criado.");
             }
 
             setIsModalOpen(false);
             setEditingEmployee(null);
-            await loadEmployees();
+            await loadEmployees(); // Força a tela a recarregar as metas salvas
         } catch (error: any) {
             if (error?.errorFields) return;
             message.error(error?.message || "Não foi possível salvar o funcionário.");
@@ -256,73 +351,149 @@ export const InsightsEmployeesPage = () => {
         }
     };
 
-    if (isLoadingEmployees) {
+    if (isLoadingEmployees || clientesQuery?.isLoading) {
         return <Skeleton active />;
     }
 
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
-                title="Equipe e Metas (Mês Atual)"
-                subtitle={`Gestão do diretório de utilizadores e acompanhamento imediato. Fonte: ${sourceTable}.`}
+                title="Equipe e Funcionários"
+                subtitle={`Cadastro do time comercial com metas e produtividade vinculada ao CRM.`}
                 extra={
                     <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
-                        Novo funcionário
+                        Novo membro
                     </Button>
                 }
             />
 
             <IntroCard
-                title="Gestão de utilizadores"
-                description="Controle quem faz parte da sua operação comercial, os seus respetivos cargos e veja rapidamente a meta definida para o mês em curso."
+                title="Gestão de equipe e performance"
+                description="Mapeie quem está batendo a meta, quem precisa de coaching e qual carteira gera mais resultado."
             />
 
-            {schemaMissing ? <MissingSchemaAlert description="Nenhuma tabela de funcionários encontrada (`funcionarios` ou `crm_employees`)." /> : null}
-            {errorMessage ? <MissingSchemaAlert title="Falha ao carregar funcionários" description={errorMessage} /> : null}
+            {schemaMissing ? (
+                <MissingSchemaAlert description="Nenhuma tabela de funcionários encontrada." />
+            ) : null}
+
+            {errorMessage ? (
+                <MissingSchemaAlert title="Falha ao carregar funcionários" description={errorMessage} />
+            ) : null}
 
             <Space direction="vertical" size={12} style={{ width: "100%" }}>
-                <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-                    <StatCard title="Total de Funcionários" value={summary.total} prefix={<TeamOutlined style={{ color: "#2563eb" }} />} accentColor="#2563eb" />
-                    <StatCard title="Ativos no momento" value={summary.active} prefix={<UserOutlined style={{ color: "#16a34a" }} />} accentColor="#16a34a" />
+                <div
+                    style={{
+                        display: "grid",
+                        gap: 12,
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    }}
+                >
+                    <StatCard
+                        title="Ativos"
+                        value={summary.active}
+                        prefix={<TeamOutlined style={{ color: "#2563eb" }} />}
+                        accentColor="#2563eb"
+                    />
+                    <StatCard
+                        title="Meta mensal consolidada"
+                        value={summary.totalGoal}
+                        prefix={<TrophyOutlined style={{ color: "#f59e0b" }} />}
+                        accentColor="#f59e0b"
+                        subtitle={formatCurrencyBRL(summary.totalGoal, "R$ 0,00")}
+                    />
+                    <StatCard
+                        title="Receita atribuída"
+                        value={summary.totalRevenue}
+                        prefix={<UserOutlined style={{ color: "#16a34a" }} />}
+                        accentColor="#16a34a"
+                        subtitle={formatCurrencyBRL(summary.totalRevenue, "R$ 0,00")}
+                    />
+                    <StatCard
+                        title="Atingimento médio"
+                        value={Number(summary.avgProgress.toFixed(1))}
+                        suffix="%"
+                        accentColor="#0f766e"
+                        valueStyle={{ color: "#115e59" }}
+                    />
                 </div>
 
-                <Card title="Diretório da Equipe">
-                    {employees.length === 0 ? (
-                        <EmptyState title="Nenhum funcionário cadastrado" description="Cadastre o seu time para que eles possam assumir oportunidades no CRM." actionLabel="Cadastrar funcionário" onAction={openCreateModal} />
+                <Card title="Equipe comercial">
+                    {enrichedEmployees.length === 0 ? (
+                        <EmptyState
+                            title="Nenhum funcionário encontrado"
+                            description="Cadastre seu time para acompanhar metas e performance."
+                        />
                     ) : (
                         <Table
                             size="small"
-                            rowKey={(record) => record.id}
+                            rowKey="id"
                             pagination={{ pageSize: 10 }}
-                            dataSource={employees}
+                            dataSource={enrichedEmployees}
                             columns={[
                                 {
-                                    title: "Funcionário",
-                                    render: (_, record: EmployeeRecord) => (
+                                    title: "Nome",
+                                    dataIndex: "full_name",
+                                    render: (text, record: EmployeeRecord) => (
                                         <Space direction="vertical" size={0}>
-                                            <Typography.Text strong>{record.full_name}</Typography.Text>
-                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.role || "Sem cargo"}</Typography.Text>
+                                            <Typography.Text strong>{text}</Typography.Text>
+                                            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                                                {record.role || "Sem cargo"}
+                                            </Typography.Text>
                                         </Space>
                                     ),
                                 },
-                                { title: "Contato (Login)", render: (_, record: EmployeeRecord) => record.email || "-" },
                                 {
-                                    title: "Meta (Mês Atual)",
-                                    width: 150,
-                                    render: (_, record: EmployeeRecord) => formatCurrencyBRL(record.current_target_value || 0, "R$ 0,00"),
+                                    title: "Email",
+                                    dataIndex: "email",
+                                    render: (_, record: EmployeeRecord) => record.email || "-",
                                 },
                                 {
                                     title: "Status",
-                                    width: 100,
+                                    width: 110,
                                     render: (_, record: EmployeeRecord) =>
-                                        record.active === false ? <Tag color="default">Inativo</Tag> : <Tag color="green">Ativo</Tag>,
+                                        record.active === false ? (
+                                            <Tag color="default">Inativo</Tag>
+                                        ) : (
+                                            <Tag color="green">Ativo</Tag>
+                                        ),
                                 },
                                 {
-                                    title: "",
+                                    title: "Ganhos",
+                                    width: 80,
+                                    render: (_, record: any) => record.atualGanhos || 0,
+                                },
+                                {
+                                    title: "Receita",
+                                    width: 130,
+                                    render: (_, record: any) =>
+                                        formatCurrencyBRL(record.atualValor, "R$ 0,00"),
+                                },
+                                {
+                                    title: "Meta mensal",
+                                    width: 130,
+                                    render: (_, record: any) =>
+                                        formatCurrencyBRL(record.monthly_goal_value, "R$ 0,00"),
+                                },
+                                {
+                                    title: "Progresso",
+                                    width: 180,
+                                    render: (_, record: any) => (
+                                        <Progress
+                                            percent={Number(record.valueProgress.toFixed(1))}
+                                            size="small"
+                                            strokeColor={
+                                                record.valueProgress >= 100 ? "#16a34a" : "#2563eb"
+                                            }
+                                        />
+                                    ),
+                                },
+                                {
+                                    title: "Ações",
                                     width: 100,
-                                    align: "right",
-                                    render: (_, record: EmployeeRecord) => (
-                                        <Button size="small" onClick={() => openEditModal(record)}>Editar</Button>
+                                    render: (_, record) => (
+                                        <Button size="small" onClick={() => openEditModal(record)}>
+                                            Editar
+                                        </Button>
                                     ),
                                 },
                             ]}
@@ -332,43 +503,37 @@ export const InsightsEmployeesPage = () => {
             </Space>
 
             <Modal
-                title={editingEmployee ? "Editar Funcionário e Meta do Mês" : "Novo Funcionário"}
+                title={editingEmployee ? "Editar funcionário e metas" : "Novo funcionário"}
                 open={isModalOpen}
-                onCancel={() => setIsModalOpen(false)}
+                onCancel={() => {
+                    setIsModalOpen(false);
+                    setEditingEmployee(null);
+                }}
                 onOk={handleSave}
                 confirmLoading={isSaving}
-                okText={editingEmployee ? "Salvar alterações" : "Criar funcionário"}
-                cancelText="Cancelar"
-                destroyOnClose
+                destroyOnClose={false}
             >
-                <Form form={form} layout="vertical" preserve={false}>
-                    <Form.Item label="Nome completo" name="full_name" rules={[{ required: true, message: "Informe o nome." }]}>
-                        <Input placeholder="Ex: Maria Carolina" />
+                <Form form={form} layout="vertical">
+                    <Form.Item label="Nome" name="full_name" rules={[{ required: true }]}>
+                        <Input />
                     </Form.Item>
-                    <Form.Item label="E-mail (Usado para Login)" name="email">
-                        <Input placeholder="maria@empresa.com" />
+
+                    <Form.Item label="Email" name="email">
+                        <Input />
                     </Form.Item>
-                    <Form.Item label="Cargo" name="role">
-                        <Input placeholder="Ex: Consultor(a) comercial" />
+
+                    <Form.Item label="Cargo / Função" name="role">
+                        <Input />
                     </Form.Item>
-                    
-                    <Typography.Title level={5} style={{ marginTop: '20px' }}>Metas para o Mês Atual</Typography.Title>
-                    <Space size={10} style={{ width: "100%" }}>
-                        <Form.Item label="Meta Receita (R$)" name="target_value" style={{ flex: 1 }}>
-                            <InputNumber 
-                                min={0 as number} 
-                                style={{ width: "100%" }} 
-                                formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                                parser={(value) => value ? Number(value.replace(/[^0-9.-]+/g, "")) : 0}
-                            />
-                        </Form.Item>
-                        <Form.Item label="Meta Fechamentos (Qtd)" name="target_wins" style={{ flex: 1 }}>
-                            <InputNumber min={0} style={{ width: "100%" }} />
+
+                    <Space size="large" style={{ width: "100%", marginBottom: 16 }}>
+                        <Form.Item label="Meta de faturamento (R$)" name="monthly_goal_value" style={{ margin: 0 }}>
+                            <InputNumber style={{ width: 180 }} min={0} step={100} prefix="R$" />
                         </Form.Item>
                     </Space>
 
-                    <Form.Item label="Acesso Ativo no CRM" name="active" valuePropName="checked">
-                        <Switch />
+                    <Form.Item label="Status" name="active" valuePropName="checked">
+                        <Switch checkedChildren="Ativo" unCheckedChildren="Inativo" />
                     </Form.Item>
                 </Form>
             </Modal>
