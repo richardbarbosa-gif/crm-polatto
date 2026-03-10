@@ -33,9 +33,7 @@ import {
     LEAD_TEMPERATURE_OPTIONS,
     type LeadTemperature,
     resolveAutomaticLeadTemperature,
-    setLeadTemperature,
 } from "../../lib/leadTemperature";
-import { markLeadAsRecentlyCreated } from "../../lib/leadVisibility";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -59,7 +57,6 @@ export const ClienteCreate = () => {
     const go = useGo();
     const { tenantId } = useTenant();
     const { ownerDisplayName } = useCrmAccess();
-    const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
     const pendingFilesRef = useRef<{
         propostaFile: File | null;
         contaLuzFile: File | null;
@@ -84,18 +81,9 @@ export const ClienteCreate = () => {
         successNotification: false,
         onMutationSuccess: async (data) => {
             const createdId = (data as any)?.data?.id ?? (data as any)?.id;
-            const pendingTemperature = pendingTemperatureRef.current;
             const pendingFiles = pendingFilesRef.current;
 
             try {
-                if (createdId && pendingTemperature) {
-                    setLeadTemperature(createdId, pendingTemperature);
-                }
-
-                if (createdId) {
-                    markLeadAsRecentlyCreated(createdId);
-                }
-
                 const uploadJobs: Promise<unknown>[] = [];
                 const hasPendingFiles = Boolean(
                     pendingFiles.propostaFile || pendingFiles.contaLuzFile,
@@ -157,7 +145,6 @@ export const ClienteCreate = () => {
                 );
             } finally {
                 setIsUploadingFiles(false);
-                pendingTemperatureRef.current = undefined;
                 pendingFilesRef.current = {
                     propostaFile: null,
                     contaLuzFile: null,
@@ -328,7 +315,6 @@ export const ClienteCreate = () => {
         const responsavelSelecionado = responsavelOptions.find(opt => opt.value === responsavel_id);
         const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : ownerDisplayName;
 
-        pendingTemperatureRef.current = nextTemperature;
         pendingFilesRef.current = {
             propostaFile,
             contaLuzFile,
@@ -340,8 +326,9 @@ export const ClienteCreate = () => {
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
             status: nextStage?.nome || undefined,
-            responsavel: responsavelNome, // Salva o nome para retrocompatibilidade
-            responsavel_id: responsavel_id, // Salva o UUID para o novo motor de relatórios
+            temperatura: nextTemperature || null,
+            responsavel: responsavelNome,
+            responsavel_id: responsavel_id,
         } as any);
     };
 

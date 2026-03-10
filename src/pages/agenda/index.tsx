@@ -5,7 +5,7 @@ import {
     ReloadOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { useList } from "@refinedev/core";
+import { useList, useInvalidate } from "@refinedev/core"; // <-- Adicionado useInvalidate
 import {
     Alert,
     Badge,
@@ -29,8 +29,7 @@ import { TaskFormModal, type TaskContextData, type TarefaRecord } from "../../co
 import { getTaskSituation, type TaskSituation, isTaskOverdue } from "../../lib/insights";
 import {
     resolveTaskExecutionStatus,
-    setTaskExecutionStatus,
-    subscribeTaskExecutionStatusUpdates,
+    updateTaskExecutionStatus,
     TASK_EXECUTION_STATUS_LABELS,
     TASK_EXECUTION_STATUS_OPTIONS,
     type TaskExecutionStatus,
@@ -84,7 +83,8 @@ type ClienteAgendaRecord = {
 };
 
 export const AgendaPage = () => {
-    const [, setExecutionStatusRevision] = useState(0);
+    const invalidate = useInvalidate(); // <-- Inicializando o invalidate do Refine
+
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
 
@@ -96,12 +96,6 @@ export const AgendaPage = () => {
     const [taskEditRecord, setTaskEditRecord] = useState<TarefaRecord | null>(null);
     const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
     const [taskInitialDate, setTaskInitialDate] = useState<Dayjs | null>(null);
-
-    useEffect(() => {
-        return subscribeTaskExecutionStatusUpdates(() => {
-            setExecutionStatusRevision((previous) => previous + 1);
-        });
-    }, []);
 
     const rangeStart = useMemo(
         () => visibleDate.startOf("month").subtract(1, "month").startOf("day"),
@@ -569,15 +563,35 @@ export const AgendaPage = () => {
                                                 size="middle"
                                                 options={TASK_EXECUTION_STATUS_OPTIONS}
                                                 value={executionStatus}
-                                                onChange={(value) => {
+                                                // -- AQUI ESTÁ A CORREÇÃO PRINCIPAL --
+                                                onChange={async (value) => {
                                                     if (!tarefaEmFoco?.id) {
                                                         return;
                                                     }
 
-                                                    setTaskExecutionStatus(
-                                                        tarefaEmFoco.id,
-                                                        value as TaskExecutionStatus,
-                                                    );
+                                                    try {
+                                                        // Chama a nova função conectada ao Supabase
+                                                        await updateTaskExecutionStatus(
+                                                            tarefaEmFoco.id,
+                                                            value as TaskExecutionStatus,
+                                                        );
+
+                                                        // Força a atualização da lista no Refine (rebusca no banco)
+                                                        invalidate({
+                                                            resource: "tarefas",
+                                                            invalidates: ["list"],
+                                                        });
+
+                                                        // Atualiza o estado local para a UI responder na hora
+                                                        setTarefaEmFoco({
+                                                            ...tarefaEmFoco,
+                                                            execucao_status: value as TaskExecutionStatus,
+                                                        } as TarefaRecord);
+
+                                                    } catch (error) {
+                                                        console.error("Erro ao atualizar o status:", error);
+                                                        message.error("Não foi possível salvar o status no banco de dados.");
+                                                    }
                                                 }}
                                             />
                                             <Typography.Text

@@ -1,7 +1,7 @@
 import { Edit, useForm } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
 import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
@@ -19,7 +19,6 @@ import {
     type LeadTemperature,
     resolveAutomaticLeadTemperature,
     resolveEditableLeadTemperature,
-    setLeadTemperature,
 } from "../../lib/leadTemperature";
 
 type ClienteEditFormValues = {
@@ -36,26 +35,10 @@ type ClienteEditFormValues = {
 
 export const ClienteEdit = () => {
     const { tenantId } = useTenant();
-    const pendingTemperatureRef = useRef<LeadTemperature | undefined>(undefined);
     const { canDeleteRecords, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
 
-    const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({
-        onMutationSuccess: (data) => {
-            const updatedId = (data as any)?.data?.id ?? (query?.data?.data as any)?.id;
-            const temperature = pendingTemperatureRef.current;
-
-            if (updatedId && temperature) {
-                setLeadTemperature(updatedId, temperature);
-            }
-
-            if (updatedId && !temperature) {
-                setLeadTemperature(updatedId, undefined);
-            }
-
-            pendingTemperatureRef.current = undefined;
-        },
-    });
+    const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({});
 
     const record = (query?.data?.data as any) ?? null;
     const isRecordLoading = Boolean(query?.isLoading || query?.isFetching);
@@ -155,19 +138,14 @@ export const ClienteEdit = () => {
         const responsavelSelecionado = listaResponsaveis.find(opt => opt.value === responsavel_id);
         const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : (record?.responsavel || ownerDisplayName);
 
-        pendingTemperatureRef.current = nextTemperature;
-
-        if (record?.id) {
-            setLeadTemperature(record.id, nextTemperature);
-        }
-
         return formProps.onFinish?.({
             ...payload,
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
             status: nextStage?.nome || undefined,
-            responsavel: canViewAllLeads ? responsavelNome : record?.responsavel, // Salva o nome
-            responsavel_id: canViewAllLeads ? responsavel_id : record?.responsavel_id, // Salva o UUID
+            temperatura: nextTemperature || null,
+            responsavel: canViewAllLeads ? responsavelNome : record?.responsavel,
+            responsavel_id: canViewAllLeads ? responsavel_id : record?.responsavel_id,
         } as any);
     };
 

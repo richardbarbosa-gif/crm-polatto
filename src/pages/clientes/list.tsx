@@ -118,8 +118,6 @@ export const ClienteList = () => {
     const [temperaturaFiltro, setTemperaturaFiltro] = useState<
         "todas" | LeadTemperatureTag
     >("todas");
-    const [temperatureRevision, setTemperatureRevision] = useState(0);
-
     const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
     const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -197,12 +195,6 @@ export const ClienteList = () => {
 
         return lead as Record<string, any>;
     }, [rawData, selectedLeadId]);
-
-    useEffect(() => {
-        const handleFocus = () => setTemperatureRevision((prev) => prev + 1);
-        window.addEventListener("focus", handleFocus);
-        return () => window.removeEventListener("focus", handleFocus);
-    }, []);
 
     const refetchClientes = clientesQuery?.refetch;
 
@@ -566,7 +558,6 @@ export const ClienteList = () => {
         responsavelFiltro,
         searchText,
         temperaturaFiltro,
-        temperatureRevision,
         resolveLeadStageName,
     ]);
 

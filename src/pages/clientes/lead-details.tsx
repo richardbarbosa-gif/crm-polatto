@@ -26,7 +26,7 @@ import {
     isAutomaticLeadTemperature,
     resolveAutomaticLeadTemperature,
     resolveLeadTemperature,
-    setLeadTemperature,
+    updateLeadTemperature,
 } from "../../lib/leadTemperature";
 import {
     MAX_PDF_FILE_SIZE_BYTES,
@@ -219,14 +219,18 @@ export const LeadDetails = ({
         }));
     }, [timeline]);
 
-    const handleTemperatureChange = (value?: LeadTemperature) => {
+    const handleTemperatureChange = async (value?: LeadTemperature) => {
         if (automaticTemperature) {
             return;
         }
 
         setTemperatureTag(value);
         if (record?.id) {
-            setLeadTemperature(record.id, value);
+            try {
+                await updateLeadTemperature(record.id, value);
+            } catch {
+                message.error("Falha ao salvar temperatura do lead.");
+            }
         }
     };
 
