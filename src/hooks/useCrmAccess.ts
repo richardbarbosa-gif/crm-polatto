@@ -5,8 +5,6 @@ import { type CrmEmployee, fetchEmployeeByEmail, isManagerRole } from "../lib/cr
 import { normalizeText } from "../lib/formatters";
 import { canDelete } from "../lib/permissions";
 
-const SYSTEM_ADMINS = ["richardbarbosa28@gmail.com"];
-
 type IdentityRecord = {
     email?: string | null;
     name?: string | null;
@@ -100,11 +98,9 @@ export const useCrmAccess = () => {
     const [isEmployeeLoading, setIsEmployeeLoading] = useState(false);
 
     const identityEmail = toStringValue(identity?.email);
-    const isSystemAdminIdentity = Boolean(
-        tenant?.isSystemAdmin ||
-            (identityEmail &&
-                SYSTEM_ADMINS.some((adminEmail) => adminEmail.toLowerCase() === identityEmail.toLowerCase())),
-    );
+    
+    // AGORA ELE PEGA DO TENANT QUE VEM DO BANCO DE DADOS
+    const isSystemAdminIdentity = Boolean(tenant?.isSystemAdmin);
 
     useEffect(() => {
         let active = true;

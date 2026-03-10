@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useGo, useList, useUpdate, useCreate } from "@refinedev/core";
 import { CreateButton } from "@refinedev/antd";
+import { ImportLeadsButton } from "../../components/import-leads";
+
 import { Drawer, Input, Modal, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
 import {
     AppstoreOutlined,
@@ -1008,6 +1010,10 @@ export const ClienteList = () => {
                 >
                     Novo Lead
                 </CreateButton>
+                
+                {/* O NOSSO NOVO BOTÃO DE IMPORTAÇÃO ENTRA AQUI */}
+                <ImportLeadsButton />
+                
                 <Button
                     icon={<SettingOutlined />}
                     onClick={openStageManager}
