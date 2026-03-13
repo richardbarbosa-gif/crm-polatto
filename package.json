@@ -36,6 +36,7 @@
     "vite": "^6.3.5"
   },
   "scripts": {
+    "postinstall": "node -e \"var fs=require('fs'),p='node_modules/tsconfig.build.json';if(!fs.existsSync(p))fs.writeFileSync(p,JSON.stringify({compilerOptions:{target:'ES2020',module:'ESNext',moduleResolution:'bundler',jsx:'react-jsx',strict:true,skipLibCheck:true,esModuleInterop:true,declaration:true,noEmit:false}},null,2))\"",
     "dev": "refine dev",
     "build": "tsc && refine build",
     "start": "refine start",
