@@ -20,28 +20,28 @@ export const StatCard = ({
     suffix,
     subtitle,
     valueStyle,
-    accentColor = "#dbe4ee",
+    accentColor = "#94a3b8",
     style,
 }: Props) => {
     return (
         <Card
             className="crm-stat-card"
-            bodyStyle={{ padding: 16 }}
+            bodyStyle={{ padding: "16px 18px 14px" }}
             style={{
-                border: "1px solid rgba(148, 163, 184, 0.2)",
-                boxShadow: "0 12px 26px rgba(15, 23, 42, 0.07)",
-                background:
-                    "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.9) 100%)",
+                border: "1px solid rgba(15, 23, 42, 0.06)",
+                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
+                background: "#ffffff",
                 ...style,
             }}
         >
             <div
                 style={{
-                    width: 44,
-                    height: 4,
+                    width: 28,
+                    height: 2.5,
                     borderRadius: 999,
                     background: accentColor,
                     marginBottom: 12,
+                    opacity: 0.6,
                 }}
             />
             <Statistic
@@ -51,13 +51,15 @@ export const StatCard = ({
                 suffix={suffix}
                 valueStyle={{
                     fontSize: 22,
-                    fontWeight: 800,
+                    fontWeight: 700,
                     color: "#0f172a",
+                    letterSpacing: "-0.03em",
+                    fontFamily: "'Sora', 'Inter', sans-serif",
                     ...valueStyle,
                 }}
             />
             {subtitle ? (
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12, marginTop: 4 }}>
                     {subtitle}
                 </Typography.Text>
             ) : null}

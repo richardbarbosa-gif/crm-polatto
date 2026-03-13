@@ -13,12 +13,12 @@ export const Card = ({ interactive, hoverable, style, className, ...props }: Pro
                 .filter(Boolean)
                 .join(" ")}
             style={{
-                borderRadius: 16,
-                border: "1px solid rgba(148, 163, 184, 0.22)",
-                boxShadow: "0 10px 30px rgba(15, 23, 42, 0.06)",
-                background: "linear-gradient(180deg, #ffffff 0%, #fcfdff 100%)",
+                borderRadius: 14,
+                border: "1px solid rgba(15, 23, 42, 0.06)",
+                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
+                background: "#ffffff",
                 transition:
-                    "box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease",
+                    "box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
                 ...style,
             }}
         />

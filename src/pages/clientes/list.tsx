@@ -770,7 +770,7 @@ export const ClienteList = () => {
         }
     };
 
-    const handleDrop = async (
+   const handleDrop = async (
         event: React.DragEvent<HTMLDivElement>,
         novoStageId: string,
     ) => {
@@ -795,6 +795,9 @@ export const ClienteList = () => {
         const nextStageName = nextStage?.nome || "Sem etapa";
         const fromStageName = resolveLeadStageName(leadArrastado);
 
+        // A MÁGICA ACONTECE AQUI: Verifica se a nova coluna é de fechamento
+        const isFechado = nextStageName.toLowerCase().includes("fechado");
+
         try {
             await updateLead({
                 resource: "clientes",
@@ -803,6 +806,7 @@ export const ClienteList = () => {
                     tenant_id: tenantId || undefined,
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
+                    data_fechamento: isFechado ? new Date().toISOString() : null, // <-- CARIMBO DA DATA DE VENDA
                 },
                 successNotification: () => ({
                     message: `Movido para ${nextStageName}`,
@@ -913,8 +917,9 @@ export const ClienteList = () => {
 
     if (isLoading) {
         return (
-            <div style={{ display: "flex", justifyContent: "center", paddingTop: 50 }}>
-                <Spin size="large" tip="Carregando CRM..." />
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", paddingTop: 80, flexDirection: "column", gap: 16 }}>
+                <Spin size="large" />
+                <Text style={{ color: "#94a3b8", fontSize: 13 }}>Carregando oportunidades...</Text>
             </div>
         );
     }
@@ -922,8 +927,8 @@ export const ClienteList = () => {
     const KommoHeader = () => (
         <div className="crm-opportunities-header">
             <div className="crm-opportunities-header-main">
-                <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-                    <Title level={4} className="crm-opportunities-title">
+                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                    <Title level={4} className="crm-opportunities-title" style={{ fontSize: 18 }}>
                         Oportunidades
                     </Title>
                     <div className="crm-view-toggle">
@@ -933,9 +938,10 @@ export const ClienteList = () => {
                                 icon={<AppstoreOutlined />}
                                 aria-label="Exibir em kanban"
                                 style={{
-                                    color: viewType === "kanban" ? "#3182ce" : "#a0aec0",
+                                    color: viewType === "kanban" ? "#3b82f6" : "#94a3b8",
                                     background:
-                                        viewType === "kanban" ? "#ebf8ff" : "transparent",
+                                        viewType === "kanban" ? "rgba(59, 130, 246, 0.08)" : "transparent",
+                                    borderRadius: 8,
                                 }}
                                 onClick={() => setViewType("kanban")}
                             />
@@ -946,8 +952,9 @@ export const ClienteList = () => {
                                 icon={<BarsOutlined />}
                                 aria-label="Exibir em lista"
                                 style={{
-                                    color: viewType === "list" ? "#3182ce" : "#a0aec0",
-                                    background: viewType === "list" ? "#ebf8ff" : "transparent",
+                                    color: viewType === "list" ? "#3b82f6" : "#94a3b8",
+                                    background: viewType === "list" ? "rgba(59, 130, 246, 0.08)" : "transparent",
+                                    borderRadius: 8,
                                 }}
                                 onClick={() => setViewType("list")}
                             />
@@ -957,18 +964,18 @@ export const ClienteList = () => {
 
                 <div className="crm-opportunities-filters">
                     <Input
-                        placeholder="Busca e filtro"
-                        prefix={<SearchOutlined style={{ color: "#a0aec0" }} />}
+                        placeholder="Buscar leads..."
+                        prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
                         value={searchText}
                         onChange={(event) => setSearchText(event.target.value)}
                         aria-label="Buscar lead"
                         style={{
-                            width: "230px",
-                            backgroundColor: "#f0f2f5",
-                            border: "none",
-                            borderRadius: "6px",
-                            height: "34px",
-                            fontSize: "13px",
+                            width: 220,
+                            backgroundColor: "rgba(241, 245, 249, 0.8)",
+                            border: "1px solid rgba(148, 163, 184, 0.15)",
+                            borderRadius: 10,
+                            height: 36,
+                            fontSize: 13,
                         }}
                     />
                     <Select
@@ -1037,22 +1044,22 @@ export const ClienteList = () => {
                     <StatCard
                         title="Previsao de receita"
                         value={kpis.totalValor}
-                        prefix={<DollarCircleOutlined style={{ color: "#4c8bf5" }} />}
-                        accentColor="#4c8bf5"
+                        prefix={<DollarCircleOutlined style={{ color: "#3b82f6" }} />}
+                        accentColor="#3b82f6"
                     />
                     <StatCard
                         title="Conversao"
                         value={kpis.taxaConversao}
                         suffix="%"
-                        prefix={<CheckCircleOutlined style={{ color: "#38a169" }} />}
-                        accentColor="#38a169"
-                        valueStyle={{ color: "#38a169" }}
+                        prefix={<CheckCircleOutlined style={{ color: "#10b981" }} />}
+                        accentColor="#10b981"
+                        valueStyle={{ color: "#059669" }}
                     />
                     <StatCard
                         title="Leads Ativos"
                         value={kpis.totalLeads}
-                        prefix={<ArrowUpOutlined style={{ color: "#ed8936" }} />}
-                        accentColor="#ed8936"
+                        prefix={<ArrowUpOutlined style={{ color: "#f59e0b" }} />}
+                        accentColor="#f59e0b"
                     />
                 </div>
                 <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>
@@ -1143,18 +1150,18 @@ export const ClienteList = () => {
                                         {estagio.nome}
                                     </Text>
                                     <div className="crm-kanban-column-stats">
-                                        <Text style={{ fontSize: "11px", color: "#667085" }}>{clientesDaColuna.length} leads</Text>
-                                        <span>•</span>
-                                        <Text style={{ fontSize: "11px", color: "#667085" }}>{formatCurrencyBRL(totalColuna, "R$ 0,00")}</Text>
+                                        <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{clientesDaColuna.length} leads</Text>
+                                        <span style={{ color: "#cbd5e1" }}>·</span>
+                                        <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{formatCurrencyBRL(totalColuna, "R$ 0,00")}</Text>
                                     </div>
                                     <div
                                         style={{
-                                            height: "4px",
+                                            height: 3,
                                             width: "100%",
-                                            backgroundColor: accentColor,
-                                            marginTop: "10px",
-                                            borderRadius: "2px",
-                                            opacity: 0.8
+                                            background: `linear-gradient(90deg, ${accentColor}, ${accentColor}88)`,
+                                            marginTop: 10,
+                                            borderRadius: 999,
+                                            opacity: 0.7,
                                         }}
                                     />
                                 </div>
@@ -1192,9 +1199,9 @@ export const ClienteList = () => {
                                                     interactive
                                                     className="crm-lead-card"
                                                     style={{
-                                                        borderLeft: `4px solid ${accentColor}`,
+                                                        borderLeft: `3px solid ${accentColor}`,
                                                     }}
-                                                    bodyStyle={{ padding: "12px" }}
+                                                    bodyStyle={{ padding: "14px 14px 10px" }}
                                                     actions={[
                                                         <Button
                                                             key={`edit-${cliente.id}`}
@@ -1239,7 +1246,7 @@ export const ClienteList = () => {
                                                     </div>
                                                     <div className="crm-lead-card-meta">
                                                         {cliente.conta_energia_media > 0 && (
-                                                            <Text style={{ fontSize: "13px", color: "#4a5568", fontWeight: 500 }}>
+                                                            <Text style={{ fontSize: 13, color: "#334155", fontWeight: 600, letterSpacing: "-0.01em" }}>
                                                                 {formatCurrencyBRL(
                                                                     cliente.conta_energia_media,
                                                                     "R$ 0,00",
@@ -1247,11 +1254,11 @@ export const ClienteList = () => {
                                                             </Text>
                                                         )}
                                                         {cliente.responsavel && (
-                                                            <Text style={{ fontSize: "11px", color: "#718096" }}>
+                                                            <Text style={{ fontSize: 11, color: "#64748b" }}>
                                                                 Resp: {cliente.responsavel}
                                                             </Text>
                                                         )}
-                                                        <Text style={{ fontSize: "11px", color: "#a0aec0" }}>
+                                                        <Text style={{ fontSize: 11, color: "#94a3b8" }}>
                                                             {formatDateBR(cliente.created_at, "-")}
                                                         </Text>
                                                     </div>

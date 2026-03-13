@@ -109,3 +109,16 @@ export const resolveTaskExecutionStatus = (
 export const hasTaskExecutionAction = (status: TaskExecutionStatus): boolean => {
     return status !== "pendente";
 };
+
+const statusListeners = new Set<() => void>();
+
+export const subscribeTaskExecutionStatusUpdates = (callback: () => void): (() => void) => {
+    statusListeners.add(callback);
+    return () => {
+        statusListeners.delete(callback);
+    };
+};
+
+export const notifyTaskExecutionStatusUpdate = (): void => {
+    statusListeners.forEach((cb) => cb());
+};

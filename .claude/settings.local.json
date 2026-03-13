@@ -5,7 +5,9 @@
       "Bash(find /c/Users/User/crm-polatto/src -type f \\\\\\(-name *.ts -o -name *.tsx \\\\\\))",
       "Bash(grep -r isSystemAdmin /c/Users/User/crm-polatto/src --include=*.ts --include=*.tsx)",
       "Bash(grep -r SYSTEM_ADMINS /c/Users/User/crm-polatto/src --include=*.ts --include=*.tsx)",
-      "Bash(grep -r richardbarbosa28 /c/Users/User/crm-polatto/src --include=*.ts --include=*.tsx)"
+      "Bash(grep -r richardbarbosa28 /c/Users/User/crm-polatto/src --include=*.ts --include=*.tsx)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

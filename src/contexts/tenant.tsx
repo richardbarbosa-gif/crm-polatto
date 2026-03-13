@@ -5,8 +5,6 @@ import { isSupabaseMissingColumn, isSupabaseMissingRelation } from "../lib/supab
 import type { UsuarioEmpresa } from "../types/db";
 import { supabaseClient } from "../utility";
 
-// A CONSTANTE COM SEU E-MAIL FOI DELETADA DAQUI!
-
 type IdentityRecord = {
     id?: string | null;
     email?: string | null;
@@ -43,12 +41,14 @@ const firstString = (...values: unknown[]): string | null => {
 };
 
 const mapMembership = (row: Record<string, unknown>): UsuarioEmpresa => {
+    // Agora ele sabe ler exatamente a coluna empresa_id
     const tenantId = firstString(
-        row.tenant_id, row.empresa_id, row.company_id, row.organizacao_id, row.id_empresa, row.id_tenant
+        row.empresa_id, row.tenant_id, row.company_id, row.id_empresa
     );
-    const role = firstString(row.role, row.perfil, row.cargo, row.tipo, row.funcao);
-    const userId = firstString(row.user_id, row.usuario_id, row.utilizador_id, row.id_usuario);
-    const email = firstString(row.email, row.usuario_email, row.utilizador_email);
+    const role = firstString(row.role, row.perfil, row.cargo, row.tipo);
+    // Agora ele sabe ler exatamente a coluna auth_uid
+    const userId = firstString(row.auth_uid, row.user_id, row.usuario_id);
+    const email = firstString(row.email, row.usuario_email);
     const rawId = firstString(row.id, row.uuid) || "membership";
 
     return { id: rawId, tenant_id: tenantId, role, user_id: userId, email, raw: row };
@@ -71,8 +71,9 @@ const findMembershipByColumn = async (column: string, value: string): Promise<Us
 };
 
 const fetchMembership = async (userId?: string | null, email?: string | null): Promise<UsuarioEmpresa | null> => {
-    const userIdColumns = ["user_id", "usuario_id", "utilizador_id", "id_usuario", "id_utilizador"];
-    const emailColumns = ["email", "usuario_email", "utilizador_email"];
+    // AQUI ESTAVA O ERRO! Adicionamos o "auth_uid" como a primeira coluna a ser buscada
+    const userIdColumns = ["auth_uid", "user_id", "usuario_id", "utilizador_id"];
+    const emailColumns = ["email", "usuario_email"];
 
     const normalizedUserId = toStringValue(userId);
     if (normalizedUserId) {
@@ -112,7 +113,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             setMembership(null);
             setMembershipError(null);
             setIsMembershipLoading(false);
-            window.localStorage.removeItem("crm_tenant_id"); // Limpa tenant_id global
+            window.localStorage.removeItem("crm_tenant_id");
             return;
         }
 
@@ -123,7 +124,6 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             const nextMembership = await fetchMembership(identityUserId, identityEmail);
             setMembership(nextMembership);
             
-            // Registra o tenant_id globalmente para o interceptador do Supabase ler
             if (nextMembership?.tenant_id) {
                 window.localStorage.setItem("crm_tenant_id", nextMembership.tenant_id);
             } else {
@@ -149,7 +149,6 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
     const tenantId = membership?.tenant_id || null;
     const role = membership?.role || null;
     
-    // AGORA O ADMIN VEM EXCLUSIVAMENTE DO BANCO (ROLE)
     const isSystemAdmin = role === 'superadmin'; 
     const canAccessTenant = isSystemAdmin || Boolean(tenantId);
 
@@ -184,9 +183,9 @@ export const RequireTenant = ({ children }: { children: React.ReactNode }) => {
             <div style={{ padding: 24 }}>
                 <Result
                     status="403"
-                    title="Acesso nao configurado"
-                    subTitle="Seu usuario nao possui vinculo com empresa/tenant. Solicite vinculacao ao administrador."
-                    extra={error ? <span style={{ color: "#b42318", fontSize: 12 }}>Detalhe tecnico: {error}</span> : undefined}
+                    title="Acesso não configurado"
+                    subTitle="Seu usuário não possui vínculo com empresa/tenant. Solicite vinculação ao administrador."
+                    extra={error ? <span style={{ color: "#b42318", fontSize: 12 }}>Detalhe técnico: {error}</span> : undefined}
                 />
             </div>
         );

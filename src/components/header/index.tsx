@@ -1,11 +1,11 @@
-import { MoonOutlined, SunOutlined, SearchOutlined } from "@ant-design/icons";
+import { MoonOutlined, SunOutlined } from "@ant-design/icons";
 import { useGetIdentity } from "@refinedev/core";
-import { Avatar, Layout as AntdLayout, Space, Switch, Typography, Button } from "antd";
+import { Avatar, Layout as AntdLayout, Space, Switch, Typography } from "antd";
 import { useContext, useMemo, useState } from "react";
 import { ColorModeContext } from "../../contexts/color-mode";
-import { GlobalSearch } from "../global-search"; // <-- Importamos a nossa busca!
+import { GlobalSearch } from "../global-search";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 type IdentityLike = {
     name?: string | null;
@@ -16,8 +16,6 @@ type IdentityLike = {
 export const Header = ({ sticky }: { sticky?: boolean }) => {
     const { data } = useGetIdentity<IdentityLike>();
     const { mode, setMode } = useContext(ColorModeContext);
-    
-    // Estado para controlar se a busca está aberta ou fechada
     const [searchOpen, setSearchOpen] = useState(false);
 
     const userName = (data?.name || data?.email || "Usuario").toString();
@@ -35,80 +33,79 @@ export const Header = ({ sticky }: { sticky?: boolean }) => {
         <AntdLayout.Header
             className="crm-topbar"
             style={{
-                paddingInline: 22,
-                height: 72,
+                paddingInline: 24,
+                height: 56,
                 position: sticky ? "sticky" : "relative",
                 top: 0,
                 zIndex: 40,
             }}
         >
             <div className="crm-topbar-inner">
-                <div>
-                    <Space size={10} align="center">
-                        <div className="crm-topbar-dot" />
-                        <Text className="crm-topbar-label">CRM Polatto</Text>
-                    </Space>
-                    <Title level={4} style={{ margin: "4px 0 0 0", color: "#e2e8f0", fontWeight: 700 }}>
-                        Operação Comercial
-                    </Title>
-                </div>
-
-                <Space size={14} align="center" wrap>
-                    {/* Botão de Busca Rápida (Abre a janela flutuante) */}
-                    <Button
-                        onClick={() => setSearchOpen(true)}
-                        icon={<SearchOutlined />}
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div className="crm-topbar-dot" />
+                    <Text className="crm-topbar-label">CRM Polatto</Text>
+                    <div
                         style={{
-                            backgroundColor: "rgba(255, 255, 255, 0.08)",
-                            border: "1px solid rgba(255, 255, 255, 0.12)",
-                            color: "#cbd5e1",
-                            borderRadius: 8,
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 6,
-                            padding: "0 12px"
+                            width: 1,
+                            height: 18,
+                            background: "rgba(255,255,255,0.08)",
+                            marginInline: 4,
+                        }}
+                    />
+                    <Text
+                        style={{
+                            color: "rgba(203, 213, 225, 0.65)",
+                            fontSize: 13,
+                            fontWeight: 500,
+                            letterSpacing: "-0.01em",
                         }}
                     >
-                        Buscar lead... 
-                        <span style={{
-                            fontSize: 10,
-                            backgroundColor: "rgba(255, 255, 255, 0.15)",
-                            color: "#fff",
-                            padding: "2px 6px",
-                            borderRadius: 4,
-                            marginLeft: 4,
-                            fontWeight: 600
-                        }}>Ctrl K</span>
-                    </Button>
+                        Operação Comercial
+                    </Text>
+                </div>
 
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
                     <div className="crm-date-pill">{todayLabel}</div>
-                    
+
                     <Switch
                         checked={mode === "dark"}
                         checkedChildren={<MoonOutlined />}
                         unCheckedChildren={<SunOutlined />}
                         onChange={() => setMode(mode === "light" ? "dark" : "light")}
                         aria-label="Alternar tema"
+                        style={{ minWidth: 44 }}
                     />
-                    <Space size={10} align="center">
-                        <Text style={{ color: "#dbe5f5", fontWeight: 600 }}>{userName}</Text>
+
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 10,
+                            borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
+                            paddingInlineStart: 14,
+                        }}
+                    >
+                        <Text style={{ color: "#cbd5e1", fontWeight: 500, fontSize: 13 }}>
+                            {userName}
+                        </Text>
                         <Avatar
                             src={data?.avatar || undefined}
                             alt={userName}
+                            size={30}
                             style={{
-                                backgroundColor: "rgba(76,139,245,0.2)",
-                                color: "#8cc0ff",
-                                border: "1px solid rgba(140,192,255,0.45)",
-                                fontWeight: 700,
+                                backgroundColor: "rgba(59, 130, 246, 0.18)",
+                                color: "#93bbfc",
+                                border: "1.5px solid rgba(96, 165, 250, 0.22)",
+                                fontWeight: 600,
+                                fontSize: 12,
                             }}
                         >
                             {userInitial}
                         </Avatar>
-                    </Space>
-                </Space>
+                    </div>
+                </div>
             </div>
 
-            {/* O Modal Mágico embutido no header (só aparece quando aberto) */}
             <GlobalSearch open={searchOpen} setOpen={setSearchOpen} />
         </AntdLayout.Header>
     );
