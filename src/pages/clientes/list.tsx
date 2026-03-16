@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useGo, useList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
+import { useGo, useList, useInfiniteList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
 import { CreateButton } from "@refinedev/antd";
 import { ImportLeadsButton } from "../../components/import-leads";
 
@@ -147,7 +147,7 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
     openLeadEdit,
     stopActionPropagation,
 }) => {
-    const [loadedPages, setLoadedPages] = useState(1);
+    const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     const columnFilters = useMemo<CrudFilter[]>(() => {
         const base = [...serverFilters];
@@ -159,17 +159,36 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
         return base;
     }, [serverFilters, stageColumnId, isOthersColumn]);
 
-    const { query: colQuery } = useList({
+    const { query: colQuery, result: colResult } = useInfiniteList({
         resource: "clientes",
-        pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE * loadedPages },
+        pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
         filters: columnFilters,
         liveMode: "auto",
     });
 
-    const leads = colQuery?.data?.data ?? [];
-    const total = colQuery?.data?.total ?? 0;
-    const hasMore = leads.length < total;
-    const isColLoading = colQuery?.isLoading ?? false;
+    const leads = useMemo(
+        () => colResult.data?.pages.flatMap((p) => p.data) ?? [],
+        [colResult.data],
+    );
+    const total = colResult.data?.pages[0]?.total ?? 0;
+    const isColLoading = colQuery.isLoading;
+    const isFetchingMore = colQuery.isFetchingNextPage;
+
+    // IntersectionObserver para infinite scroll automático
+    useEffect(() => {
+        const sentinel = sentinelRef.current;
+        if (!sentinel) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries[0]?.isIntersecting && colResult.hasNextPage && !isFetchingMore) {
+                    colQuery.fetchNextPage();
+                }
+            },
+            { rootMargin: "200px" },
+        );
+        observer.observe(sentinel);
+        return () => observer.disconnect();
+    }, [colResult.hasNextPage, isFetchingMore, colQuery.fetchNextPage]);
 
     const totalColuna = useMemo(
         () => leads.reduce((acc: number, c: any) => acc + Number(c.conta_energia_media || 0), 0),
@@ -290,15 +309,11 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 </Card>
                             </div>
                         ))}
-                        {hasMore && (
-                            <Button
-                                type="dashed"
-                                block
-                                onClick={() => setLoadedPages((p) => p + 1)}
-                                style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}
-                            >
-                                Carregar mais ({total - leads.length} restantes)
-                            </Button>
+                        <div ref={sentinelRef} style={{ height: 1 }} />
+                        {isFetchingMore && (
+                            <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>
+                                <Spin size="small" />
+                            </div>
                         )}
                     </>
                 )}
@@ -473,42 +488,72 @@ export const ClienteList = () => {
         setListPage(1);
     }, [serverFilters]);
 
-    // ---- KPI query (leve – seleciona apenas campos necessários) ----
+    // ---- KPI filters (subset aplicável à View materializada) ----
+    const kpiFilters = useMemo<CrudFilter[]>(() => {
+        const filters: CrudFilter[] = [];
+
+        if (responsavelFiltro) {
+            filters.push({ field: "responsavel_id", operator: "eq", value: responsavelFiltro });
+        }
+
+        if (temperaturaFiltro !== "todas") {
+            if (temperaturaFiltro === "fechado") {
+                filters.push({
+                    operator: "or",
+                    value: [
+                        { field: "status", operator: "contains", value: "fechado" },
+                        { field: "status", operator: "contains", value: "ganho" },
+                    ],
+                });
+            } else if (temperaturaFiltro === "perdido") {
+                filters.push({ field: "status", operator: "contains", value: "perdido" });
+            }
+        }
+
+        if (!canViewAllLeads && ownerCandidatesNormalized.length > 0) {
+            filters.push({ field: "responsavel_id", operator: "in", value: ownerCandidatesNormalized });
+        }
+
+        return filters;
+    }, [responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidatesNormalized]);
+
+    // ---- KPI query (View materializada – dados já agregados) ----
     const { query: kpiQuery } = useList({
-        resource: "clientes",
-        pagination: { currentPage: 1, pageSize: 5000 },
-        filters: serverFilters,
-        meta: { select: "id,conta_energia_media,status,stage_id" },
+        resource: "vw_kanban_kpis",
+        pagination: { mode: "off" },
+        filters: kpiFilters,
         liveMode: "auto",
     });
 
-    const kpiData = kpiQuery?.data?.data ?? [];
-    const kpiTotal = kpiQuery?.data?.total ?? 0;
+    const kpiRows = kpiQuery?.data?.data ?? [];
     const kpiError = (kpiQuery?.error ?? null) as any;
     const hasKpiPolicyRecursion = isSupabasePolicyRecursion(kpiError);
     const kpiErrorMessage = getSupabaseErrorMessage(kpiError);
 
     // ---- KPIs ----
     const kpis = useMemo(() => {
-        const totalLeads = kpiTotal;
-        const totalValor = kpiData.reduce((acc: number, c: any) => acc + Number(c.conta_energia_media || 0), 0);
-        const fechados = kpiData.filter((c: any) => {
-            const s = normalizeText(c.status);
-            return s.includes("fechado") || s.includes("ganho");
-        }).length;
+        const totalLeads = kpiRows.reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
+        const totalValor = kpiRows.reduce((acc: number, r: any) => acc + Number(r.valor_total || 0), 0);
+        const fechados = kpiRows
+            .filter((r: any) => {
+                const s = normalizeText(r.status);
+                return s.includes("fechado") || s.includes("ganho");
+            })
+            .reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
         const taxaConversao = totalLeads > 0 ? ((fechados / totalLeads) * 100).toFixed(1) : "0";
         return { totalLeads, totalValor, taxaConversao };
-    }, [kpiData, kpiTotal]);
+    }, [kpiRows]);
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
     const leadCountByStageId = useMemo(() => {
-        return kpiData.reduce<Record<string, number>>((acc, c: any) => {
-            const sid = resolveLeadStageId(c);
+        return kpiRows.reduce<Record<string, number>>((acc, r: any) => {
+            const normalizedStatus = normalizeText(r.status);
+            const sid = stageIdByName.get(normalizedStatus) || "";
             if (!sid) return acc;
-            acc[sid] = (acc[sid] || 0) + 1;
+            acc[sid] = (acc[sid] || 0) + Number(r.total_leads || 0);
             return acc;
         }, {});
-    }, [kpiData, stageIdByName]);
+    }, [kpiRows, stageIdByName]);
 
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) return 0;
@@ -524,13 +569,14 @@ export const ClienteList = () => {
 
     // ---- stagesVisiveis (detecção de coluna "Outros") ----
     const stagesVisiveis = useMemo(() => {
-        const hasOrphaned = kpiData.some((c: any) => {
-            const sid = c.stage_id;
-            return !sid || !stageIdSet.has(String(sid));
+        const hasOrphaned = kpiRows.some((r: any) => {
+            const normalizedStatus = normalizeText(r.status);
+            const sid = stageIdByName.get(normalizedStatus);
+            return !sid || !stageIdSet.has(sid);
         });
         if (!hasOrphaned) return stages;
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [kpiData, stageIdSet, stages]);
+    }, [kpiRows, stageIdByName, stageIdSet, stages]);
 
     // ---- Responsáveis disponíveis (query direta leve) ----
     useEffect(() => {
@@ -1211,7 +1257,7 @@ export const ClienteList = () => {
             );
         }
 
-        if (!kpiQuery?.isLoading && kpiTotal === 0) {
+        if (!kpiQuery?.isLoading && kpis.totalLeads === 0) {
             return (
                 <div style={{ padding: 20 }}>
                     <EmptyState

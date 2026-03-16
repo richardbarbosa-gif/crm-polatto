@@ -76,9 +76,47 @@ export const ClienteCreate = () => {
     const [contaLuzFile, setContaLuzFile] = useState<File | null>(null);
     const [isUploadingFiles, setIsUploadingFiles] = useState(false);
 
-    const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>({
+    
+        const { formProps, saveButtonProps, form } = useForm<any, any, ClienteCreateFormValues>({
         redirect: false,
         successNotification: false,
+        errorNotification: (error: any) => {
+            const errorMsg = String(error?.message || "").toLowerCase();
+            
+            // Intercepta o erro de CPF/CNPJ duplicado
+            if (errorMsg.includes("idx_clientes_unique_cpf_cnpj_tenant") || (errorMsg.includes("23505") && errorMsg.includes("cpf_cnpj"))) {
+                return {
+                    message: "Empresa/Cliente já cadastrado",
+                    description: "Este CPF ou CNPJ já existe na sua base de dados.",
+                    type: "error",
+                };
+            }
+
+            // Intercepta o erro de E-mail duplicado
+            if (errorMsg.includes("idx_clientes_unique_email_tenant") || (errorMsg.includes("23505") && errorMsg.includes("email"))) {
+                return {
+                    message: "Atenção: E-mail Duplicado",
+                    description: "Este e-mail já está registado noutro lead da sua empresa. Por favor, verifique.",
+                    type: "error",
+                };
+            }
+            
+            // Intercepta o erro de Telefone duplicado
+            if (errorMsg.includes("idx_clientes_unique_telefone_tenant") || (errorMsg.includes("23505") && errorMsg.includes("telefone"))) {
+                return {
+                    message: "Atenção: Telefone Duplicado",
+                    description: "Este número de telefone/WhatsApp já pertence a outro lead do seu funil.",
+                    type: "error",
+                };
+            }
+
+            // Erro genérico
+            return {
+                message: "Não foi possível guardar o lead",
+                description: error?.message || "Verifique os dados e tente novamente.",
+                type: "error",
+            };
+        },
         onMutationSuccess: async (data) => {
             const createdId = (data as any)?.data?.id ?? (data as any)?.id;
             const pendingFiles = pendingFilesRef.current;

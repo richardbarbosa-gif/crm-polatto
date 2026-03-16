@@ -8,7 +8,8 @@
       "Bash(grep -r richardbarbosa28 /c/Users/User/crm-polatto/src --include=*.ts --include=*.tsx)",
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(grep -r useInfinite c:/Users/User/crm-polatto/node_modules/@refinedev/core/dist/ --include=*.js -l)"
     ]
   }
 }
