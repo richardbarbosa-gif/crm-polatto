@@ -46,6 +46,7 @@ type ClienteCreateFormValues = {
     numero: string;
     complemento?: string;
     conta_energia_media: number;
+    valor?: number;
     responsavel_id?: string; // Alterado para ID
     stage_id: string;
     temperature?: LeadTemperature;
@@ -247,7 +248,7 @@ export const ClienteCreate = () => {
         }
 
         if (currentStageId) {
-            const normalizedStage = coerceLeadStageIdValue(currentStageId, leadStages);
+            const normalizedStage: string = coerceLeadStageIdValue(currentStageId, leadStages);
             if (normalizedStage !== currentStageId) {
                 form.setFieldValue("stage_id", normalizedStage);
             }
@@ -444,6 +445,18 @@ export const ClienteCreate = () => {
                     <Col xs={24} lg={6}>
                         <Form.Item label="Media da Conta (R$)" name="conta_energia_media" rules={[{ required: true }]}>
                             <InputNumber style={{ width: "100%" }} size="large" formatter={(value) => `R$ ${value}`} parser={(value) => value!.replace("R$ ", "")} />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Valor da Venda (R$)" name="valor" tooltip="Qual é o valor financeiro estimado (tamanho do negócio)?">
+                            <InputNumber
+                                style={{ width: "100%" }}
+                                size="large"
+                                min={0 as number}
+                                formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                                parser={(value) => value ? Number(String(value).replace(/R\$\s?|\./g, '').replace(',', '.')) : 0 as any}
+                                placeholder="Ex: 15000"
+                            />
                         </Form.Item>
                     </Col>
                     <Col xs={24} lg={6}>

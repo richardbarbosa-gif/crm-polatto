@@ -28,6 +28,7 @@ type ClienteEditFormValues = {
     cpf_cnpj?: string;
     endereco_instalacao?: string;
     conta_energia_media?: number;
+    valor?: number;
     responsavel_id?: string; // Alterado para suportar o Select
     stage_id?: string;
     temperature?: LeadTemperature;
@@ -208,6 +209,15 @@ export const ClienteEdit = () => {
 
                 <Form.Item label="Media da Conta de Energia (R$)" name="conta_energia_media">
                     <InputNumber style={{ width: "220px" }} formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ",")} parser={(value) => value!.replace(/[^\d.-]/g, "")} />
+                </Form.Item>
+
+                <Form.Item label="Valor do Contrato (R$)" name="valor">
+                    <InputNumber
+                        style={{ width: "220px" }}
+                        min={0 as number}
+                        formatter={(value) => `R$ ${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ".")}
+                        parser={(value) => value ? Number(String(value).replace(/R\$\s?|\./g, "").replace(",", ".")) : (0 as any)}
+                    />
                 </Form.Item>
 
                 <Form.Item label="Responsavel" name="responsavel_id">
