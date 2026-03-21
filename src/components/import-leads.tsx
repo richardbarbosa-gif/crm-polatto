@@ -30,45 +30,91 @@ export const ImportLeadsButton = () => {
 
                     message.loading({ content: "Analisando planilha e checando duplicatas...", key: "import-status" });
 
-                    // 1. Mapear e higienizar os dados do CSV (Igual fazíamos antes)
+                    // 1. Mapear e higienizar os dados do CSV
                     const mappedLeads = rows.map((item) => ({
                         tenant_id: tenantId || undefined,
                         nome: item.Nome || item.nome || item.Name || "Lead Sem Nome",
-                        email: item.Email || item.email || null,
+                        email: (item.Email || item.email || "").trim() || null,
                         telefone: String(item.Telefone || item.telefone || item.Phone || "").trim(),
+                        cpf_cnpj: (item.cpf_cnpj || item.cpf || item.cnpj || item.CPF || item.CNPJ || "").trim() || null,
                         responsavel: item.Responsavel || item.responsavel || item.Responsável || ownerDisplayName,
-                        conta_energia_media: Number(item.Valor || item.valor || item.conta_energia_media) || 0,
+                        conta_energia_media: Number(item.conta_energia_media || item.Conta_Energia || 0) || 0,
+                        valor: Number(item.valor || item.Valor || 0) || 0,
                         status: item.Status || item.status || item.Etapa || "Novo Lead",
                         temperatura: item.Temperatura || item.temperatura || null,
                     }));
 
-                    // 2. Extrair apenas os telefones válidos para nossa "Malha Fina"
+                    // 2. Extrair valores válidos para a "Malha Fina" tripla
                     const telefonesParaChecar = mappedLeads
                         .map(l => l.telefone)
                         .filter(tel => tel.length > 0);
 
-                    // 3. Buscar no Supabase QUAIS desses telefones já existem (Consulta Bulk super rápida)
-                    let telefonesExistentes = new Set<string>();
-                    
+                    const emailsParaChecar = mappedLeads
+                        .map(l => l.email)
+                        .filter((e): e is string => typeof e === "string" && e.length > 0);
+
+                    const cpfsParaChecar = mappedLeads
+                        .map(l => l.cpf_cnpj)
+                        .filter((c): c is string => typeof c === "string" && c.length > 0);
+
+                    // 3. Buscar no Supabase QUAIS já existem (3 consultas em paralelo)
+                    const telefonesExistentes = new Set<string>();
+                    const emailsExistentes = new Set<string>();
+                    const cpfsExistentes = new Set<string>();
+
+                    const buscas: PromiseLike<void>[] = [];
+
                     if (telefonesParaChecar.length > 0) {
-                        const { data: leadsExistentes, error } = await supabaseClient
-                            .from("clientes")
-                            .select("telefone")
-                            .in("telefone", telefonesParaChecar)
-                            .not("telefone", "is", null);
-                            
-                        if (!error && leadsExistentes) {
-                            leadsExistentes.forEach(l => telefonesExistentes.add(l.telefone));
-                        }
+                        buscas.push(
+                            supabaseClient
+                                .from("clientes")
+                                .select("telefone")
+                                .in("telefone", telefonesParaChecar)
+                                .not("telefone", "is", null)
+                                .then(({ data, error }) => {
+                                    if (!error && data) data.forEach((l: any) => telefonesExistentes.add(l.telefone));
+                                }),
+                        );
                     }
 
-                    // 4. A Inteligência: Separar quem entra e quem é barrado
-                    const leadsParaInserir = [];
+                    if (emailsParaChecar.length > 0) {
+                        buscas.push(
+                            supabaseClient
+                                .from("clientes")
+                                .select("email")
+                                .in("email", emailsParaChecar)
+                                .not("email", "is", null)
+                                .then(({ data, error }) => {
+                                    if (!error && data) data.forEach((l: any) => emailsExistentes.add(l.email));
+                                }),
+                        );
+                    }
+
+                    if (cpfsParaChecar.length > 0) {
+                        buscas.push(
+                            supabaseClient
+                                .from("clientes")
+                                .select("cpf_cnpj")
+                                .in("cpf_cnpj", cpfsParaChecar)
+                                .not("cpf_cnpj", "is", null)
+                                .then(({ data, error }) => {
+                                    if (!error && data) data.forEach((l: any) => cpfsExistentes.add(l.cpf_cnpj));
+                                }),
+                        );
+                    }
+
+                    await Promise.all(buscas);
+
+                    // 4. Separar quem entra e quem é barrado (checagem tripla)
+                    const leadsParaInserir: typeof mappedLeads = [];
                     let ignoradosCount = 0;
 
                     for (const lead of mappedLeads) {
-                        // Se o lead tem telefone E esse telefone já foi pego na malha fina do banco, ignora!
-                        if (lead.telefone && telefonesExistentes.has(lead.telefone)) {
+                        const telefoneJaExiste = lead.telefone && telefonesExistentes.has(lead.telefone);
+                        const emailJaExiste = lead.email && emailsExistentes.has(lead.email);
+                        const cpfJaExiste = lead.cpf_cnpj && cpfsExistentes.has(lead.cpf_cnpj);
+
+                        if (telefoneJaExiste || emailJaExiste || cpfJaExiste) {
                             ignoradosCount++;
                             continue;
                         }
