@@ -332,7 +332,7 @@ export const ClienteList = () => {
         canDeleteRecords,
         isLoadingAccess,
         tenantId,
-        ownerCandidatesNormalized,
+        ownerCandidates,
         ownerDisplayName,
     } = useCrmAccess();
 
@@ -473,12 +473,12 @@ export const ClienteList = () => {
             }
         }
 
-        if (!canViewAllLeads && ownerCandidatesNormalized.length > 0) {
-            filters.push({ field: "responsavel", operator: "in", value: ownerCandidatesNormalized });
+        if (!canViewAllLeads && ownerCandidates.length > 0) {
+            filters.push({ field: "responsavel", operator: "in", value: ownerCandidates });
         }
 
         return filters;
-    }, [debouncedSearch, responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidatesNormalized]);
+    }, [debouncedSearch, responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidates]);
 
     // Chave para forçar remount das colunas kanban quando filtros mudam
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
@@ -489,12 +489,10 @@ export const ClienteList = () => {
     }, [serverFilters]);
 
     // ---- KPI filters (subset aplicável à View materializada) ----
+    // Nota: vw_kanban_kpis não tem coluna "responsavel" (texto), apenas "responsavel_id" (UUID).
+    // Filtragem por responsável é feita client-side nos kpiRows abaixo.
     const kpiFilters = useMemo<CrudFilter[]>(() => {
         const filters: CrudFilter[] = [];
-
-        if (responsavelFiltro) {
-            filters.push({ field: "responsavel_id", operator: "eq", value: responsavelFiltro });
-        }
 
         if (temperaturaFiltro !== "todas") {
             if (temperaturaFiltro === "fechado") {
@@ -510,12 +508,8 @@ export const ClienteList = () => {
             }
         }
 
-        if (!canViewAllLeads && ownerCandidatesNormalized.length > 0) {
-            filters.push({ field: "responsavel_id", operator: "in", value: ownerCandidatesNormalized });
-        }
-
         return filters;
-    }, [responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidatesNormalized]);
+    }, [temperaturaFiltro]);
 
     // ---- KPI query (View materializada – dados já agregados) ----
     const { query: kpiQuery } = useList({
@@ -586,8 +580,8 @@ export const ClienteList = () => {
                 .from("clientes")
                 .select("responsavel")
                 .not("responsavel", "is", null);
-            if (!canViewAllLeads && ownerCandidatesNormalized.length > 0) {
-                query = query.in("responsavel", ownerCandidatesNormalized);
+            if (!canViewAllLeads && ownerCandidates.length > 0) {
+                query = query.in("responsavel", ownerCandidates);
             }
             const { data } = await query.limit(5000);
             const unique = [
@@ -596,7 +590,7 @@ export const ClienteList = () => {
             setResponsaveisDisponiveis(unique);
         };
         fetchResponsaveis();
-    }, [canViewAllLeads, ownerCandidatesNormalized, tenantId, isLoadingAccess]);
+    }, [canViewAllLeads, ownerCandidates, tenantId, isLoadingAccess]);
 
     // ---- List view query (paginação server-side) ----
     const { query: listQuery } = useList({

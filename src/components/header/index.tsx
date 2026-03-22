@@ -41,27 +41,8 @@ export const Header = ({ sticky }: { sticky?: boolean }) => {
             }}
         >
             <div className="crm-topbar-inner">
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <div className="crm-topbar-dot" />
-                    <Text className="crm-topbar-label">CRM Polatto</Text>
-                    <div
-                        style={{
-                            width: 1,
-                            height: 18,
-                            background: "rgba(255,255,255,0.08)",
-                            marginInline: 4,
-                        }}
-                    />
-                    <Text
-                        style={{
-                            color: "rgba(203, 213, 225, 0.65)",
-                            fontSize: 13,
-                            fontWeight: 500,
-                            letterSpacing: "-0.01em",
-                        }}
-                    >
-                        Operação Comercial
-                    </Text>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Text className="crm-topbar-label">Operação Comercial</Text>
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -76,16 +57,8 @@ export const Header = ({ sticky }: { sticky?: boolean }) => {
                         style={{ minWidth: 44 }}
                     />
 
-                    <div
-                        style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 10,
-                            borderLeft: "1px solid rgba(255, 255, 255, 0.06)",
-                            paddingInlineStart: 14,
-                        }}
-                    >
-                        <Text style={{ color: "#cbd5e1", fontWeight: 500, fontSize: 13 }}>
+                    <div className="crm-topbar-user">
+                        <Text className="crm-topbar-user__name">
                             {userName}
                         </Text>
                         <Avatar
@@ -93,9 +66,9 @@ export const Header = ({ sticky }: { sticky?: boolean }) => {
                             alt={userName}
                             size={30}
                             style={{
-                                backgroundColor: "rgba(59, 130, 246, 0.18)",
-                                color: "#93bbfc",
-                                border: "1.5px solid rgba(96, 165, 250, 0.22)",
+                                backgroundColor: "rgba(59, 130, 246, 0.1)",
+                                color: "#3b82f6",
+                                border: "1.5px solid rgba(59, 130, 246, 0.15)",
                                 fontWeight: 600,
                                 fontSize: 12,
                             }}
