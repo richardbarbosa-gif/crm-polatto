@@ -167,52 +167,57 @@ h1, h2, h3, h4, h5, h6,
     width: calc(100% + 32px);
     height: 56px;
     padding: 0 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    background: var(--crm-navy-950);
+    overflow: hidden;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.08);
+    background: linear-gradient(180deg, #0f1b2d 0%, var(--crm-navy-900) 100%);
     transition: all var(--crm-duration) var(--crm-ease);
 }
 
 .crm-sider-brand--collapsed {
     justify-content: center;
     padding: 0;
+    gap: 0;
 }
 
-.crm-sider-brand__icon {
+.crm-sider-brand__monogram {
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
-    flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    border-radius: var(--crm-radius-sm);
-    background: linear-gradient(135deg, var(--crm-sky-500), var(--crm-sky-700));
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
     color: #ffffff;
+    font-family: "Sora", sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1;
+    flex-shrink: 0;
     box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
-.crm-sider-brand__text {
-    display: flex;
-    flex-direction: column;
-    line-height: 1;
-    min-width: 0;
-}
-
 .crm-sider-brand__name {
-    font-family: "Sora", "Inter", -apple-system, sans-serif;
-    font-size: 16px;
+    font-family: "Sora", sans-serif;
+    font-size: 15px;
     font-weight: 700;
-    letter-spacing: -0.02em;
-    color: #ffffff;
+    letter-spacing: 0.06em;
+    color: #f1f5f9;
+    line-height: 1;
 }
 
-.crm-sider-brand__sub {
-    font-family: "Inter", -apple-system, sans-serif;
+.crm-sider-brand__badge {
+    font-family: "Inter", sans-serif;
     font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--crm-ink-500);
-    margin-top: 2px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.12);
+    padding: 2px 5px;
+    border-radius: 4px;
+    line-height: 1;
+    position: relative;
+    top: -1px;
 }
 
 .crm-sider-nav {
@@ -262,61 +267,7 @@ h1, h2, h3, h4, h5, h6,
     color: rgba(148, 163, 184, 0.7);
 }
 
-/* ═══════════════════════════════════════════════════════════
-   TOP BAR
-   ═══════════════════════════════════════════════════════════ */
-
-.crm-topbar {
-    background: var(--crm-surface-1) !important;
-    border-bottom: 1px solid var(--crm-border);
-    box-shadow: var(--crm-shadow-xs);
-}
-
-.crm-topbar-inner {
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-wrap: wrap;
-}
-
-.crm-topbar-label {
-    font-family: "Sora", "Inter", -apple-system, sans-serif;
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--crm-ink-900) !important;
-}
-
-.crm-date-pill {
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    padding-inline: 10px;
-    border-radius: var(--crm-radius-xs);
-    background: var(--crm-surface-2);
-    border: 1px solid var(--crm-border);
-    color: var(--crm-ink-600);
-    font-size: 12px;
-    font-weight: 450;
-    text-transform: capitalize;
-    letter-spacing: -0.01em;
-}
-
-.crm-topbar-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    border-left: 1px solid var(--crm-border);
-    padding-inline-start: 14px;
-}
-
-.crm-topbar-user__name {
-    color: var(--crm-ink-700) !important;
-    font-weight: 500;
-    font-size: 13px;
-}
+/* (Top bar styles moved to Premium section below) */
 
 /* ═══════════════════════════════════════════════════════════
    BUTTONS
@@ -937,11 +888,13 @@ h1, h2, h3, h4, h5, h6,
 
     .crm-topbar {
         height: auto !important;
-        padding-block: 10px;
+        padding-block: 8px;
+        line-height: normal !important;
     }
 
-    .crm-topbar-inner {
-        align-items: flex-start;
+    .crm-topbar .crm-topbar-inner {
+        flex-wrap: wrap;
+        gap: 8px;
     }
 }
 
@@ -1325,30 +1278,6 @@ html[data-theme="dark"] .ant-drawer-mask {
     background: rgba(0, 0, 0, 0.45) !important;
 }
 
-/* ── Dark: Top bar ── */
-html[data-theme="dark"] .crm-topbar {
-    background: #0d1117 !important;
-    border-bottom-color: rgba(240, 246, 252, 0.06);
-}
-
-html[data-theme="dark"] .crm-topbar-label {
-    color: #e6edf3 !important;
-}
-
-html[data-theme="dark"] .crm-date-pill {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(240, 246, 252, 0.08);
-    color: #8b949e;
-}
-
-html[data-theme="dark"] .crm-topbar-user {
-    border-left-color: rgba(240, 246, 252, 0.06);
-}
-
-html[data-theme="dark"] .crm-topbar-user__name {
-    color: #c9d1d9 !important;
-}
-
 /* ── Dark: Opportunities header ── */
 html[data-theme="dark"] .crm-opportunities-header {
     background: #161b22;
@@ -1431,96 +1360,6 @@ html[data-theme="dark"] .ant-switch {
 html[data-theme="dark"] .ant-switch-checked {
     background: #3b82f6;
 }
-
-/* ═══════════════════════════════════════════════════════════
-   AUTH PAGE — Premium Login
-   ═══════════════════════════════════════════════════════════ */
-
-/* ── Brand block ── */
-.crm-auth-brand {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 8px;
-}
-
-.crm-auth-brand__icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 52px;
-    height: 52px;
-    border-radius: var(--crm-radius-lg);
-    background: linear-gradient(135deg, var(--crm-sky-500), var(--crm-sky-700));
-    color: #ffffff;
-    margin-bottom: 8px;
-    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.25);
-}
-
-.crm-auth-brand__icon svg {
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.15));
-}
-
-.crm-auth-brand__name {
-    font-family: "Sora", "Inter", -apple-system, sans-serif;
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: -0.03em;
-    color: var(--crm-ink-900);
-    margin: 0;
-    line-height: 1.1;
-}
-
-.crm-auth-brand__tagline {
-    font-family: "Inter", -apple-system, sans-serif;
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--crm-ink-500);
-    margin-top: 2px;
-}
-
-/* ── Auth page container override ── */
-.ant-layout.ant-layout-has-sider > .ant-layout,
-div[style*="background"][style*="backgroundSize"] {
-    /* fallback — Refine's AuthPage wrapper */
-}
-
-/* Refine AuthPage layout wrapper */
-.ant-row.ant-row-middle[style*="minHeight: 100vh"],
-div[style*="minHeight"][style*="100vh"][style*="center"] {
-    background: linear-gradient(160deg, #f0f4f8 0%, #e8eef5 40%, #f7f9fb 100%) !important;
-}
-
-/* Auth card refinements */
-.ant-card.ant-card-bordered[style*="maxWidth"] {
-    border: none !important;
-    border-radius: var(--crm-radius-xl) !important;
-    box-shadow: var(--crm-shadow-xl), 0 0 0 1px rgba(15, 23, 42, 0.04) !important;
-    overflow: hidden;
-}
-
-/* ── Dark mode auth ── */
-html[data-theme="dark"] .crm-auth-brand__name {
-    color: #e6edf3;
-}
-
-html[data-theme="dark"] .crm-auth-brand__tagline {
-    color: #8b949e;
-}
-
-html[data-theme="dark"] .ant-row.ant-row-middle[style*="minHeight: 100vh"],
-html[data-theme="dark"] div[style*="minHeight"][style*="100vh"][style*="center"] {
-    background: linear-gradient(160deg, #0a0e17 0%, #0d1420 40%, #0a1120 100%) !important;
-}
-
-html[data-theme="dark"] .ant-card.ant-card-bordered[style*="maxWidth"] {
-    background: #161b22 !important;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(240, 246, 252, 0.06) !important;
-}
-
 html[data-theme="dark"] .ant-card.ant-card-bordered[style*="maxWidth"] {
     background: #161b22 !important;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(240, 246, 252, 0.06) !important;
@@ -1550,4 +1389,92 @@ html[data-theme="dark"] .ant-card.ant-card-bordered[style*="maxWidth"] {
    Isso garante que o Lead caia sempre na COLUNA, e nunca em cima de outro cartão. */
 .is-dragging-board .crm-lead-card {
     pointer-events: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TOPBAR PREMIUM — Header (sem logo, so acoes a direita)
+   ═══════════════════════════════════════════════════════════ */
+
+.crm-topbar {
+    background: linear-gradient(135deg, #0c1524 0%, #0f1b2d 100%) !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.06) !important;
+    height: 52px !important;
+    padding: 0 24px !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+    line-height: 52px !important;
+}
+
+.crm-topbar .crm-topbar-inner {
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 16px;
+}
+
+/* Actions area */
+.crm-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.crm-topbar-divider {
+    width: 1px;
+    height: 22px;
+    background: rgba(148, 163, 184, 0.15);
+    flex-shrink: 0;
+}
+
+/* User profile */
+.crm-topbar-user-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.crm-topbar-user-info {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+    line-height: 1.2;
+}
+
+.crm-topbar-user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f1f5f9 !important;
+}
+
+.crm-topbar-user-email {
+    font-size: 11px;
+    color: rgba(148, 163, 184, 0.65) !important;
+}
+
+html[data-theme="dark"] .crm-topbar-user-name {
+    color: #e2e8f0 !important;
+}
+
+html[data-theme="dark"] .crm-topbar-user-email {
+    color: rgba(148, 163, 184, 0.45) !important;
+}
+
+/* Avatar */
+.crm-topbar-avatar {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    border: 2px solid rgba(96, 165, 250, 0.2) !important;
+    font-weight: 600;
+    font-size: 13px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* Theme switch */
+.crm-topbar .ant-switch {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.crm-topbar .ant-switch-checked {
+    background: rgba(96, 165, 250, 0.25) !important;
 }

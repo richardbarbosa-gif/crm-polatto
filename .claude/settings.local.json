@@ -10,7 +10,8 @@
       "Bash(npx tsc:*)",
       "Bash(npx vite:*)",
       "Bash(grep -r useInfinite c:/Users/User/crm-polatto/node_modules/@refinedev/core/dist/ --include=*.js -l)",
-      "Bash(ls \"c:/Users/User/crm-polatto/public/logo\"*)"
+      "Bash(ls \"c:/Users/User/crm-polatto/public/logo\"*)",
+      "Bash(ls \"c:/Users/User/crm-polatto/src/components/header\"*)"
     ]
   }
 }

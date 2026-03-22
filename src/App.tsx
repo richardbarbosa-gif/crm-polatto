@@ -57,16 +57,12 @@ import {
 
 const CustomTitle = ({ collapsed }: { collapsed?: boolean }) => (
     <div className={`crm-sider-brand ${collapsed ? "crm-sider-brand--collapsed" : ""}`}>
-        <div className="crm-sider-brand__icon" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
-            </svg>
-        </div>
+        <div className="crm-sider-brand__monogram" aria-hidden="true">P</div>
         {!collapsed && (
-            <div className="crm-sider-brand__text">
-                <span className="crm-sider-brand__name">Polatto</span>
-                <span className="crm-sider-brand__sub">energia solar</span>
-            </div>
+            <>
+                <span className="crm-sider-brand__name">POLATTO</span>
+                <span className="crm-sider-brand__badge">CRM</span>
+            </>
         )}
     </div>
 );
