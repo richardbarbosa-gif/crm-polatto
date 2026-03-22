@@ -22,9 +22,9 @@ export const EmptyState = ({
         <div
             className="crm-empty-state"
             style={{
-                border: "1.5px dashed rgba(148, 163, 184, 0.3)",
+                border: "1.5px dashed var(--crm-border)",
                 borderRadius: 16,
-                background: "rgba(248, 250, 252, 0.8)",
+                background: "var(--crm-surface-1)",
                 padding: "48px 32px",
                 textAlign: "center",
             }}

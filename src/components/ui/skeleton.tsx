@@ -37,10 +37,10 @@ export const SkeletonCard = ({ cards = 3 }: SkeletonCardProps) => {
                 <div
                     key={index}
                     style={{
-                        border: "1px solid #e5e7eb",
+                        border: "1px solid var(--crm-border)",
                         borderRadius: 12,
                         padding: 14,
-                        background: "#ffffff",
+                        background: "var(--crm-surface-1)",
                     }}
                 >
                     <Skeleton active paragraph={{ rows: 2 }} title={{ width: "50%" }} />

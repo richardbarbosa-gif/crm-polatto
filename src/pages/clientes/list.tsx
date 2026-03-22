@@ -208,9 +208,9 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
             <div className="crm-kanban-column-head">
                 <Text strong className="crm-kanban-column-title">{stage.nome}</Text>
                 <div className="crm-kanban-column-stats">
-                    <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>{total} leads</Text>
-                    <span style={{ color: "#cbd5e1" }}>·</span>
-                    <Text style={{ fontSize: 11, color: "#64748b", fontWeight: 500 }}>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>{total} leads</Text>
+                    <span style={{ color: "var(--crm-ink-300)" }}>·</span>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>
                         {formatCurrencyBRL(totalColuna, "R$ 0,00")}
                     </Text>
                 </div>
@@ -293,16 +293,16 @@ const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     </div>
                                     <div className="crm-lead-card-meta">
                                         {cliente.conta_energia_media > 0 && (
-                                            <Text style={{ fontSize: 13, color: "#334155", fontWeight: 600, letterSpacing: "-0.01em" }}>
+                                            <Text style={{ fontSize: 13, color: "var(--crm-ink-700)", fontWeight: 600, letterSpacing: "-0.01em" }}>
                                                 {formatCurrencyBRL(cliente.conta_energia_media, "R$ 0,00")}
                                             </Text>
                                         )}
                                         {cliente.responsavel && (
-                                            <Text style={{ fontSize: 11, color: "#64748b" }}>
+                                            <Text style={{ fontSize: 11, color: "var(--crm-ink-500)" }}>
                                                 Resp: {cliente.responsavel}
                                             </Text>
                                         )}
-                                        <Text style={{ fontSize: 11, color: "#94a3b8" }}>
+                                        <Text style={{ fontSize: 11, color: "var(--crm-ink-400)" }}>
                                             {formatDateBR(cliente.created_at, "-")}
                                         </Text>
                                     </div>
@@ -1344,7 +1344,7 @@ export const ClienteList = () => {
                         {
                             title: "Nome do Lead",
                             dataIndex: "nome",
-                            render: (text) => <b style={{ color: "#153046" }}>{text}</b>,
+                            render: (text) => <b style={{ color: "var(--crm-ink-900)" }}>{text}</b>,
                         },
                         {
                             title: "Etapa",

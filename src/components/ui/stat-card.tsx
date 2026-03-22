@@ -28,9 +28,9 @@ export const StatCard = ({
             className="crm-stat-card"
             bodyStyle={{ padding: "16px 18px 14px" }}
             style={{
-                border: "1px solid rgba(15, 23, 42, 0.06)",
-                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
-                background: "#ffffff",
+                border: "1px solid var(--crm-border)",
+                boxShadow: "var(--crm-shadow-xs)",
+                background: "var(--crm-surface-1)",
                 ...style,
             }}
         >
@@ -52,7 +52,7 @@ export const StatCard = ({
                 valueStyle={{
                     fontSize: 22,
                     fontWeight: 700,
-                    color: "#0f172a",
+                    color: "var(--crm-ink-950)",
                     letterSpacing: "-0.03em",
                     fontFamily: "'Sora', 'Inter', sans-serif",
                     ...valueStyle,

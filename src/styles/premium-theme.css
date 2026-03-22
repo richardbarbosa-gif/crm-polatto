@@ -71,6 +71,7 @@ body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    transition: background 0.3s ease, color 0.3s ease;
 }
 
 h1, h2, h3, h4, h5, h6,
@@ -446,9 +447,10 @@ h1, h2, h3, h4, h5, h6,
 .crm-focusable:focus-visible,
 .ant-btn:focus-visible,
 .ant-input:focus-visible,
-.ant-input-number:focus-visible {
-    outline: 2px solid rgba(59, 130, 246, 0.2) !important;
-    outline-offset: 1px;
+.ant-input-number:focus-visible,
+.ant-select-focused .ant-select-selector {
+    outline: 2px solid rgba(59, 130, 246, 0.4) !important;
+    outline-offset: 2px;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1032,4 +1034,340 @@ h1, h2, h3, h4, h5, h6,
 
 .ant-skeleton-element .ant-skeleton-button {
     border-radius: var(--crm-radius-sm);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   DARK MODE — Override de variáveis CSS
+   ═══════════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] {
+    --crm-surface-0: #0d1117;
+    --crm-surface-1: #161b22;
+    --crm-surface-2: #1c2333;
+
+    --crm-ink-950: #e6edf3;
+    --crm-ink-900: #e6edf3;
+    --crm-ink-700: #c9d1d9;
+    --crm-ink-600: #b1bac4;
+    --crm-ink-500: #8b949e;
+    --crm-ink-400: #8b949e;
+    --crm-ink-300: #6e7681;
+
+    --crm-border: rgba(240, 246, 252, 0.1);
+    --crm-border-subtle: rgba(240, 246, 252, 0.06);
+    --crm-border-interactive: rgba(59, 130, 246, 0.35);
+
+    --crm-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --crm-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
+    --crm-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --crm-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+    --crm-shadow-xl: 0 20px 40px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.25);
+    --crm-shadow-glow: 0 0 0 1px rgba(59, 130, 246, 0.2), 0 2px 12px rgba(59, 130, 246, 0.12);
+
+    color-scheme: dark;
+}
+
+html[data-theme="dark"] body {
+    color: #e6edf3;
+    background: #0d1117;
+}
+
+html[data-theme="dark"] ::selection {
+    background: rgba(59, 130, 246, 0.3);
+    color: #e6edf3;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: rgba(240, 246, 252, 0.1);
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(240, 246, 252, 0.18);
+}
+
+html[data-theme="dark"] .crm-button-default {
+    background: #161b22 !important;
+    border-color: rgba(240, 246, 252, 0.1) !important;
+}
+
+html[data-theme="dark"] .crm-button-default:hover {
+    border-color: rgba(240, 246, 252, 0.18) !important;
+}
+
+html[data-theme="dark"] .ant-table-thead > tr > th,
+html[data-theme="dark"] .ant-table-thead > tr > td {
+    background: #161b22 !important;
+    color: #8b949e !important;
+    border-bottom-color: rgba(240, 246, 252, 0.1) !important;
+}
+
+html[data-theme="dark"] .ant-table-tbody > tr > td {
+    border-bottom-color: rgba(240, 246, 252, 0.06) !important;
+}
+
+html[data-theme="dark"] .ant-table-tbody > tr:hover > td {
+    background: rgba(255, 255, 255, 0.04) !important;
+}
+
+html[data-theme="dark"] .ant-card {
+    background: #161b22;
+    border-color: rgba(240, 246, 252, 0.1);
+}
+
+html[data-theme="dark"] .ant-card .ant-card-head {
+    border-bottom-color: rgba(240, 246, 252, 0.08) !important;
+}
+
+html[data-theme="dark"] .ant-modal-content {
+    background: #161b22;
+}
+
+html[data-theme="dark"] .ant-drawer-content {
+    background: #161b22;
+}
+
+/* ── Dark: Form inputs ── */
+html[data-theme="dark"] .ant-input,
+html[data-theme="dark"] .ant-select-selector,
+html[data-theme="dark"] .ant-input-number,
+html[data-theme="dark"] .ant-picker {
+    border-color: rgba(240, 246, 252, 0.1) !important;
+    background: #0d1117 !important;
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .ant-input:hover,
+html[data-theme="dark"] .ant-select-selector:hover,
+html[data-theme="dark"] .ant-input-number:hover,
+html[data-theme="dark"] .ant-picker:hover {
+    border-color: rgba(240, 246, 252, 0.2) !important;
+}
+
+html[data-theme="dark"] .ant-input::placeholder,
+html[data-theme="dark"] .ant-input-number-input::placeholder {
+    color: #484f58 !important;
+}
+
+html[data-theme="dark"] .ant-select-selection-placeholder {
+    color: #484f58 !important;
+}
+
+html[data-theme="dark"] .ant-select-selection-item {
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .ant-form-item-label > label {
+    color: #b1bac4 !important;
+}
+
+/* ── Dark: Select dropdown ── */
+html[data-theme="dark"] .ant-select-dropdown {
+    background: #1c2333 !important;
+    border-color: rgba(240, 246, 252, 0.1) !important;
+}
+
+html[data-theme="dark"] .ant-select-item {
+    color: #c9d1d9 !important;
+}
+
+html[data-theme="dark"] .ant-select-item-option-active,
+html[data-theme="dark"] .ant-select-item-option-selected {
+    background: rgba(59, 130, 246, 0.15) !important;
+}
+
+/* ── Dark: Kanban/Lead cards ── */
+html[data-theme="dark"] .crm-lead-card {
+    border-color: rgba(240, 246, 252, 0.08) !important;
+}
+
+html[data-theme="dark"] .crm-lead-card:hover {
+    border-color: rgba(240, 246, 252, 0.15) !important;
+}
+
+html[data-theme="dark"] .crm-lead-card .ant-card-actions {
+    border-top-color: rgba(240, 246, 252, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+html[data-theme="dark"] .crm-kanban-empty {
+    border-color: rgba(240, 246, 252, 0.06);
+    background: rgba(255, 255, 255, 0.02);
+    color: #6e7681;
+}
+
+html[data-theme="dark"] .crm-kanban-column-drop-active {
+    background: rgba(59, 130, 246, 0.06);
+    box-shadow: inset 0 0 0 1.5px rgba(59, 130, 246, 0.25);
+}
+
+/* ── Dark: Soft blocks & form sections ── */
+html[data-theme="dark"] .crm-soft-block {
+    border-color: rgba(240, 246, 252, 0.08);
+    background: #0d1117;
+}
+
+html[data-theme="dark"] .crm-soft-block:hover {
+    border-color: rgba(240, 246, 252, 0.14);
+}
+
+html[data-theme="dark"] .crm-form-section {
+    border-color: rgba(240, 246, 252, 0.08);
+    background: #161b22;
+}
+
+/* ── Dark: Agenda ── */
+html[data-theme="dark"] .crm-agenda-day-item {
+    border-color: rgba(240, 246, 252, 0.08);
+    background: #161b22;
+}
+
+html[data-theme="dark"] .crm-agenda-day-item:hover {
+    border-color: rgba(59, 130, 246, 0.3);
+}
+
+html[data-theme="dark"] .crm-agenda-treatment {
+    border-color: rgba(240, 246, 252, 0.08);
+    background: #161b22;
+}
+
+/* ── Dark: Notifications, tooltips, dropdowns ── */
+html[data-theme="dark"] .ant-notification-notice {
+    background: #1c2333;
+    border-color: rgba(240, 246, 252, 0.1);
+}
+
+html[data-theme="dark"] .ant-dropdown-menu {
+    background: #1c2333 !important;
+}
+
+html[data-theme="dark"] .ant-dropdown-menu-item {
+    color: #c9d1d9 !important;
+}
+
+html[data-theme="dark"] .ant-dropdown-menu-item:hover {
+    background: rgba(59, 130, 246, 0.12) !important;
+}
+
+html[data-theme="dark"] .ant-message-notice-content {
+    background: #1c2333;
+    color: #e6edf3;
+}
+
+/* ── Dark: Segmented, pagination, progress ── */
+html[data-theme="dark"] .ant-segmented {
+    background: #0d1117 !important;
+}
+
+html[data-theme="dark"] .ant-segmented-item-selected {
+    background: #161b22 !important;
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .ant-pagination-item {
+    border-color: rgba(240, 246, 252, 0.1) !important;
+    background: transparent !important;
+}
+
+html[data-theme="dark"] .ant-pagination-item a {
+    color: #c9d1d9 !important;
+}
+
+html[data-theme="dark"] .ant-pagination-item-active {
+    border-color: #3b82f6 !important;
+}
+
+html[data-theme="dark"] .ant-pagination-item-active a {
+    color: #3b82f6 !important;
+}
+
+/* ── Dark: Modal mask & overlays ── */
+html[data-theme="dark"] .ant-modal-mask {
+    background: rgba(0, 0, 0, 0.55) !important;
+}
+
+html[data-theme="dark"] .ant-drawer-mask {
+    background: rgba(0, 0, 0, 0.45) !important;
+}
+
+/* ── Dark: Opportunities header ── */
+html[data-theme="dark"] .crm-opportunities-header {
+    background: #161b22;
+    border-bottom-color: rgba(240, 246, 252, 0.06);
+}
+
+html[data-theme="dark"] .crm-view-toggle {
+    background: #0d1117;
+}
+
+/* ── Dark: Alert ── */
+html[data-theme="dark"] .ant-alert {
+    border-color: rgba(240, 246, 252, 0.1);
+}
+
+/* ── Dark: Config/Settings ── */
+html[data-theme="dark"] .crm-config-row + .crm-config-row {
+    border-top-color: rgba(240, 246, 252, 0.06);
+}
+
+/* ── Dark: List shell ── */
+html[data-theme="dark"] .crm-list-shell {
+    background: #161b22;
+}
+
+/* ── Dark: Typography overrides ── */
+html[data-theme="dark"] .crm-page-header-title,
+html[data-theme="dark"] .crm-opportunities-title {
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .crm-lead-card-title {
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .ant-typography {
+    color: #c9d1d9;
+}
+
+html[data-theme="dark"] .ant-table-wrapper .ant-table {
+    border-color: rgba(240, 246, 252, 0.1);
+}
+
+html[data-theme="dark"] .ant-table-wrapper .ant-table-thead > tr > th {
+    background: #161b22 !important;
+}
+
+html[data-theme="dark"] .ant-statistic-title {
+    color: #8b949e !important;
+}
+
+html[data-theme="dark"] .ant-statistic-content-value {
+    color: #e6edf3;
+}
+
+html[data-theme="dark"] .ant-progress-text {
+    color: #c9d1d9 !important;
+}
+
+html[data-theme="dark"] .ant-empty-description {
+    color: #6e7681;
+}
+
+html[data-theme="dark"] .ant-tabs-tab {
+    color: #8b949e !important;
+}
+
+html[data-theme="dark"] .ant-tabs-tab-active .ant-tabs-tab-btn {
+    color: #e6edf3 !important;
+}
+
+html[data-theme="dark"] .ant-tabs-ink-bar {
+    background: #3b82f6;
+}
+
+html[data-theme="dark"] .ant-switch {
+    background: rgba(240, 246, 252, 0.1);
+}
+
+html[data-theme="dark"] .ant-switch-checked {
+    background: #3b82f6;
 }

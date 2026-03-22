@@ -14,9 +14,9 @@ export const Card = ({ interactive, hoverable, style, className, ...props }: Pro
                 .join(" ")}
             style={{
                 borderRadius: 14,
-                border: "1px solid rgba(15, 23, 42, 0.06)",
-                boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
-                background: "#ffffff",
+                border: "1px solid var(--crm-border)",
+                boxShadow: "var(--crm-shadow-xs)",
+                background: "var(--crm-surface-1)",
                 transition:
                     "box-shadow 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)",
                 ...style,

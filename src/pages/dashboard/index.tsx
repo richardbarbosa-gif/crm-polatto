@@ -28,8 +28,8 @@ const funnelSteps = [
 ] as const;
 
 const cardBase = {
-    border: "1px solid rgba(15, 23, 42, 0.06)",
-    boxShadow: "0 1px 2px rgba(15, 23, 42, 0.03)",
+    border: "1px solid var(--crm-border)",
+    boxShadow: "var(--crm-shadow-xs)",
 };
 
 const valueBase = {
@@ -187,7 +187,7 @@ export const DashboardPage = () => {
                                 return (
                                     <div key={step.key}>
                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                                            <Text style={{ fontSize: 13, color: "#334155", fontWeight: 500 }}>
+                                            <Text style={{ fontSize: 13, color: "var(--crm-ink-700)", fontWeight: 500 }}>
                                                 {step.label}
                                             </Text>
                                             <Text style={{ fontSize: 13, fontWeight: 600, color: step.color, fontFamily: "'Sora', 'Inter', sans-serif" }}>
@@ -199,7 +199,7 @@ export const DashboardPage = () => {
                                             success={step.key === "fechado" ? { percent: pct } : undefined}
                                             showInfo={false}
                                             strokeColor={step.color}
-                                            trailColor="rgba(15, 23, 42, 0.04)"
+                                            trailColor="var(--crm-border)"
                                             style={{ marginBottom: 0 }}
                                         />
                                     </div>
@@ -221,7 +221,7 @@ export const DashboardPage = () => {
                                 <Text strong style={{ fontSize: 13, display: "block", marginBottom: 4 }}>
                                     Meta do mes
                                 </Text>
-                                <Text style={{ display: "block", marginBottom: 8, fontSize: 13, color: "#64748b" }}>
+                                <Text style={{ display: "block", marginBottom: 8, fontSize: 13, color: "var(--crm-ink-500)" }}>
                                     Faltam {Math.max(10 - qtdVendas, 0)} para a meta.
                                 </Text>
                                 <Progress
@@ -229,11 +229,11 @@ export const DashboardPage = () => {
                                     size="small"
                                     status="active"
                                     strokeColor="#3b82f6"
-                                    trailColor="rgba(15, 23, 42, 0.04)"
+                                    trailColor="var(--crm-border)"
                                 />
                             </div>
                             <div>
-                                <Text style={{ fontSize: 11, fontWeight: 550, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8" }}>
+                                <Text style={{ fontSize: 11, fontWeight: 550, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--crm-ink-400)" }}>
                                     Resumo
                                 </Text>
                                 <ul className="crm-dashboard-highlight-list">
