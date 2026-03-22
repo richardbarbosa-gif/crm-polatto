@@ -1,326 +1,39 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useGo, useList, useInfiniteList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
-import { CreateButton } from "@refinedev/antd";
-import { ImportLeadsButton } from "../../components/import-leads";
+import { useGo, useList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
 
-import { Drawer, Input, Modal, Select, Space, Spin, Table, Tooltip, Typography, message } from "antd";
+import { Drawer, Input, Modal, Select, Spin, Typography, message } from "antd";
 import {
-    AppstoreOutlined,
-    ArrowUpOutlined,
-    BarsOutlined,
-    CheckCircleOutlined,
     DeleteOutlined,
-    DollarCircleOutlined,
-    EditOutlined,
-    EyeOutlined,
     PlusOutlined,
-    SearchOutlined,
-    SettingOutlined,
 } from "@ant-design/icons";
-import {
-    Badge,
-    Button,
-    Card,
-    EmptyState,
-    StatCard,
-    TemperatureBadge,
-} from "../../components/ui";
+import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
-import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
+import { normalizeText } from "../../lib/formatters";
 import {
     getSupabaseErrorMessage,
     isSupabaseMissingRelation,
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
 import { addLeadActivity } from "../../lib/leadTimeline";
-import {
-    type LeadTemperatureTag,
-    LEAD_AUTOMATIC_TEMPERATURE_OPTIONS,
-    LEAD_TEMPERATURE_OPTIONS,
-    resolveLeadTemperature,
-} from "../../lib/leadTemperature";
+import { type LeadTemperatureTag } from "../../lib/leadTemperature";
 import { LeadDetails } from "./lead-details";
 import { supabaseClient } from "../../utility";
 
-const { Text, Title } = Typography;
+import {
+    KanbanHeader,
+    KanbanBoard,
+    ListView,
+    type Stage,
+    type LeadPointerSession,
+    DEFAULT_STAGE_BLUEPRINT,
+    DRAG_ACTIVATION_DISTANCE,
+    DRAG_ACTIVATION_DELAY_MS,
+    SEARCH_DEBOUNCE_MS,
+    getStatusAccent,
+} from "../../components/kanban";
 
-type Stage = {
-    id?: string | number;
-    nome: string;
-    cor?: string;
-    ordem?: number;
-    persisted?: boolean;
-};
-
-const DEFAULT_STAGES: Stage[] = [
-    { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
-    { id: "negociacao", nome: "Em Negociação", cor: "#3182ce", ordem: 2 },
-    { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 3 },
-    { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
-    { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
-];
-
-const DEFAULT_STAGE_BLUEPRINT: Stage[] = [
-    { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
-    { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 2 },
-    { id: "negociacao", nome: "Em Negociacao", cor: "#3182ce", ordem: 3 },
-    { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
-    { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
-];
-
-const getStatusAccent = (status?: string) => {
-    const normalized = normalizeText(status);
-    if (normalized.includes("fechado")) return "#82cf6e";
-    if (normalized.includes("perdido")) return "#f56565";
-    if (normalized.includes("visita")) return "#ed8936";
-    if (normalized.includes("negocia")) return "#3182ce";
-    return "#5d9cec";
-};
-
-const getStatusTone = (
-    status?: string,
-): "success" | "danger" | "warning" | "info" => {
-    const normalized = normalizeText(status);
-    if (normalized.includes("fechado")) return "success";
-    if (normalized.includes("perdido")) return "danger";
-    if (normalized.includes("visita")) return "warning";
-    return "info";
-};
-
-const DRAG_ACTIVATION_DISTANCE = 5;
-const DRAG_ACTIVATION_DELAY_MS = 250;
-const KANBAN_PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 400;
-
-type LeadPointerSession = {
-    leadId: string;
-    startX: number;
-    startY: number;
-    draggableElement: HTMLDivElement;
-    isInteractiveTarget: boolean;
-    hasDragged: boolean;
-    timerId: number | null;
-};
-
-/* ------------------------------------------------------------------ */
-/*  KanbanColumn – cada coluna carrega seus leads de forma independente */
-/* ------------------------------------------------------------------ */
-type KanbanColumnProps = {
-    stage: Stage;
-    stageColumnId: string;
-    isOthersColumn?: boolean;
-    serverFilters: CrudFilter[];
-    accentColor: string;
-    isDragging: boolean;
-    activeDropColumn: string | null;
-    onDragOverColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
-    onDropColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
-    onDragStartLead: (e: React.DragEvent<HTMLDivElement>, lead: any) => void;
-    onDragEndLead: (e: React.DragEvent<HTMLDivElement>) => void;
-    onLeadPointerDown: (e: React.PointerEvent<HTMLDivElement>, leadId: string) => void;
-    onLeadPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
-    onLeadPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: any) => void;
-    onLeadPointerCancel: () => void;
-    openLeadDrawer: (lead: any) => void;
-    openLeadEdit: (leadId: string | number) => void;
-    stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
-};
-
-const KanbanColumn: React.FC<KanbanColumnProps> = ({
-    stage,
-    stageColumnId,
-    isOthersColumn,
-    serverFilters,
-    accentColor,
-    isDragging,
-    activeDropColumn,
-    onDragOverColumn,
-    onDropColumn,
-    onDragStartLead,
-    onDragEndLead,
-    onLeadPointerDown,
-    onLeadPointerMove,
-    onLeadPointerUp,
-    onLeadPointerCancel,
-    openLeadDrawer,
-    openLeadEdit,
-    stopActionPropagation,
-}) => {
-    const sentinelRef = useRef<HTMLDivElement | null>(null);
-
-    const columnFilters = useMemo<CrudFilter[]>(() => {
-        const base = [...serverFilters];
-        if (isOthersColumn) {
-            base.push({ field: "stage_id", operator: "null" as const, value: true });
-        } else {
-            base.push({ field: "stage_id", operator: "eq" as const, value: stageColumnId });
-        }
-        return base;
-    }, [serverFilters, stageColumnId, isOthersColumn]);
-
-    const { query: colQuery, result: colResult } = useInfiniteList({
-        resource: "clientes",
-        pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
-        filters: columnFilters,
-        liveMode: "auto",
-    });
-
-    const leads = useMemo(
-        () => colResult.data?.pages.flatMap((p) => p.data) ?? [],
-        [colResult.data],
-    );
-    const total = colResult.data?.pages[0]?.total ?? 0;
-    const isColLoading = colQuery.isLoading;
-    const isFetchingMore = colQuery.isFetchingNextPage;
-
-    // IntersectionObserver para infinite scroll automático
-    useEffect(() => {
-        const sentinel = sentinelRef.current;
-        if (!sentinel) return;
-        const observer = new IntersectionObserver(
-            (entries) => {
-                if (entries[0]?.isIntersecting && colResult.hasNextPage && !isFetchingMore) {
-                    colQuery.fetchNextPage();
-                }
-            },
-            { rootMargin: "200px" },
-        );
-        observer.observe(sentinel);
-        return () => observer.disconnect();
-    }, [colResult.hasNextPage, isFetchingMore, colQuery.fetchNextPage]);
-
-    const totalColuna = useMemo(
-        () => leads.reduce((acc: number, c: any) => acc + Number(c.conta_energia_media || 0), 0),
-        [leads],
-    );
-
-    const isDroppable = !isOthersColumn;
-    const isDropActive = isDroppable && isDragging && activeDropColumn === stageColumnId;
-
-    return (
-        <div
-            onDragOver={isDroppable ? (e) => onDragOverColumn(e, stageColumnId) : undefined}
-            onDrop={isDroppable ? (e) => onDropColumn(e, stageColumnId) : undefined}
-            className={`crm-kanban-column ${isDropActive ? "crm-kanban-column-drop-active" : ""}`}
-            style={{ backgroundColor: isDropActive ? "rgba(37, 99, 235, 0.08)" : undefined }}
-        >
-            <div className="crm-kanban-column-head">
-                <Text strong className="crm-kanban-column-title">{stage.nome}</Text>
-                <div className="crm-kanban-column-stats">
-                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>{total} leads</Text>
-                    <span style={{ color: "var(--crm-ink-300)" }}>·</span>
-                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>
-                        {formatCurrencyBRL(totalColuna, "R$ 0,00")}
-                    </Text>
-                </div>
-                <div
-                    style={{
-                        height: 3,
-                        width: "100%",
-                        background: `linear-gradient(90deg, ${accentColor}, ${accentColor}88)`,
-                        marginTop: 10,
-                        borderRadius: 999,
-                        opacity: 0.7,
-                    }}
-                />
-            </div>
-
-            <div className="crm-kanban-column-content" style={{ minHeight: 0 }}>
-                {isColLoading ? (
-                    <div style={{ display: "flex", justifyContent: "center", padding: 20 }}>
-                        <Spin size="small" />
-                    </div>
-                ) : leads.length === 0 ? (
-                    <div className="crm-kanban-empty">
-                        {isDropActive ? "Solte o lead aqui" : "Sem leads nesta etapa"}
-                    </div>
-                ) : (
-                    <>
-                        {leads.map((cliente: any) => (
-                            <div
-                                key={cliente.id}
-                                data-pan-ignore="true"
-                                draggable
-                                onPointerDown={(e) => onLeadPointerDown(e, String(cliente.id))}
-                                onPointerMove={onLeadPointerMove}
-                                onPointerUp={(e) => onLeadPointerUp(e, cliente)}
-                                onPointerCancel={onLeadPointerCancel}
-                                onDragStart={(e) => onDragStartLead(e, cliente)}
-                                onDragEnd={onDragEndLead}
-                                style={{ cursor: "grab", touchAction: "pan-y" }}
-                            >
-                                <Card
-                                    size="small"
-                                    interactive
-                                    className="crm-lead-card"
-                                    style={{ borderLeft: `3px solid ${accentColor}` }}
-                                    bodyStyle={{ padding: "14px 14px 10px" }}
-                                    actions={[
-                                        <Button
-                                            key={`edit-${cliente.id}`}
-                                            icon={<EditOutlined />}
-                                            size="small"
-                                            data-no-card-open="true"
-                                            onPointerDown={stopActionPropagation}
-                                            onClick={(e) => {
-                                                stopActionPropagation(e);
-                                                openLeadEdit(cliente.id);
-                                            }}
-                                        >
-                                            Editar
-                                        </Button>,
-                                        <Button
-                                            key={`show-${cliente.id}`}
-                                            icon={<EyeOutlined />}
-                                            size="small"
-                                            data-no-card-open="true"
-                                            onPointerDown={stopActionPropagation}
-                                            onClick={(e) => {
-                                                stopActionPropagation(e);
-                                                openLeadDrawer(cliente);
-                                            }}
-                                        >
-                                            Ver
-                                        </Button>,
-                                    ]}
-                                >
-                                    <div style={{ marginBottom: "8px" }}>
-                                        <Text strong className="crm-lead-card-title">{cliente.nome}</Text>
-                                    </div>
-                                    <div style={{ marginBottom: "8px" }}>
-                                        <TemperatureBadge value={resolveLeadTemperature(cliente)} />
-                                    </div>
-                                    <div className="crm-lead-card-meta">
-                                        {cliente.conta_energia_media > 0 && (
-                                            <Text style={{ fontSize: 13, color: "var(--crm-ink-700)", fontWeight: 600, letterSpacing: "-0.01em" }}>
-                                                {formatCurrencyBRL(cliente.conta_energia_media, "R$ 0,00")}
-                                            </Text>
-                                        )}
-                                        {cliente.responsavel && (
-                                            <Text style={{ fontSize: 11, color: "var(--crm-ink-500)" }}>
-                                                Resp: {cliente.responsavel}
-                                            </Text>
-                                        )}
-                                        <Text style={{ fontSize: 11, color: "var(--crm-ink-400)" }}>
-                                            {formatDateBR(cliente.created_at, "-")}
-                                        </Text>
-                                    </div>
-                                </Card>
-                            </div>
-                        ))}
-                        <div ref={sentinelRef} style={{ height: 1 }} />
-                        {isFetchingMore && (
-                            <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>
-                                <Spin size="small" />
-                            </div>
-                        )}
-                    </>
-                )}
-            </div>
-        </div>
-    );
-};
+const { Text } = Typography;
 
 /* ------------------------------------------------------------------ */
 /*  ClienteList – componente principal                                 */
@@ -480,17 +193,13 @@ export const ClienteList = () => {
         return filters;
     }, [debouncedSearch, responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidates]);
 
-    // Chave para forçar remount das colunas kanban quando filtros mudam
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
 
-    // Reset da página da lista quando filtros mudam
     useEffect(() => {
         setListPage(1);
     }, [serverFilters]);
 
     // ---- KPI filters (subset aplicável à View materializada) ----
-    // Nota: vw_kanban_kpis não tem coluna "responsavel" (texto), apenas "responsavel_id" (UUID).
-    // Filtragem por responsável é feita client-side nos kpiRows abaixo.
     const kpiFilters = useMemo<CrudFilter[]>(() => {
         const filters: CrudFilter[] = [];
 
@@ -1095,308 +804,25 @@ export const ClienteList = () => {
         );
     }
 
-    // ---- Header ----
-    const KommoHeader = () => (
-        <div className="crm-opportunities-header">
-            <div className="crm-opportunities-header-main">
-                <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                    <Title level={4} className="crm-opportunities-title" style={{ fontSize: 18 }}>
-                        Oportunidades
-                    </Title>
-                    <div className="crm-view-toggle">
-                        <Tooltip title="Kanban">
-                            <Button
-                                type="text"
-                                icon={<AppstoreOutlined />}
-                                aria-label="Exibir em kanban"
-                                style={{
-                                    color: viewType === "kanban" ? "#3b82f6" : "#94a3b8",
-                                    background: viewType === "kanban" ? "rgba(59, 130, 246, 0.08)" : "transparent",
-                                    borderRadius: 8,
-                                }}
-                                onClick={() => setViewType("kanban")}
-                            />
-                        </Tooltip>
-                        <Tooltip title="Lista">
-                            <Button
-                                type="text"
-                                icon={<BarsOutlined />}
-                                aria-label="Exibir em lista"
-                                style={{
-                                    color: viewType === "list" ? "#3b82f6" : "#94a3b8",
-                                    background: viewType === "list" ? "rgba(59, 130, 246, 0.08)" : "transparent",
-                                    borderRadius: 8,
-                                }}
-                                onClick={() => setViewType("list")}
-                            />
-                        </Tooltip>
-                    </div>
-                </div>
-
-                <div className="crm-opportunities-filters">
-                    <Input
-                        placeholder="Buscar leads..."
-                        prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
-                        value={searchText}
-                        onChange={(e) => setSearchText(e.target.value)}
-                        aria-label="Buscar lead"
-                        style={{
-                            width: 220,
-                            backgroundColor: "rgba(241, 245, 249, 0.8)",
-                            border: "1px solid rgba(148, 163, 184, 0.15)",
-                            borderRadius: 10,
-                            height: 36,
-                            fontSize: 13,
-                        }}
-                    />
-                    <Select
-                        placeholder="Responsável"
-                        allowClear
-                        value={responsavelFiltro}
-                        onChange={(v) => setResponsavelFiltro(v)}
-                        aria-label="Filtrar por responsavel"
-                        options={responsaveisDisponiveis.map((r) => ({ value: r, label: r }))}
-                        style={{ width: "180px" }}
-                        disabled={responsaveisDisponiveis.length === 0}
-                    />
-                    <Select
-                        value={temperaturaFiltro}
-                        onChange={(v) => setTemperaturaFiltro(v)}
-                        aria-label="Filtrar por temperatura"
-                        style={{ width: "170px" }}
-                        options={[
-                            { value: "todas", label: "Temperatura: Todas" },
-                            ...LEAD_TEMPERATURE_OPTIONS.map((o) => ({
-                                value: o.value,
-                                label: `Temperatura: ${o.label}`,
-                            })),
-                            ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({
-                                value: o.value,
-                                label: `Temperatura: ${o.label}`,
-                            })),
-                        ]}
-                    />
-                </div>
-
-                <CreateButton type="primary" icon={<PlusOutlined />} className="crm-focusable">
-                    Novo Lead
-                </CreateButton>
-                <ImportLeadsButton />
-                <Button
-                    icon={<SettingOutlined />}
-                    onClick={openStageManager}
-                    disabled={!canDeleteRecords}
-                    aria-label="Gerenciar colunas"
-                >
-                    Colunas
-                </Button>
-            </div>
-
-            {!canViewAllLeads ? (
-                <div style={{ padding: "0 20px 8px 20px" }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        Visão restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
-                    </Text>
-                </div>
-            ) : null}
-
-            <div className="crm-opportunities-kpis">
-                <div className="crm-kpi-grid">
-                    <StatCard
-                        title="Previsao de receita"
-                        value={kpis.totalValor}
-                        prefix={<DollarCircleOutlined style={{ color: "#3b82f6" }} />}
-                        accentColor="#3b82f6"
-                    />
-                    <StatCard
-                        title="Conversao"
-                        value={kpis.taxaConversao}
-                        suffix="%"
-                        prefix={<CheckCircleOutlined style={{ color: "#10b981" }} />}
-                        accentColor="#10b981"
-                        valueStyle={{ color: "#059669" }}
-                    />
-                    <StatCard
-                        title="Leads Ativos"
-                        value={kpis.totalLeads}
-                        prefix={<ArrowUpOutlined style={{ color: "#f59e0b" }} />}
-                        accentColor="#f59e0b"
-                    />
-                </div>
-                <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>
-                    Dica: clique e arraste no fundo do kanban para navegar horizontalmente.
-                </Text>
-            </div>
-        </div>
-    );
-
-    // ---- Kanban view ----
-    const renderKanbanView = () => {
-        if (kpiError) {
-            return (
-                <div style={{ padding: 20 }}>
-                    <EmptyState
-                        title={
-                            hasKpiPolicyRecursion
-                                ? "Falha de policy RLS no Supabase"
-                                : "Não foi possível carregar os leads"
-                        }
-                        description={
-                            hasKpiPolicyRecursion
-                                ? "O erro indica recursão infinita em policy. O acesso foi bloqueado."
-                                : kpiErrorMessage || "Revise as policies RLS."
-                        }
-                    />
-                </div>
-            );
-        }
-
-        if (!kpiQuery?.isLoading && kpis.totalLeads === 0) {
-            return (
-                <div style={{ padding: 20 }}>
-                    <EmptyState
-                        title="Nenhum lead para os filtros aplicados"
-                        description="Ajuste busca, responsável ou temperatura."
-                    />
-                </div>
-            );
-        }
-
-        return (
-            <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}>
-                <div
-                    ref={boardRef}
-                    className="crm-kanban-scroll crm-kanban-board"
-                    onMouseDown={handleBoardMouseDown}
-                    onMouseMove={handleBoardMouseMove}
-                    onMouseUp={stopBoardPan}
-                    onMouseLeave={stopBoardPan}
-                    style={{
-                        cursor: isDragging ? "default" : isBoardPanning ? "grabbing" : "grab",
-                        userSelect: isBoardPanning ? "none" : "auto",
-                    }}
-                >
-                    {stagesVisiveis.map((estagio) => {
-                        const stageColumnId = String(estagio.id ?? estagio.nome);
-                        const isOthers = estagio.nome === "Outros";
-                        const accentColor = estagio.cor || getStatusAccent(estagio.nome);
-
-                        return (
-                            <KanbanColumn
-                                key={`${stageColumnId}-${filterKey}`}
-                                stage={estagio}
-                                stageColumnId={stageColumnId}
-                                isOthersColumn={isOthers}
-                                serverFilters={serverFilters}
-                                accentColor={accentColor}
-                                isDragging={isDragging}
-                                activeDropColumn={activeDropColumn}
-                                onDragOverColumn={handleDragOver}
-                                onDropColumn={handleDrop}
-                                onDragStartLead={handleDragStart}
-                                onDragEndLead={handleDragEnd}
-                                onLeadPointerDown={handleLeadPointerDown}
-                                onLeadPointerMove={handleLeadPointerMove}
-                                onLeadPointerUp={handleLeadPointerUp}
-                                onLeadPointerCancel={clearLeadPointerSession}
-                                openLeadDrawer={openLeadDrawer}
-                                openLeadEdit={openLeadEdit}
-                                stopActionPropagation={stopLeadCardActionPropagation}
-                            />
-                        );
-                    })}
-                </div>
-            </div>
-        );
-    };
-
-    // ---- List view ----
-    const renderListView = () => (
-        <div className="crm-list-shell">
-            {listError ? (
-                <EmptyState
-                    title="Erro ao carregar leads"
-                    description={listErrorMessage || "Revise as policies RLS."}
-                />
-            ) : (
-                <Table
-                    dataSource={listData}
-                    rowKey="id"
-                    size="middle"
-                    loading={listQuery?.isLoading}
-                    pagination={{
-                        current: listPage,
-                        pageSize: 12,
-                        total: listTotal,
-                        position: ["bottomCenter"],
-                        showSizeChanger: false,
-                    }}
-                    onChange={(pagination) => {
-                        setListPage(pagination.current || 1);
-                    }}
-                    columns={[
-                        {
-                            title: "Nome do Lead",
-                            dataIndex: "nome",
-                            render: (text) => <b style={{ color: "var(--crm-ink-900)" }}>{text}</b>,
-                        },
-                        {
-                            title: "Etapa",
-                            key: "stage_id",
-                            render: (_, record: any) => {
-                                const stageName = resolveLeadStageName(record);
-                                return <Badge tone={getStatusTone(stageName)}>{stageName}</Badge>;
-                            },
-                        },
-                        {
-                            title: "Temperatura",
-                            key: "temperature",
-                            render: (_, record: any) => (
-                                <TemperatureBadge value={resolveLeadTemperature(record)} />
-                            ),
-                        },
-                        {
-                            title: "Responsável",
-                            dataIndex: "responsavel",
-                            render: (v) => v || "-",
-                        },
-                        {
-                            title: "Valor",
-                            dataIndex: "conta_energia_media",
-                            render: (v) => formatCurrencyBRL(v, "R$ 0,00"),
-                        },
-                        { title: "Telefone", dataIndex: "telefone" },
-                        {
-                            title: "",
-                            render: (_, record: any) => (
-                                <Space>
-                                    <Button
-                                        size="small"
-                                        icon={<EyeOutlined />}
-                                        onClick={() => openLeadDrawer(record)}
-                                    >
-                                        Ver
-                                    </Button>
-                                    <Button
-                                        size="small"
-                                        icon={<EditOutlined />}
-                                        onClick={() => openLeadEdit(record.id)}
-                                    >
-                                        Editar
-                                    </Button>
-                                </Space>
-                            ),
-                        },
-                    ]}
-                />
-            )}
-        </div>
-    );
-
     // ---- Main render ----
     return (
         <div className="crm-opportunities-page">
-            <KommoHeader />
+            <KanbanHeader
+                viewType={viewType}
+                onViewTypeChange={setViewType}
+                searchText={searchText}
+                onSearchChange={setSearchText}
+                responsavelFiltro={responsavelFiltro}
+                onResponsavelChange={setResponsavelFiltro}
+                responsaveisDisponiveis={responsaveisDisponiveis}
+                temperaturaFiltro={temperaturaFiltro}
+                onTemperaturaChange={setTemperaturaFiltro}
+                canDeleteRecords={canDeleteRecords}
+                canViewAllLeads={canViewAllLeads}
+                ownerDisplayName={ownerDisplayName}
+                onOpenStageManager={openStageManager}
+                kpis={kpis}
+            />
             <div
                 style={{
                     flex: 1,
@@ -1404,7 +830,49 @@ export const ClienteList = () => {
                     position: "relative",
                 }}
             >
-                {viewType === "kanban" ? renderKanbanView() : renderListView()}
+                {viewType === "kanban" ? (
+                    <KanbanBoard
+                        stagesVisiveis={stagesVisiveis}
+                        serverFilters={serverFilters}
+                        filterKey={filterKey}
+                        isDragging={isDragging}
+                        isBoardPanning={isBoardPanning}
+                        activeDropColumn={activeDropColumn}
+                        boardRef={boardRef}
+                        onBoardMouseDown={handleBoardMouseDown}
+                        onBoardMouseMove={handleBoardMouseMove}
+                        onBoardMouseUp={stopBoardPan}
+                        onDragOverColumn={handleDragOver}
+                        onDropColumn={handleDrop}
+                        onDragStartLead={handleDragStart}
+                        onDragEndLead={handleDragEnd}
+                        onLeadPointerDown={handleLeadPointerDown}
+                        onLeadPointerMove={handleLeadPointerMove}
+                        onLeadPointerUp={handleLeadPointerUp}
+                        onLeadPointerCancel={clearLeadPointerSession}
+                        openLeadDrawer={openLeadDrawer}
+                        openLeadEdit={openLeadEdit}
+                        stopActionPropagation={stopLeadCardActionPropagation}
+                        kpiError={kpiError}
+                        hasKpiPolicyRecursion={hasKpiPolicyRecursion}
+                        kpiErrorMessage={kpiErrorMessage}
+                        totalLeads={kpis.totalLeads}
+                        isKpiLoading={kpiQuery?.isLoading}
+                    />
+                ) : (
+                    <ListView
+                        listData={listData}
+                        listTotal={listTotal}
+                        listPage={listPage}
+                        isLoading={listQuery?.isLoading}
+                        listError={listError}
+                        listErrorMessage={listErrorMessage}
+                        onPageChange={setListPage}
+                        resolveLeadStageName={resolveLeadStageName}
+                        onView={openLeadDrawer}
+                        onEdit={openLeadEdit}
+                    />
+                )}
             </div>
 
             <Modal
