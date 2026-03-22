@@ -12,14 +12,15 @@ import {
 } from "@ant-design/icons";
 import { CreateButton } from "@refinedev/antd";
 import { ImportLeadsButton } from "../import-leads";
-import { Button, StatCard } from "../ui";
+import { Button } from "../ui";
 import {
     type LeadTemperatureTag,
     LEAD_AUTOMATIC_TEMPERATURE_OPTIONS,
     LEAD_TEMPERATURE_OPTIONS,
 } from "../../lib/leadTemperature";
+import { formatCurrencyBRL } from "../../lib/formatters";
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
 export interface KanbanHeaderProps {
     viewType: "kanban" | "list";
@@ -48,18 +49,19 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
     responsaveisDisponiveis,
     temperaturaFiltro,
     onTemperaturaChange,
-    canDeleteRecords,
     canViewAllLeads,
     ownerDisplayName,
     onOpenStageManager,
     kpis,
 }) => (
-    <div className="crm-opportunities-header">
-        <div className="crm-opportunities-header-main">
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <Title level={4} className="crm-opportunities-title" style={{ fontSize: 18 }}>
-                    Oportunidades
-                </Title>
+    <div className="crm-opportunities-header" style={{ padding: "12px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
+        
+        {/* LINHA PRINCIPAL: Filtros à esquerda/centro, Ações à direita */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+            
+            {/* GRUPO ESQUERDO: Alternador de Visão e Filtros */}
+            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
+                
                 <div className="crm-view-toggle">
                     <Tooltip title="Kanban">
                         <Button
@@ -88,101 +90,98 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                         />
                     </Tooltip>
                 </div>
+
+                <div className="crm-opportunities-filters" style={{ display: "flex", gap: "8px" }}>
+                    <Input
+                        placeholder="Buscar leads..."
+                        prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
+                        value={searchText}
+                        onChange={(e) => onSearchChange(e.target.value)}
+                        aria-label="Buscar lead"
+                        style={{
+                            width: 220,
+                            backgroundColor: "rgba(241, 245, 249, 0.8)",
+                            border: "1px solid rgba(148, 163, 184, 0.15)",
+                            borderRadius: 10,
+                            height: 36,
+                            fontSize: 13,
+                        }}
+                    />
+                    <Select
+                        placeholder="Responsável"
+                        allowClear
+                        value={responsavelFiltro}
+                        onChange={(v) => onResponsavelChange(v)}
+                        aria-label="Filtrar por responsavel"
+                        options={responsaveisDisponiveis.map((r) => ({ value: r, label: r }))}
+                        style={{ width: "180px" }}
+                        disabled={responsaveisDisponiveis.length === 0}
+                    />
+                    <Select
+                        value={temperaturaFiltro}
+                        onChange={(v) => onTemperaturaChange(v)}
+                        aria-label="Filtrar por temperatura"
+                        style={{ width: "170px" }}
+                        options={[
+                            { value: "todas", label: "Temperatura: Todas" },
+                            ...LEAD_TEMPERATURE_OPTIONS.map((o) => ({
+                                value: o.value,
+                                label: `Temperatura: ${o.label}`,
+                            })),
+                            ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({
+                                value: o.value,
+                                label: `Temperatura: ${o.label}`,
+                            })),
+                        ]}
+                    />
+                </div>
             </div>
 
-            <div className="crm-opportunities-filters">
-                <Input
-                    placeholder="Buscar leads..."
-                    prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
-                    value={searchText}
-                    onChange={(e) => onSearchChange(e.target.value)}
-                    aria-label="Buscar lead"
-                    style={{
-                        width: 220,
-                        backgroundColor: "rgba(241, 245, 249, 0.8)",
-                        border: "1px solid rgba(148, 163, 184, 0.15)",
-                        borderRadius: 10,
-                        height: 36,
-                        fontSize: 13,
-                    }}
-                />
-                <Select
-                    placeholder="Responsável"
-                    allowClear
-                    value={responsavelFiltro}
-                    onChange={(v) => onResponsavelChange(v)}
-                    aria-label="Filtrar por responsavel"
-                    options={responsaveisDisponiveis.map((r) => ({ value: r, label: r }))}
-                    style={{ width: "180px" }}
-                    disabled={responsaveisDisponiveis.length === 0}
-                />
-                <Select
-                    value={temperaturaFiltro}
-                    onChange={(v) => onTemperaturaChange(v)}
-                    aria-label="Filtrar por temperatura"
-                    style={{ width: "170px" }}
-                    options={[
-                        { value: "todas", label: "Temperatura: Todas" },
-                        ...LEAD_TEMPERATURE_OPTIONS.map((o) => ({
-                            value: o.value,
-                            label: `Temperatura: ${o.label}`,
-                        })),
-                        ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({
-                            value: o.value,
-                            label: `Temperatura: ${o.label}`,
-                        })),
-                    ]}
-                />
+            {/* GRUPO DIREITO: Botões de Ação Amarrados e Alinhados */}
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <CreateButton type="primary" icon={<PlusOutlined />} className="crm-focusable">
+                    Novo Lead
+                </CreateButton>
+                <ImportLeadsButton />
+                {/* A trava disabled={!canDeleteRecords} foi removida para ser sempre clicável */}
+                <Button
+                    icon={<SettingOutlined />}
+                    onClick={onOpenStageManager}
+                    aria-label="Gerenciar colunas"
+                >
+                    Colunas
+                </Button>
             </div>
-
-            <CreateButton type="primary" icon={<PlusOutlined />} className="crm-focusable">
-                Novo Lead
-            </CreateButton>
-            <ImportLeadsButton />
-            <Button
-                icon={<SettingOutlined />}
-                onClick={onOpenStageManager}
-                disabled={!canDeleteRecords}
-                aria-label="Gerenciar colunas"
-            >
-                Colunas
-            </Button>
         </div>
 
-        {!canViewAllLeads ? (
-            <div style={{ padding: "0 20px 8px 20px" }}>
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                    Visão restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
-                </Text>
+        {/* LINHA SECUNDÁRIA: Avisos e KPIs Compactos */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div>
+                {!canViewAllLeads ? (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                        Visão restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
+                    </Text>
+                ) : <div />} {/* Div vazia para manter o layout flex-between caso não haja aviso */}
             </div>
-        ) : null}
 
-        <div className="crm-opportunities-kpis">
-            <div className="crm-kpi-grid">
-                <StatCard
-                    title="Previsao de receita"
-                    value={kpis.totalValor}
-                    prefix={<DollarCircleOutlined style={{ color: "#3b82f6" }} />}
-                    accentColor="#3b82f6"
-                />
-                <StatCard
-                    title="Conversao"
-                    value={kpis.taxaConversao}
-                    suffix="%"
-                    prefix={<CheckCircleOutlined style={{ color: "#10b981" }} />}
-                    accentColor="#10b981"
-                    valueStyle={{ color: "#059669" }}
-                />
-                <StatCard
-                    title="Leads Ativos"
-                    value={kpis.totalLeads}
-                    prefix={<ArrowUpOutlined style={{ color: "#f59e0b" }} />}
-                    accentColor="#f59e0b"
-                />
+            {/* KPIs Compactos (Inline) para economizar MUITO espaço vertical */}
+            <div style={{ display: "flex", gap: "24px", background: "var(--crm-surface-2)", padding: "6px 16px", borderRadius: "8px", border: "1px solid var(--crm-border-subtle)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <DollarCircleOutlined style={{ color: "#3b82f6" }} />
+                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Receita:</Text>
+                    <Text strong style={{ fontSize: 13 }}>{formatCurrencyBRL(kpis.totalValor, "R$ 0,00")}</Text>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <CheckCircleOutlined style={{ color: "#10b981" }} />
+                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Conversão:</Text>
+                    <Text strong style={{ fontSize: 13, color: "#059669" }}>{kpis.taxaConversao}%</Text>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <ArrowUpOutlined style={{ color: "#f59e0b" }} />
+                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Ativos:</Text>
+                    <Text strong style={{ fontSize: 13 }}>{kpis.totalLeads}</Text>
+                </div>
             </div>
-            <Text type="secondary" style={{ fontSize: 12, display: "block", marginTop: 10 }}>
-                Dica: clique e arraste no fundo do kanban para navegar horizontalmente.
-            </Text>
         </div>
     </div>
 );

@@ -94,9 +94,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     return (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}>
+            {/* 🔥 MÁGICA 2: A classe 'is-dragging-board' é adicionada quando você segura num card */}
             <div
                 ref={boardRef}
-                className="crm-kanban-scroll crm-kanban-board"
+                className={`crm-kanban-scroll crm-kanban-board ${isDragging ? "is-dragging-board" : ""}`}
                 onMouseDown={onBoardMouseDown}
                 onMouseMove={onBoardMouseMove}
                 onMouseUp={onBoardMouseUp}

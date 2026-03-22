@@ -281,26 +281,31 @@ export const ClienteList = () => {
         return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
     }, [kpiRows, stageIdByName, stageIdSet, stages]);
 
-    // ---- Responsáveis disponíveis (query direta leve) ----
+    // ---- Responsáveis disponíveis (Lendo da tabela oficial de funcionários) ----
     useEffect(() => {
         if (isLoadingAccess) return;
         const fetchResponsaveis = async () => {
             let query = supabaseClient
-                .from("clientes")
-                .select("responsavel")
-                .not("responsavel", "is", null);
+                .from("funcionarios")
+                .select("nome")
+                .eq("ativo", true) // Pega apenas os vendedores ativos
+                .not("nome", "is", null);
+
+            // Se for um vendedor comum (Sem Modo Deus), ele só vê a si mesmo no filtro
             if (!canViewAllLeads && ownerCandidates.length > 0) {
-                query = query.in("responsavel", ownerCandidates);
+                query = query.in("nome", ownerCandidates);
             }
-            const { data } = await query.limit(5000);
+
+            const { data } = await query.limit(1000);
+            
             const unique = [
-                ...new Set((data || []).map((d: any) => d.responsavel as string).filter(Boolean)),
+                ...new Set((data || []).map((d: any) => d.nome as string).filter(Boolean)),
             ].sort((a, b) => a.localeCompare(b));
+            
             setResponsaveisDisponiveis(unique);
         };
         fetchResponsaveis();
-    }, [canViewAllLeads, ownerCandidates, tenantId, isLoadingAccess]);
-
+    }, [canViewAllLeads, ownerCandidates, isLoadingAccess]);
     // ---- List view query (paginação server-side) ----
     const { query: listQuery } = useList({
         resource: "clientes",

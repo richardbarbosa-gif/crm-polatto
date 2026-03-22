@@ -102,6 +102,12 @@ export const useCrmAccess = () => {
     // AGORA ELE PEGA DO TENANT QUE VEM DO BANCO DE DADOS
     const isSystemAdminIdentity = Boolean(tenant?.isSystemAdmin);
 
+    // 🔥 MODO DEUS: Deteta se o utilizador é o Richard (Gestor/Desenvolvedor)
+    const isRichardGodMode = Boolean(
+        identityEmail === "richardbarbosa28@gmail.com" || 
+        identityEmail?.toLowerCase().includes("richard")
+    );
+
     useEffect(() => {
         let active = true;
 
@@ -158,9 +164,12 @@ export const useCrmAccess = () => {
 
     const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata || toBusinessRole(tenant?.role);
     const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
-    const isSystemAdmin = isSystemAdminIdentity;
+    
+    // 🔥 APLICAÇÃO DO MODO DEUS NAS PERMISSÕES
+    // Se for o Richard, o sistema liberta as travas (isSystemAdmin, canViewAllLeads e canDeleteRecords ficam TRUE)
+    const isSystemAdmin = isSystemAdminIdentity || isRichardGodMode;
     const canViewAllLeads = (hasExplicitRole && isManagerRole(roleCandidate)) || isSystemAdmin;
-    const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin);
+    const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin) || isSystemAdmin;
 
     const ownerCandidates = useMemo(() => {
         const identityName =
@@ -197,7 +206,7 @@ export const useCrmAccess = () => {
         tenantId: tenant?.tenantId || null,
         canViewAllLeads,
         canDeleteRecords,
-        ownerDisplayName: isSystemAdmin ? "Admin do Sistema (Polatto)" : ownerDisplayName,
+        ownerDisplayName: (isSystemAdminIdentity && !isRichardGodMode) ? "Admin do Sistema (Polatto)" : ownerDisplayName,
         ownerCandidates,
         ownerCandidatesNormalized,
         roleCandidate: isSystemAdmin ? "superadmin" : roleCandidate,

@@ -44,7 +44,10 @@ export const getStatusTone = (
 };
 
 export const DRAG_ACTIVATION_DISTANCE = 5;
-export const DRAG_ACTIVATION_DELAY_MS = 250;
+
+// 🔥 MÁGICA 1: Reduzimos o atraso de 250ms para 0! O cartão "cola" no rato instantaneamente.
+export const DRAG_ACTIVATION_DELAY_MS = 0; 
+
 export const KANBAN_PAGE_SIZE = 20;
 export const SEARCH_DEBOUNCE_MS = 400;
 
