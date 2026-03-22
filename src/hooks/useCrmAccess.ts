@@ -17,54 +17,34 @@ type IdentityRecord = {
 const NON_CRM_ROLE_TERMS = new Set(["authenticated", "anon", "service_role", "supabase_admin"]);
 
 const toStringValue = (value: unknown): string | undefined => {
-    if (typeof value !== "string") {
-        return undefined;
-    }
-
+    if (typeof value !== "string") return undefined;
     const trimmed = value.trim();
     return trimmed ? trimmed : undefined;
 };
 
 const getLocalNameFromEmail = (email?: string | null): string | undefined => {
     const normalized = toStringValue(email);
-    if (!normalized || !normalized.includes("@")) {
-        return normalized || undefined;
-    }
-
+    if (!normalized || !normalized.includes("@")) return normalized || undefined;
     const [localPart] = normalized.split("@");
     return localPart || undefined;
 };
 
 const dedupeStrings = (values: Array<string | undefined>): string[] => {
     const normalizedMap = new Map<string, string>();
-
     values.forEach((value) => {
-        if (!value) {
-            return;
-        }
+        if (!value) return;
         const normalized = normalizeText(value);
-        if (!normalized) {
-            return;
-        }
-        if (!normalizedMap.has(normalized)) {
-            normalizedMap.set(normalized, value);
-        }
+        if (!normalized) return;
+        if (!normalizedMap.has(normalized)) normalizedMap.set(normalized, value);
     });
-
     return Array.from(normalizedMap.values());
 };
 
 const toBusinessRole = (value: unknown): string | undefined => {
     const parsed = toStringValue(value);
-    if (!parsed) {
-        return undefined;
-    }
-
+    if (!parsed) return undefined;
     const normalized = normalizeText(parsed);
-    if (!normalized || NON_CRM_ROLE_TERMS.has(normalized)) {
-        return undefined;
-    }
-
+    if (!normalized || NON_CRM_ROLE_TERMS.has(normalized)) return undefined;
     return parsed;
 };
 
@@ -75,9 +55,7 @@ export const matchesLeadOwner = (
     const responsavelNormalized = normalizeText(
         typeof responsavel === "string" ? responsavel : String(responsavel ?? ""),
     );
-    if (!responsavelNormalized) {
-        return false;
-    }
+    if (!responsavelNormalized) return false;
 
     return ownerCandidatesNormalized.some(
         (candidate) =>
@@ -99,25 +77,17 @@ export const useCrmAccess = () => {
 
     const identityEmail = toStringValue(identity?.email);
     
-    // AGORA ELE PEGA DO TENANT QUE VEM DO BANCO DE DADOS
-    const isSystemAdminIdentity = Boolean(tenant?.isSystemAdmin);
-
-    // 🔥 MODO DEUS: Deteta se o utilizador é o Richard (Gestor/Desenvolvedor)
-    const isRichardGodMode = Boolean(
-        identityEmail === "richardbarbosa28@gmail.com" || 
-        identityEmail?.toLowerCase().includes("richard")
-    );
+    // Agora vem do BANCO via TenantProvider → checkIsSystemAdmin()
+    const isSystemAdmin = Boolean(tenant?.isSystemAdmin);
 
     useEffect(() => {
         let active = true;
 
-        if (!identityEmail || isSystemAdminIdentity) {
+        if (!identityEmail || isSystemAdmin) {
             setEmployee(null);
             setEmployeeError(null);
             setIsEmployeeLoading(false);
-            return () => {
-                active = false;
-            };
+            return () => { active = false; };
         }
 
         setIsEmployeeLoading(true);
@@ -125,15 +95,11 @@ export const useCrmAccess = () => {
 
         fetchEmployeeByEmail(identityEmail)
             .then((employeeRecord) => {
-                if (!active) {
-                    return;
-                }
+                if (!active) return;
                 setEmployee(employeeRecord);
             })
             .catch((error: unknown) => {
-                if (!active) {
-                    return;
-                }
+                if (!active) return;
                 const message =
                     typeof error === "object" && error && "message" in error
                         ? String((error as { message?: unknown }).message || "Falha ao carregar acesso.")
@@ -142,15 +108,11 @@ export const useCrmAccess = () => {
                 setEmployee(null);
             })
             .finally(() => {
-                if (active) {
-                    setIsEmployeeLoading(false);
-                }
+                if (active) setIsEmployeeLoading(false);
             });
 
-        return () => {
-            active = false;
-        };
-    }, [identityEmail, isSystemAdminIdentity]);
+        return () => { active = false; };
+    }, [identityEmail, isSystemAdmin]);
 
     const roleFromMetadata = useMemo(() => {
         return (
@@ -165,9 +127,7 @@ export const useCrmAccess = () => {
     const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata || toBusinessRole(tenant?.role);
     const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
     
-    // 🔥 APLICAÇÃO DO MODO DEUS NAS PERMISSÕES
-    // Se for o Richard, o sistema liberta as travas (isSystemAdmin, canViewAllLeads e canDeleteRecords ficam TRUE)
-    const isSystemAdmin = isSystemAdminIdentity || isRichardGodMode;
+    // Permissões derivadas do banco — sem hacks
     const canViewAllLeads = (hasExplicitRole && isManagerRole(roleCandidate)) || isSystemAdmin;
     const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin) || isSystemAdmin;
 
@@ -206,7 +166,7 @@ export const useCrmAccess = () => {
         tenantId: tenant?.tenantId || null,
         canViewAllLeads,
         canDeleteRecords,
-        ownerDisplayName: (isSystemAdminIdentity && !isRichardGodMode) ? "Admin do Sistema (Polatto)" : ownerDisplayName,
+        ownerDisplayName: isSystemAdmin ? ownerDisplayName : ownerDisplayName,
         ownerCandidates,
         ownerCandidatesNormalized,
         roleCandidate: isSystemAdmin ? "superadmin" : roleCandidate,

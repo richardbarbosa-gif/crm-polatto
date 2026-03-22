@@ -41,24 +41,25 @@ const firstString = (...values: unknown[]): string | null => {
 };
 
 const mapMembership = (row: Record<string, unknown>): UsuarioEmpresa => {
-    // Agora ele sabe ler exatamente a coluna empresa_id
-    const tenantId = firstString(
-        row.empresa_id, row.tenant_id, row.company_id, row.id_empresa
-    );
+    const tenantId = firstString(row.empresa_id, row.tenant_id, row.company_id, row.id_empresa);
     const role = firstString(row.role, row.perfil, row.cargo, row.tipo);
-    // Agora ele sabe ler exatamente a coluna auth_uid
     const userId = firstString(row.auth_uid, row.user_id, row.usuario_id);
-    const email = firstString(row.email, row.usuario_email);
     const rawId = firstString(row.id, row.uuid) || "membership";
-
-    return { id: rawId, tenant_id: tenantId, role, user_id: userId, email, raw: row };
+    return { id: rawId, tenant_id: tenantId, role, user_id: userId, email: null, raw: row };
 };
 
-const findMembershipByColumn = async (column: string, value: string): Promise<UsuarioEmpresa | null> => {
+/**
+ * Busca o vínculo do usuário na utilizadores_empresas.
+ * A tabela só tem auth_uid (uuid) — não tem coluna email.
+ */
+const fetchMembership = async (userId?: string | null): Promise<UsuarioEmpresa | null> => {
+    const normalizedUserId = toStringValue(userId);
+    if (!normalizedUserId) return null;
+
     const { data, error } = await supabaseClient
         .from("utilizadores_empresas")
         .select("*")
-        .eq(column, value)
+        .eq("auth_uid", normalizedUserId)
         .limit(1)
         .maybeSingle();
 
@@ -70,28 +71,32 @@ const findMembershipByColumn = async (column: string, value: string): Promise<Us
     return data ? mapMembership(data as Record<string, unknown>) : null;
 };
 
-const fetchMembership = async (userId?: string | null, email?: string | null): Promise<UsuarioEmpresa | null> => {
-    // AQUI ESTAVA O ERRO! Adicionamos o "auth_uid" como a primeira coluna a ser buscada
-    const userIdColumns = ["auth_uid", "user_id", "usuario_id", "utilizador_id"];
-    const emailColumns = ["email", "usuario_email"];
-
-    const normalizedUserId = toStringValue(userId);
-    if (normalizedUserId) {
-        for (const column of userIdColumns) {
-            const member = await findMembershipByColumn(column, normalizedUserId);
-            if (member) return member;
-        }
-    }
-
+/**
+ * Verifica se o email do usuário está na tabela system_admins.
+ * Única fonte de verdade para superadmin — nunca hardcodar no frontend.
+ */
+const checkIsSystemAdmin = async (email?: string | null): Promise<boolean> => {
     const normalizedEmail = toStringValue(email)?.toLowerCase();
-    if (normalizedEmail) {
-        for (const column of emailColumns) {
-            const member = await findMembershipByColumn(column, normalizedEmail);
-            if (member) return member;
-        }
-    }
+    if (!normalizedEmail) return false;
 
-    return null;
+    try {
+        const { data, error } = await supabaseClient
+            .from("system_admins")
+            .select("id")
+            .eq("email", normalizedEmail)
+            .limit(1)
+            .maybeSingle();
+
+        if (error) {
+            if (isSupabaseMissingRelation(error)) return false;
+            console.warn("Erro ao verificar system_admins:", error.message);
+            return false;
+        }
+
+        return data !== null;
+    } catch {
+        return false;
+    }
 };
 
 type TenantProviderProps = { children: React.ReactNode };
@@ -107,12 +112,14 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
     const [membership, setMembership] = useState<UsuarioEmpresa | null>(null);
     const [isMembershipLoading, setIsMembershipLoading] = useState(false);
     const [membershipError, setMembershipError] = useState<string | null>(null);
+    const [isSystemAdmin, setIsSystemAdmin] = useState(false);
 
     const loadMembership = async () => {
         if (!identityEmail && !identityUserId) {
             setMembership(null);
             setMembershipError(null);
             setIsMembershipLoading(false);
+            setIsSystemAdmin(false);
             window.localStorage.removeItem("crm_tenant_id");
             return;
         }
@@ -121,7 +128,10 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
         setMembershipError(null);
 
         try {
-            const nextMembership = await fetchMembership(identityUserId, identityEmail);
+            const adminCheck = await checkIsSystemAdmin(identityEmail);
+            setIsSystemAdmin(adminCheck);
+
+            const nextMembership = await fetchMembership(identityUserId);
             setMembership(nextMembership);
             
             if (nextMembership?.tenant_id) {
@@ -129,13 +139,13 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             } else {
                 window.localStorage.removeItem("crm_tenant_id");
             }
-
         } catch (error: unknown) {
             const message = typeof error === "object" && error && "message" in error
                 ? String((error as { message?: unknown }).message || "Falha ao carregar vinculo do tenant.")
                 : "Falha ao carregar vinculo do tenant.";
             setMembershipError(message);
             setMembership(null);
+            setIsSystemAdmin(false);
             window.localStorage.removeItem("crm_tenant_id");
         } finally {
             setIsMembershipLoading(false);
@@ -148,8 +158,6 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
 
     const tenantId = membership?.tenant_id || null;
     const role = membership?.role || null;
-    
-    const isSystemAdmin = role === 'superadmin'; 
     const canAccessTenant = isSystemAdmin || Boolean(tenantId);
 
     const value = useMemo<TenantContextValue>(
