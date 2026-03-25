@@ -1,3 +1,62 @@
+/* NUCLEAR FIX: mata o gap branco sidebar/header */
+.ant-layout-sider .ant-layout-sider-children > :first-child,
+.ant-layout-sider .ant-layout-sider-children > div:first-child,
+.ant-layout-sider .ant-layout-sider-children > a:first-child {
+    padding: 0 !important;
+    margin: 0 !important;
+    height: 52px !important;
+    min-height: 52px !important;
+    max-height: 52px !important;
+    background: #0a1120 !important;
+}
+
+.ant-layout-sider-children {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #0a1120 !important;
+}
+
+.ant-layout-header.crm-topbar {
+    box-shadow: none !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.06) !important;
+}
+
+.crm-sider-brand {
+    margin: 0 !important;
+    padding: 0 16px !important;
+    height: 52px !important;
+    width: 100% !important;
+    background: #0a1120 !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.08) !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* Mata a linha branca fina entre header e sidebar brand */
+.ant-layout-sider {
+    border: none !important;
+    outline: none !important;
+}
+
+.ant-layout-sider-children > div:first-child {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+}
+
+.crm-topbar {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* Força a cor de fundo no canto superior esquerdo (interseção) */
+.ant-layout-sider .ant-layout-sider-trigger,
+.ant-layout-sider::before,
+.ant-layout-sider::after {
+    display: none !important;
+}
+
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Sora:wght@500;600;700&display=swap");
 
 /* ═══════════════════════════════════════════════════════════
@@ -1477,4 +1536,138 @@ html[data-theme="dark"] .crm-topbar-user-email {
 
 .crm-topbar .ant-switch-checked {
     background: rgba(96, 165, 250, 0.25) !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   FIX: Alinhamento sidebar brand + header (sem gap branco)
+   Colar no FINAL do premium-theme.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* Força o layout do Refine/AntD a não criar gap entre sidebar e header */
+.ant-layout {
+    min-height: 100vh !important;
+}
+
+.ant-layout .ant-layout {
+    background: transparent !important;
+}
+
+/* Remove qualquer padding/margin que o AntD injeta no header wrapper */
+.ant-layout-header {
+    padding: 0 !important;
+    margin: 0 !important;
+    line-height: normal !important;
+}
+
+/* Sidebar brand: mesma altura que o header, sem margin negativa */
+.crm-sider-brand {
+    margin: 0 !important;
+    width: 100% !important;
+    height: 52px !important;
+    padding: 0 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.08) !important;
+    background: linear-gradient(180deg, #0f1b2d 0%, #0a1120 100%) !important;
+    box-sizing: border-box !important;
+}
+
+.crm-sider-brand--collapsed {
+    padding: 0 8px !important;
+    justify-content: center !important;
+}
+
+/* O wrapper do sider title do Refine adiciona padding que desalinha */
+.ant-layout-sider .ant-layout-sider-children > div:first-child {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Header do Refine: garante mesma linha visual */
+.crm-topbar {
+    height: 52px !important;
+    line-height: 52px !important;
+    margin: 0 !important;
+    padding: 0 24px !important;
+    background: linear-gradient(135deg, #0c1524 0%, #0f1b2d 100%) !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.06) !important;
+    box-shadow: none !important;
+}
+
+/* Remove o box-shadow que cria a impressão de "duas linhas" */
+.ant-layout-sider {
+    box-shadow: none !important;
+}
+
+/* Garante que o canto superior esquerdo (interseção sidebar+header) é uniforme */
+.ant-layout-sider .ant-layout-sider-children {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    overflow: hidden !important;
+}
+
+/* Dark mode: mesma correção */
+html[data-theme="dark"] .crm-sider-brand {
+    background: linear-gradient(180deg, #0f1b2d 0%, #0a1120 100%) !important;
+    border-bottom: 1px solid rgba(96, 165, 250, 0.06) !important;
+}
+
+html[data-theme="dark"] .crm-topbar {
+    box-shadow: none !important;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   KANBAN POLISH — Colar no FINAL do premium-theme.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* Colunas com fundo sutil e separação visual */
+.crm-kanban-column {
+    background: rgba(248, 250, 252, 0.5) !important;
+    border-radius: 10px !important;
+    padding: 0 6px !important;
+    margin-right: 4px !important;
+    border: 1px solid var(--crm-border-subtle) !important;
+}
+
+html[data-theme="dark"] .crm-kanban-column {
+    background: rgba(255, 255, 255, 0.02) !important;
+    border-color: rgba(240, 246, 252, 0.04) !important;
+}
+
+/* Cards refinados */
+.crm-lead-card {
+    border-radius: 12px !important;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.12s ease !important;
+}
+
+.crm-lead-card:hover {
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06) !important;
+}
+
+html[data-theme="dark"] .crm-lead-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Header compacto */
+.crm-opportunities-header {
+    min-height: auto !important;
+}
+
+/* Board respira mais */
+.crm-kanban-board {
+    padding: 12px 16px !important;
+    gap: 8px !important;
+}
+
+/* Coluna header mais limpo */
+.crm-kanban-column-head {
+    padding: 10px 6px 12px !important;
+}
+
+/* Scroll suave nas colunas */
+.crm-kanban-column-content {
+    padding: 0 2px 16px !important;
+    scroll-behavior: smooth;
 }

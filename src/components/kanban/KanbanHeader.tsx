@@ -2,10 +2,7 @@ import React from "react";
 import { Input, Select, Tooltip, Typography } from "antd";
 import {
     AppstoreOutlined,
-    ArrowUpOutlined,
     BarsOutlined,
-    CheckCircleOutlined,
-    DollarCircleOutlined,
     PlusOutlined,
     SearchOutlined,
     SettingOutlined,
@@ -54,24 +51,36 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
     onOpenStageManager,
     kpis,
 }) => (
-    <div className="crm-opportunities-header" style={{ padding: "12px 24px", display: "flex", flexDirection: "column", gap: "12px" }}>
-        
-        {/* LINHA PRINCIPAL: Filtros à esquerda/centro, Ações à direita */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
-            
-            {/* GRUPO ESQUERDO: Alternador de Visão e Filtros */}
-            <div style={{ display: "flex", alignItems: "center", gap: "16px", flexWrap: "wrap" }}>
-                
-                <div className="crm-view-toggle">
+    <div
+        className="crm-opportunities-header"
+        style={{
+            padding: "10px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 8,
+            borderBottom: "1px solid var(--crm-border)",
+            background: "var(--crm-surface-1)",
+        }}
+    >
+        {/* LINHA ÚNICA: Tudo junto */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+
+            {/* Esquerda: View toggle + Filtros */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {/* View toggle */}
+                <div style={{ display: "flex", gap: 2, background: "var(--crm-surface-2)", borderRadius: 8, padding: 2 }}>
                     <Tooltip title="Kanban">
                         <Button
                             type="text"
                             icon={<AppstoreOutlined />}
-                            aria-label="Exibir em kanban"
+                            aria-label="Kanban"
                             style={{
                                 color: viewType === "kanban" ? "#3b82f6" : "#94a3b8",
-                                background: viewType === "kanban" ? "rgba(59, 130, 246, 0.08)" : "transparent",
-                                borderRadius: 8,
+                                background: viewType === "kanban" ? "rgba(59,130,246,0.08)" : "transparent",
+                                borderRadius: 6,
+                                width: 32,
+                                height: 32,
+                                padding: 0,
                             }}
                             onClick={() => onViewTypeChange("kanban")}
                         />
@@ -80,108 +89,107 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                         <Button
                             type="text"
                             icon={<BarsOutlined />}
-                            aria-label="Exibir em lista"
+                            aria-label="Lista"
                             style={{
                                 color: viewType === "list" ? "#3b82f6" : "#94a3b8",
-                                background: viewType === "list" ? "rgba(59, 130, 246, 0.08)" : "transparent",
-                                borderRadius: 8,
+                                background: viewType === "list" ? "rgba(59,130,246,0.08)" : "transparent",
+                                borderRadius: 6,
+                                width: 32,
+                                height: 32,
+                                padding: 0,
                             }}
                             onClick={() => onViewTypeChange("list")}
                         />
                     </Tooltip>
                 </div>
 
-                <div className="crm-opportunities-filters" style={{ display: "flex", gap: "8px" }}>
-                    <Input
-                        placeholder="Buscar leads..."
-                        prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 13 }} />}
-                        value={searchText}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        aria-label="Buscar lead"
-                        style={{
-                            width: 220,
-                            backgroundColor: "rgba(241, 245, 249, 0.8)",
-                            border: "1px solid rgba(148, 163, 184, 0.15)",
-                            borderRadius: 10,
-                            height: 36,
-                            fontSize: 13,
-                        }}
-                    />
-                    <Select
-                        placeholder="Responsável"
-                        allowClear
-                        value={responsavelFiltro}
-                        onChange={(v) => onResponsavelChange(v)}
-                        aria-label="Filtrar por responsavel"
-                        options={responsaveisDisponiveis.map((r) => ({ value: r, label: r }))}
-                        style={{ width: "180px" }}
-                        disabled={responsaveisDisponiveis.length === 0}
-                    />
-                    <Select
-                        value={temperaturaFiltro}
-                        onChange={(v) => onTemperaturaChange(v)}
-                        aria-label="Filtrar por temperatura"
-                        style={{ width: "170px" }}
-                        options={[
-                            { value: "todas", label: "Temperatura: Todas" },
-                            ...LEAD_TEMPERATURE_OPTIONS.map((o) => ({
-                                value: o.value,
-                                label: `Temperatura: ${o.label}`,
-                            })),
-                            ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({
-                                value: o.value,
-                                label: `Temperatura: ${o.label}`,
-                            })),
-                        ]}
-                    />
+                {/* Search */}
+                <Input
+                    placeholder="Buscar..."
+                    prefix={<SearchOutlined style={{ color: "#94a3b8", fontSize: 12 }} />}
+                    value={searchText}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                    style={{
+                        width: 180,
+                        backgroundColor: "var(--crm-surface-2)",
+                        border: "1px solid var(--crm-border-subtle)",
+                        borderRadius: 8,
+                        height: 32,
+                        fontSize: 12.5,
+                    }}
+                />
+
+                {/* Filters */}
+                <Select
+                    placeholder="Responsável"
+                    allowClear
+                    value={responsavelFiltro}
+                    onChange={(v) => onResponsavelChange(v)}
+                    options={responsaveisDisponiveis.map((r) => ({ value: r, label: r }))}
+                    style={{ width: 150, height: 32 }}
+                    size="small"
+                    disabled={responsaveisDisponiveis.length === 0}
+                />
+                <Select
+                    value={temperaturaFiltro}
+                    onChange={(v) => onTemperaturaChange(v)}
+                    style={{ width: 140, height: 32 }}
+                    size="small"
+                    options={[
+                        { value: "todas", label: "Todas temp." },
+                        ...LEAD_TEMPERATURE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                        ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+                    ]}
+                />
+            </div>
+
+            {/* Centro: KPIs inline */}
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Receita</Text>
+                    <Text style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "var(--crm-ink-900)" }}>
+                        {formatCurrencyBRL(kpis.totalValor, "R$ 0")}
+                    </Text>
+                </div>
+                <div style={{ width: 1, height: 16, background: "var(--crm-border)" }} />
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Conv.</Text>
+                    <Text style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "#059669" }}>
+                        {kpis.taxaConversao}%
+                    </Text>
+                </div>
+                <div style={{ width: 1, height: 16, background: "var(--crm-border)" }} />
+                <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Ativos</Text>
+                    <Text style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "var(--crm-ink-900)" }}>
+                        {kpis.totalLeads}
+                    </Text>
                 </div>
             </div>
 
-            {/* GRUPO DIREITO: Botões de Ação Amarrados e Alinhados */}
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <CreateButton type="primary" icon={<PlusOutlined />} className="crm-focusable">
+            {/* Direita: Actions */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <CreateButton type="primary" icon={<PlusOutlined />} size="small" className="crm-focusable" style={{ height: 32, fontSize: 12.5, borderRadius: 8 }}>
                     Novo Lead
                 </CreateButton>
                 <ImportLeadsButton />
-                {/* A trava disabled={!canDeleteRecords} foi removida para ser sempre clicável */}
                 <Button
                     icon={<SettingOutlined />}
                     onClick={onOpenStageManager}
                     aria-label="Gerenciar colunas"
+                    size="small"
+                    style={{ height: 32, fontSize: 12.5, borderRadius: 8 }}
                 >
                     Colunas
                 </Button>
             </div>
         </div>
 
-        {/* LINHA SECUNDÁRIA: Avisos e KPIs Compactos */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div>
-                {!canViewAllLeads ? (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        Visão restrita: exibindo apenas leads vinculados a {ownerDisplayName}.
-                    </Text>
-                ) : <div />} {/* Div vazia para manter o layout flex-between caso não haja aviso */}
-            </div>
-
-            {/* KPIs Compactos (Inline) para economizar MUITO espaço vertical */}
-            <div style={{ display: "flex", gap: "24px", background: "var(--crm-surface-2)", padding: "6px 16px", borderRadius: "8px", border: "1px solid var(--crm-border-subtle)" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <DollarCircleOutlined style={{ color: "#3b82f6" }} />
-                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Receita:</Text>
-                    <Text strong style={{ fontSize: 13 }}>{formatCurrencyBRL(kpis.totalValor, "R$ 0,00")}</Text>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <CheckCircleOutlined style={{ color: "#10b981" }} />
-                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Conversão:</Text>
-                    <Text strong style={{ fontSize: 13, color: "#059669" }}>{kpis.taxaConversao}%</Text>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                    <ArrowUpOutlined style={{ color: "#f59e0b" }} />
-                    <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Ativos:</Text>
-                    <Text strong style={{ fontSize: 13 }}>{kpis.totalLeads}</Text>
-                </div>
-            </div>
-        </div>
+        {/* Aviso de visão restrita (só aparece se necessário) */}
+        {!canViewAllLeads && (
+            <Text type="secondary" style={{ fontSize: 11 }}>
+                Visão restrita: exibindo leads de {ownerDisplayName}.
+            </Text>
+        )}
     </div>
 );

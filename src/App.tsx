@@ -1,4 +1,5 @@
 import { Authenticated, Refine } from "@refinedev/core";
+import { PolattoLogo } from "./components/polatto-logo";
 import { DevtoolsPanel, DevtoolsProvider } from "@refinedev/devtools";
 import { RefineKbar, RefineKbarProvider } from "@refinedev/kbar";
 import {
@@ -57,13 +58,7 @@ import {
 
 const CustomTitle = ({ collapsed }: { collapsed?: boolean }) => (
     <div className={`crm-sider-brand ${collapsed ? "crm-sider-brand--collapsed" : ""}`}>
-        <div className="crm-sider-brand__monogram" aria-hidden="true">P</div>
-        {!collapsed && (
-            <>
-                <span className="crm-sider-brand__name">POLATTO</span>
-                <span className="crm-sider-brand__badge">CRM</span>
-            </>
-        )}
+        <PolattoLogo collapsed={collapsed} variant="sidebar" size="sm" />
     </div>
 );
 
@@ -225,17 +220,7 @@ function App() {
                                                 </Authenticated>
                                             }
                                         >
-                                            <Route path="/login" element={<AuthPage type="login" title={
-                                                <div className="crm-auth-brand">
-                                                    <div className="crm-auth-brand__icon">
-                                                        <svg aria-hidden="true" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="currentColor" />
-                                                        </svg>
-                                                    </div>
-                                                    <h1 className="crm-auth-brand__name">Polatto</h1>
-                                                    <span className="crm-auth-brand__tagline">energia solar</span>
-                                                </div>
-                                            } />} />
+                                           <Route path="/login" element={<AuthPage type="login" title={<PolattoLogo variant="login" size="lg" />} />} />
                                             <Route path="/register" element={<AuthPage type="register" />} />
                                             <Route path="/forgot-password" element={<AuthPage type="forgotPassword" />} />
                                         </Route>

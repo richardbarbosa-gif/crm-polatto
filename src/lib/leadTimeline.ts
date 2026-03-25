@@ -3,7 +3,7 @@ import type { DocumentoLeadRecord } from "../types/db";
 import { supabaseClient } from "../utility";
 
 export const LEAD_FILES_BUCKET = "lead-files";
-export const MAX_PDF_FILE_SIZE_BYTES = 15 * 1024 * 1024;
+export const MAX_PDF_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — limite reduzido
 
 export type LeadTimelineEntry = {
     id: string;
@@ -41,7 +41,7 @@ export type UploadNewLeadDocumentResult = {
     path: string;
     documentId?: string;
     version: number;
-    status: "concluido";
+    status: "ativo";
 };
 
 export type LeadUploadProgressStatus = "enviando" | "processando" | "concluido";
@@ -475,14 +475,14 @@ export const uploadNewLeadDocument = async (
     }
 
     const payload = {
-        tenant_id: tenantId || undefined,
+        tenant_id: tenantId || null,
         cliente_id: clienteId,
         tipo,
         nome_arquivo: file.name,
         caminho_storage: path,
         tamanho_bytes: file.size,
         versao: nextVersion,
-        status: "concluido",
+        status: "ativo",
         enviado_por: enviadoPor || null,
     };
 
@@ -507,7 +507,7 @@ export const uploadNewLeadDocument = async (
         path,
         documentId: insertedData?.id ? String(insertedData.id) : undefined,
         version: nextVersion,
-        status: "concluido",
+        status: "ativo",
     };
 };
 
@@ -527,7 +527,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
 
     const rows = (data || []) as DocumentoLeadRecord[];
     const visibleRows = rows.filter((row) => {
-        const status = String(row.status || "concluido").toLowerCase();
+        const status = String(row.status || "ativo").toLowerCase();
         return status !== "excluido";
     });
 
@@ -538,7 +538,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
             const fileType = (item.tipo as LeadDocumentType) || inferFileType(nomeArquivo);
             const size = typeof item.tamanho_bytes === "number" ? item.tamanho_bytes : 0;
             const versao = typeof item.versao === "number" ? item.versao : 1;
-            const status = String(item.status || "concluido");
+            const status = String(item.status || "ativo");
 
             if (!fullPath) {
                 return {
