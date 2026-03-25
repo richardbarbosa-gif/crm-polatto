@@ -2,12 +2,14 @@ import { Authenticated, Refine } from "@refinedev/core";
 import { PolattoLogo } from "./components/polatto-logo";
 import { DevtoolsPanel, DevtoolsProvider } from "@refinedev/devtools";
 import { RefineKbar, RefineKbarProvider } from "@refinedev/kbar";
+import { ChatPlaceholderPage } from "./pages/chat";
 import {
     AuthPage,
     ErrorComponent,
     ThemedLayout,
     ThemedSider,
     useNotificationProvider,
+    
 } from "@refinedev/antd";
 import "@refinedev/antd/dist/reset.css";
 
@@ -32,7 +34,8 @@ import {
     SettingOutlined,
     UsergroupAddOutlined,
     ProfileOutlined,
-    FlagOutlined
+    FlagOutlined,
+    MessageOutlined,
 } from "@ant-design/icons";
 
 import authProvider from "./authProvider";
@@ -139,6 +142,11 @@ function App() {
                                         list: "/insights/logs",
                                         meta: { label: "Logs", parent: "insights", icon: <ProfileOutlined /> },
                                     },
+                                    {
+    name: "chat",
+    list: "/chat",
+    meta: { label: "Chat", icon: <MessageOutlined /> },
+},
                                     { name: "atividades_lead" },
                                     { name: "tarefas" },
                                     { name: "pipeline_stages" },
@@ -210,6 +218,7 @@ function App() {
                                             <Route path="/insights/gains-losses" element={<InsightsGainsLossesPage />} />
                                             <Route path="/insights/activities" element={<InsightsActivitiesPage />} />
                                             <Route path="/insights/logs" element={<InsightsActivityLogPage />} />
+                                            <Route path="/chat" element={<ChatPlaceholderPage />} />
                                             <Route path="*" element={<ErrorComponent />} />
                                         </Route>
 

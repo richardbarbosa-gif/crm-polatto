@@ -1,6 +1,7 @@
 import { Create, useForm } from "@refinedev/antd";
 import { useGo, useList } from "@refinedev/core";
 import { UploadOutlined } from "@ant-design/icons";
+import { useTenantSegmento } from "../../hooks/useTenantSegmento";
 import {
     Button,
     Card,
@@ -58,6 +59,8 @@ export const ClienteCreate = () => {
     const go = useGo();
     const { tenantId } = useTenant();
     const { ownerDisplayName } = useCrmAccess();
+    const { isEnergiaSolar } = useTenantSegmento();
+    
     const pendingFilesRef = useRef<{
         propostaFile: File | null;
         contaLuzFile: File | null;
@@ -495,14 +498,16 @@ export const ClienteCreate = () => {
                                 </Upload>
                             </Form.Item>
                         </Col>
-                        <Col xs={24} lg={12}>
-                            <Form.Item label="Conta de luz (PDF)">
-                                <Upload accept=".pdf,application/pdf" maxCount={1} beforeUpload={(file) => handleBeforeUpload("conta_luz", file)} fileList={toUploadFileList(contaLuzFile, "conta_luz")} onRemove={() => { setContaLuzFile(null); return true; }} disabled={isUploadingFiles}>
-                                    <Button icon={<UploadOutlined />}>Selecionar conta de luz</Button>
-                                </Upload>
-                            </Form.Item>
-                        </Col>
-                    </Row>
+                         {isEnergiaSolar && (
+        <Col xs={24} lg={12}>
+            <Form.Item label="Conta de luz (PDF)">
+                <Upload accept=".pdf,application/pdf" maxCount={1} beforeUpload={(file) => handleBeforeUpload("conta_luz", file)} fileList={toUploadFileList(contaLuzFile, "conta_luz")} onRemove={() => { setContaLuzFile(null); return true; }} disabled={isUploadingFiles}>
+                    <Button icon={<UploadOutlined />}>Selecionar conta de luz</Button>
+                </Upload>
+            </Form.Item>
+        </Col>
+    )}
+</Row>
 
                     {isUploadingFiles ? <Text type="secondary">Enviando documentos para o repositório oficial do lead...</Text> : null}
                 </Card>

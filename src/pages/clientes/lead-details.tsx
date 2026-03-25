@@ -18,6 +18,7 @@ import { Badge, Button, Card, TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
+import { useTenantSegmento } from "../../hooks/useTenantSegmento";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -130,6 +131,7 @@ export const LeadDetails = ({
     const automaticTemperature = resolveAutomaticLeadTemperature(stageDisplayName);
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
     const canDeleteDocuments = canDelete(role, isSystemAdmin);
+    const { isEnergiaSolar } = useTenantSegmento();
 
     useEffect(() => {
         setTemperatureTag(resolveLeadTemperature(record));
@@ -534,7 +536,7 @@ export const LeadDetails = ({
                 </div>
             </Card>
 
-            <Card title="Arquivos do lead (PDF)">
+            <Card title={isEnergiaSolar ? "Arquivos do lead (PDF)" : "Documentos do lead (PDF)"}>
                 <input
                     ref={propostaInputRef}
                     type="file"
@@ -558,13 +560,15 @@ export const LeadDetails = ({
                     >
                         Upload proposta
                     </Button>
-                    <Button
-                        icon={<UploadOutlined />}
-                        loading={uploadingKind === "conta_luz"}
-                        onClick={() => contaInputRef.current?.click()}
-                    >
-                        Upload conta de luz
-                    </Button>
+                   {isEnergiaSolar && (
+    <Button
+        icon={<UploadOutlined />}
+        loading={uploadingKind === "conta_luz"}
+        onClick={() => contaInputRef.current?.click()}
+    >
+        Upload conta de luz
+    </Button>
+)}
                 </Space>
                 {uploadStatusByKind.proposta ? (
                     <Text type="secondary" style={{ display: "block" }}>

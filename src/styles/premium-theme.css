@@ -1671,3 +1671,46 @@ html[data-theme="dark"] .crm-lead-card:hover {
     padding: 0 2px 16px !important;
     scroll-behavior: smooth;
 }
+
+/* ═══════════════════════════════════════════════════════════
+   COMPANY SELECTOR — Colar no FINAL do premium-theme.css
+   ═══════════════════════════════════════════════════════════ */
+
+.crm-company-selector .ant-select-selector {
+    background: rgba(255, 255, 255, 0.06) !important;
+    border: 1px solid rgba(148, 163, 184, 0.12) !important;
+    border-radius: 8px !important;
+    height: 34px !important;
+    color: #e2e8f0 !important;
+    font-size: 12.5px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+.crm-company-selector .ant-select-selector:hover {
+    border-color: rgba(96, 165, 250, 0.3) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.crm-company-selector.ant-select-focused .ant-select-selector {
+    border-color: rgba(96, 165, 250, 0.5) !important;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12) !important;
+}
+
+.crm-company-selector .ant-select-selection-item {
+    color: #e2e8f0 !important;
+    font-size: 12.5px !important;
+}
+
+.crm-company-selector .ant-select-arrow {
+    color: #60a5fa !important;
+}
+
+html[data-theme="dark"] .crm-company-selector .ant-select-selector {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border-color: rgba(240, 246, 252, 0.1) !important;
+}
+
+html[data-theme="dark"] .crm-company-selector .ant-select-selector:hover {
+    border-color: rgba(96, 165, 250, 0.25) !important;
+}

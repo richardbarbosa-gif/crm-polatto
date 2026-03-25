@@ -3,6 +3,7 @@ import { useGetIdentity } from "@refinedev/core";
 import { Avatar, Layout as AntdLayout, Switch, Typography } from "antd";
 import { useContext } from "react";
 import { ColorModeContext } from "../../contexts/color-mode";
+import { CompanySelector } from "./company-selector";
 
 const { Text } = Typography;
 
@@ -17,6 +18,11 @@ export const Header = () => {
         <AntdLayout.Header className="crm-topbar">
             <div className="crm-topbar-inner">
                 <div className="crm-topbar-actions">
+                    {/* Seletor de empresa */}
+                    <CompanySelector />
+
+                    <div className="crm-topbar-divider" />
+
                     <Switch
                         checked={mode === "dark"}
                         checkedChildren={<MoonOutlined />}

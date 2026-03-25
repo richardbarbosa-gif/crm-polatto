@@ -1,0 +1,1 @@
+export { ChatPlaceholderPage } from "./page";
