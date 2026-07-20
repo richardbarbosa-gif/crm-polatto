@@ -88,7 +88,64 @@ export const ClienteList = () => {
         return () => clearTimeout(timer);
     }, [searchText]);
 
-    // ---- Stages query (inalterada) ----
+    // ---- Pipelines (múltiplos funis por tenant) ----
+    const { query: pipelinesQuery } = useList({
+        resource: "pipelines",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
+    const pipelines = useMemo(() => {
+        if (isSupabaseMissingRelation(pipelinesQuery?.error)) return [];
+        return ((pipelinesQuery?.data?.data as any[]) || []).filter((p) => p?.id && p?.nome);
+    }, [pipelinesQuery?.data?.data, pipelinesQuery?.error]);
+
+    const pipelineStorageKey = `crm_pipeline_${tenantId || "default"}`;
+    const [pipelineSelecionado, setPipelineSelecionado] = useState<string | undefined>(() => {
+        return window.localStorage.getItem(`crm_pipeline_${window.localStorage.getItem("crm_tenant_id") || "default"}`) || undefined;
+    });
+
+    const pipelineAtivo = useMemo(() => {
+        if (pipelines.length === 0) return undefined;
+        const persistido = pipelines.find((p) => String(p.id) === pipelineSelecionado);
+        return persistido ? String(persistido.id) : String(pipelines[0].id);
+    }, [pipelines, pipelineSelecionado]);
+
+    const handlePipelineChange = (pipelineId: string) => {
+        setPipelineSelecionado(pipelineId);
+        window.localStorage.setItem(pipelineStorageKey, pipelineId);
+    };
+
+    const pipelineOptions = useMemo(
+        () => pipelines.map((p) => ({ value: String(p.id), label: String(p.nome) })),
+        [pipelines],
+    );
+
+    // ---- Motivos de perda (configuráveis por tenant) ----
+    const { query: motivosPerdaQuery } = useList({
+        resource: "motivos_perda",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
+    const motivosPerda = useMemo(() => {
+        if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
+        return ((motivosPerdaQuery?.data?.data as any[]) || []).filter((m) => m?.nome);
+    }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
+
+    const [pendingLossDrop, setPendingLossDrop] = useState<{
+        lead: any;
+        novoStageId: string;
+    } | null>(null);
+    const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState<string | undefined>(undefined);
+    const [motivoPerdaLivre, setMotivoPerdaLivre] = useState("");
+    const [isSavingLossDrop, setIsSavingLossDrop] = useState(false);
+
+    // ---- Stages query ----
     const { query: stagesQuery } = useList({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
@@ -108,12 +165,21 @@ export const ClienteList = () => {
                 cor: s.cor ?? s.color,
                 ordem: s.ordem ?? s.order ?? s.sort_order,
                 persisted: s.id !== undefined && s.id !== null,
+                pipeline_id: s.pipeline_id ?? null,
+                probabilidade: s.probabilidade ?? null,
+                ganho: Boolean(s.ganho),
+                perdido: Boolean(s.perdido),
             }))
             .filter((s) => s.nome)
+            // Com funil ativo: mostra as etapas dele + legadas sem funil
+            .filter((s) => {
+                if (!pipelineAtivo) return true;
+                return s.pipeline_id == null || String(s.pipeline_id) === pipelineAtivo;
+            })
             .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
         if (normalized.length > 0) return normalized;
         return DEFAULT_STAGE_BLUEPRINT.map((s) => ({ ...s, persisted: false }));
-    }, [persistedStagesRaw]);
+    }, [persistedStagesRaw, pipelineAtivo]);
 
     const stageIdSet = useMemo(() => new Set(stages.map((s) => String(s.id ?? ""))), [stages]);
     const stageIdByName = useMemo(
@@ -338,6 +404,8 @@ export const ClienteList = () => {
     }, [selectedLeadId]);
 
     // ---- Realtime notification (apenas toast – dados atualizados via liveMode) ----
+    // Escuta as duas tabelas: "clientes" (modelo antigo) e "negocios" (modelo
+    // novo — a view clientes não emite eventos realtime). Só uma dispara.
     useEffect(() => {
         const channel = supabaseClient
             .channel("crm-leads-realtime-notifications")
@@ -348,6 +416,17 @@ export const ClienteList = () => {
                     const leadName = (payload.new as Record<string, unknown>)?.nome;
                     message.info(
                         `Novo lead recebido: ${typeof leadName === "string" ? leadName : "Sem nome"}`,
+                    );
+                },
+            )
+            .on(
+                "postgres_changes",
+                { event: "INSERT", schema: "public", table: "negocios" },
+                (payload) => {
+                    const registro = payload.new as Record<string, unknown>;
+                    const titulo = registro?.titulo ?? registro?.nome;
+                    message.info(
+                        `Novo lead recebido: ${typeof titulo === "string" ? titulo : "Sem nome"}`,
                     );
                 },
             )
@@ -428,6 +507,7 @@ export const ClienteList = () => {
                     title: nome,
                     cor: newStageColor,
                     ordem: maxOrder + 1,
+                    ...(pipelineAtivo ? { pipeline_id: pipelineAtivo } : {}),
                 },
                 successNotification: false,
             });
@@ -666,24 +746,12 @@ export const ClienteList = () => {
         if (activeDropColumn !== stageId) setActiveDropColumn(stageId);
     };
 
-    const handleDrop = async (
-        event: React.DragEvent<HTMLDivElement>,
+    const moverLeadParaStage = async (
+        leadArrastado: any,
         novoStageId: string,
+        motivoPerda?: string,
     ) => {
-        event.preventDefault();
-        setActiveDropColumn(null);
-        setIsDragging(false);
-
-        const leadArrastado = draggedLead;
-        if (!leadArrastado) {
-            message.warning("Lead não encontrado.");
-            return;
-        }
-
         const leadId = String(leadArrastado.id);
-        const currentStageId = resolveLeadStageId(leadArrastado);
-        if (currentStageId === novoStageId) return;
-
         const nextStage = stageById.get(novoStageId);
         const nextStageName = nextStage?.nome || "Sem etapa";
         const fromStageName = resolveLeadStageName(leadArrastado);
@@ -698,6 +766,7 @@ export const ClienteList = () => {
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
                     data_fechamento: isFechado ? new Date().toISOString() : null,
+                    ...(motivoPerda ? { motivo_perda: motivoPerda } : {}),
                 },
                 successNotification: () => ({
                     message: `Movido para ${nextStageName}`,
@@ -732,7 +801,9 @@ export const ClienteList = () => {
                     tenantId,
                     activityType: "status",
                     title: "Mudança de etapa",
-                    description: `${fromStageName} -> ${nextStageName}`,
+                    description: motivoPerda
+                        ? `${fromStageName} -> ${nextStageName} (motivo: ${motivoPerda})`
+                        : `${fromStageName} -> ${nextStageName}`,
                     fromStatus: fromStageName,
                     toStatus: nextStageName,
                     author: ownerDisplayName,
@@ -740,6 +811,66 @@ export const ClienteList = () => {
             }
         } catch {
             // Error notification is handled by refine.
+        }
+    };
+
+    const handleDrop = async (
+        event: React.DragEvent<HTMLDivElement>,
+        novoStageId: string,
+    ) => {
+        event.preventDefault();
+        setActiveDropColumn(null);
+        setIsDragging(false);
+
+        const leadArrastado = draggedLead;
+        if (!leadArrastado) {
+            message.warning("Lead não encontrado.");
+            return;
+        }
+
+        const currentStageId = resolveLeadStageId(leadArrastado);
+        if (currentStageId === novoStageId) return;
+
+        // Etapa de perda: pede o motivo antes de mover (configurável por tenant)
+        const nextStage = stageById.get(novoStageId);
+        const isPerdido =
+            Boolean(nextStage?.perdido) ||
+            normalizeText(nextStage?.nome).includes("perdido");
+
+        if (isPerdido) {
+            setMotivoPerdaSelecionado(undefined);
+            setMotivoPerdaLivre("");
+            setPendingLossDrop({ lead: leadArrastado, novoStageId });
+            return;
+        }
+
+        await moverLeadParaStage(leadArrastado, novoStageId);
+    };
+
+    const cancelarMotivoPerda = () => {
+        setPendingLossDrop(null);
+        setMotivoPerdaSelecionado(undefined);
+        setMotivoPerdaLivre("");
+    };
+
+    const confirmarMotivoPerda = async () => {
+        if (!pendingLossDrop) return;
+        const motivo =
+            motivoPerdaSelecionado === "__outro__" || motivosPerda.length === 0
+                ? motivoPerdaLivre.trim()
+                : motivoPerdaSelecionado;
+
+        if (!motivo) {
+            message.warning("Informe o motivo da perda.");
+            return;
+        }
+
+        setIsSavingLossDrop(true);
+        try {
+            await moverLeadParaStage(pendingLossDrop.lead, pendingLossDrop.novoStageId, motivo);
+            cancelarMotivoPerda();
+        } finally {
+            setIsSavingLossDrop(false);
         }
     };
 
@@ -827,6 +958,9 @@ export const ClienteList = () => {
                 ownerDisplayName={ownerDisplayName}
                 onOpenStageManager={openStageManager}
                 kpis={kpis}
+                pipelineOptions={pipelineOptions}
+                pipelineSelecionado={pipelineAtivo}
+                onPipelineChange={handlePipelineChange}
             />
             <div
                 style={{
@@ -1029,6 +1163,46 @@ export const ClienteList = () => {
                 onClose={closeTaskModal}
                 contextData={taskContextData}
             />
+
+            <Modal
+                title="Motivo da perda"
+                open={Boolean(pendingLossDrop)}
+                onCancel={cancelarMotivoPerda}
+                onOk={confirmarMotivoPerda}
+                okText="Confirmar perda"
+                okButtonProps={{ danger: true, loading: isSavingLossDrop }}
+                cancelButtonProps={{ disabled: isSavingLossDrop }}
+                destroyOnClose
+            >
+                <Text style={{ display: "block", marginBottom: 12 }}>
+                    Por que o negócio{" "}
+                    <Text strong>{pendingLossDrop?.lead?.nome || pendingLossDrop?.lead?.titulo || ""}</Text>{" "}
+                    foi perdido?
+                </Text>
+                {motivosPerda.length > 0 ? (
+                    <Select
+                        value={motivoPerdaSelecionado}
+                        onChange={(value) => setMotivoPerdaSelecionado(value)}
+                        placeholder="Selecione o motivo"
+                        style={{ width: "100%", marginBottom: 10 }}
+                        options={[
+                            ...motivosPerda.map((m: any) => ({
+                                value: String(m.nome),
+                                label: String(m.nome),
+                            })),
+                            { value: "__outro__", label: "Outro motivo..." },
+                        ]}
+                    />
+                ) : null}
+                {motivoPerdaSelecionado === "__outro__" || motivosPerda.length === 0 ? (
+                    <Input.TextArea
+                        value={motivoPerdaLivre}
+                        onChange={(e) => setMotivoPerdaLivre(e.target.value)}
+                        placeholder="Descreva o motivo da perda"
+                        rows={3}
+                    />
+                ) : null}
+            </Modal>
         </div>
     );
 };

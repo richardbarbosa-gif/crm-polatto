@@ -23,6 +23,7 @@ export interface InsightTaskRecord {
     data_vencimento?: string | null;
     created_at?: string | null;
     responsavel?: string | null;
+    concluido?: boolean | null;
 }
 
 export interface InsightStatusHistoryRecord {

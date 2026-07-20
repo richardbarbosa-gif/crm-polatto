@@ -34,6 +34,9 @@ export interface KanbanHeaderProps {
     ownerDisplayName: string | undefined;
     onOpenStageManager: () => void;
     kpis: { totalLeads: number; totalValor: number; taxaConversao: string };
+    pipelineOptions?: { value: string; label: string }[];
+    pipelineSelecionado?: string;
+    onPipelineChange?: (pipelineId: string) => void;
 }
 
 export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
@@ -50,6 +53,9 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
     ownerDisplayName,
     onOpenStageManager,
     kpis,
+    pipelineOptions,
+    pipelineSelecionado,
+    onPipelineChange,
 }) => (
     <div
         className="crm-opportunities-header"
@@ -67,6 +73,18 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
 
             {/* Esquerda: View toggle + Filtros */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {/* Seletor de funil (só aparece com pipelines configurados) */}
+                {pipelineOptions && pipelineOptions.length > 0 && onPipelineChange ? (
+                    <Select
+                        value={pipelineSelecionado}
+                        onChange={onPipelineChange}
+                        options={pipelineOptions}
+                        style={{ minWidth: 150, height: 32 }}
+                        size="small"
+                        aria-label="Funil ativo"
+                    />
+                ) : null}
+
                 {/* View toggle */}
                 <div style={{ display: "flex", gap: 2, background: "var(--crm-surface-2)", borderRadius: 8, padding: 2 }}>
                     <Tooltip title="Kanban">

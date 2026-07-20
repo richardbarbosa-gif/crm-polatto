@@ -1,5 +1,6 @@
 import {
     DollarCircleOutlined,
+    DownloadOutlined,
     ExperimentOutlined,
     RiseOutlined,
     WalletOutlined,
@@ -7,7 +8,8 @@ import {
 import { useList } from "@refinedev/core";
 import { Col, InputNumber, Row, Select, Skeleton, Space, Table, Typography } from "antd";
 import { useMemo, useState } from "react";
-import { Card, StatCard } from "../../components/ui";
+import { Button, Card, StatCard } from "../../components/ui";
+import { exportRowsToCsv } from "../../lib/exportCsv";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import {
     buildOwnerPerformance,
@@ -133,6 +135,24 @@ export const InsightsROIPage = () => {
                             style={{ width: 150 }}
                             placeholder="Custo/atividade"
                         />
+                        <Button
+                            icon={<DownloadOutlined />}
+                            disabled={ownerBreakdown.length === 0}
+                            onClick={() =>
+                                exportRowsToCsv(
+                                    "roi-comercial",
+                                    ownerBreakdown.map((linha) => ({
+                                        responsavel: linha.owner,
+                                        investimento: linha.investimento,
+                                        retorno: linha.retorno,
+                                        lucro: linha.lucro,
+                                        roi_pct: linha.roi,
+                                    })),
+                                )
+                            }
+                        >
+                            Exportar CSV
+                        </Button>
                     </Space>
                 }
             />

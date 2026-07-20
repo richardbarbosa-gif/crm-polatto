@@ -6,6 +6,10 @@ export type Stage = {
     cor?: string;
     ordem?: number;
     persisted?: boolean;
+    pipeline_id?: string | null;
+    probabilidade?: number | null;
+    ganho?: boolean;
+    perdido?: boolean;
 };
 
 export const DEFAULT_STAGES: Stage[] = [

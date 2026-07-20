@@ -1,4 +1,4 @@
-import { HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
 import { useList } from "@refinedev/core";
 import { Alert, Select, Skeleton, Space, Table, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -10,6 +10,7 @@ import {
     type InsightStatusHistoryRecord,
     type InsightTaskRecord,
 } from "../../lib/insights";
+import { exportRowsToCsv } from "../../lib/exportCsv";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard } from "./shared";
@@ -166,6 +167,26 @@ export const InsightsActivityLogPage = () => {
                             }}
                         >
                             Atualizar
+                        </Button>
+                        <Button
+                            icon={<DownloadOutlined />}
+                            disabled={rows.length === 0}
+                            onClick={() =>
+                                exportRowsToCsv(
+                                    "registro-de-atividades",
+                                    rows.map((row) => ({
+                                        data: row.date ?? "",
+                                        usuario: row.user,
+                                        tipo_objeto: row.objectType,
+                                        objeto: row.objectName,
+                                        evento: row.event,
+                                        antes: row.before,
+                                        depois: row.after,
+                                    })),
+                                )
+                            }
+                        >
+                            Exportar CSV
                         </Button>
                     </Space>
                 }
