@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Valores fake apenas para o build passar — nenhum segredo real no CI
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_KEY: ci-placeholder-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      - name: Build de produção
+        run: npx tsc && npx vite build

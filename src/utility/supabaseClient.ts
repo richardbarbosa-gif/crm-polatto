@@ -1,23 +1,24 @@
 import { createClient } from "@refinedev/supabase";
+import { env } from "./env";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
-
-// Interceptador para injetar o Tenant ID em TODAS as requisições ao Supabase
+// Interceptador que injeta o tenant em todas as requisições.
+// IMPORTANTE (segurança): este header é apenas informativo/telemetria.
+// O isolamento real é feito no banco via RLS com current_tenant_id(),
+// que deriva o tenant do usuário AUTENTICADO (auth.uid()) — forjar este
+// header não dá acesso a dados de outro tenant.
 const customFetch = (url: RequestInfo | URL, options?: RequestInit) => {
     const headers = new Headers(options?.headers);
-    
-    // Pega o tenant_id armazenado globalmente
+
     const tenantId = window.localStorage.getItem("crm_tenant_id");
-    
+
     if (tenantId) {
         headers.set("x-tenant-id", tenantId);
     }
-    
+
     return fetch(url, { ...options, headers });
 };
 
-export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+export const supabaseClient = createClient(env.supabaseUrl, env.supabaseKey, {
     db: {
         schema: "public",
     },

@@ -412,7 +412,14 @@ export const uploadNewLeadDocument = async (
     const timestamp = Date.now();
     const sanitizedBaseName = sanitizeStorageBaseName(file.name);
     const storageFileName = `${timestamp}_${sanitizedBaseName}.pdf`;
-    const resolvedTenantId = (tenantId || "global").toString();
+    // Segurança: a policy do Storage exige path {tenant_id}/... — sem tenant
+    // resolvido o upload seria rejeitado pelo banco de qualquer forma.
+    const resolvedTenantId = (tenantId || "").toString().trim();
+    if (!resolvedTenantId) {
+        throw new Error(
+            "Tenant não identificado para o upload. Recarregue a página e tente novamente.",
+        );
+    }
     const path = `${resolvedTenantId}/${String(clienteId)}/${storageFileName}`;
 
     const { data: existingDocs, error: existingDocsError } = await supabaseClient
