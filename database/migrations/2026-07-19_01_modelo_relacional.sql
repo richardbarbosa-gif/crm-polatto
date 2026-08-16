@@ -826,9 +826,17 @@ set search_path = public
 as $$
 declare
     v_pessoa_id uuid;
+    v_tenant uuid;
 begin
-    select pessoa_contato_principal_id into v_pessoa_id
+    select pessoa_contato_principal_id, tenant_id into v_pessoa_id, v_tenant
     from public.negocios where id = old.id;
+
+    -- Defesa em profundidade: esta função é SECURITY DEFINER e ignora a RLS.
+    -- A view já filtra por tenant (security_invoker), mas a checagem explícita
+    -- garante que nenhum caminho futuro permita editar negócio de outro tenant.
+    if v_tenant is null or not public.tenant_filter(v_tenant) then
+        raise exception 'Registro fora do seu tenant.' using errcode = '42501';
+    end if;
 
     -- Campos de pessoa
     if v_pessoa_id is not null then
@@ -885,7 +893,15 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+    v_tenant uuid;
 begin
+    select tenant_id into v_tenant from public.negocios where id = old.id;
+
+    if v_tenant is null or not public.tenant_filter(v_tenant) then
+        raise exception 'Registro fora do seu tenant.' using errcode = '42501';
+    end if;
+
     -- Soft delete: nunca perde dado por engano do usuário
     update public.negocios set deleted_at = now() where id = old.id;
     return old;

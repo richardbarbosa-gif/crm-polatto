@@ -11,19 +11,42 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-07-19_05_indices_performance.sql` | Índices para Kanban, busca por nome/email/telefone (trigram) e dedup por CPF/CNPJ |
 | `2026-07-19_06_auditoria_rls.sql` | `relatorio_rls()` (linter de isolamento) e `testar_isolamento_tenant()` (teste formal cross-tenant) |
 | `2026-07-19_07_monitoramento_erros.sql` | Tabela `client_errors` + RPC `registrar_erro_cliente` usada pelo frontend |
+| `2026-07-19_08_saas_readiness.sql` | `provisionar_tenant()` (onboarding self-service), planos e limites por tenant, `vw_dashboard_kpis` |
+| `2026-07-19_09_rls_tabelas_legadas.sql` | **RLS nas tabelas legadas** (tarefas, atividades, documentos, funcionários, metas, clientes): backfill do `tenant_id` + ativação guardada |
+
+## Testes automatizados
+
+As migrations são executadas e validadas contra um PostgreSQL real antes de
+qualquer deploy. A suíte cobre isolamento entre tenants, migração de dados,
+LGPD, limites de plano e a virada para a view de compatibilidade.
+
+```bash
+# Sobe um Postgres de teste (exemplo com instância local na porta 5433)
+PGHOST=/var/tmp/crmpg PGPORT=5433 PGUSER=postgres \
+  bash database/tests/run-migrations-test.sh
+```
+
+O runner: recria o banco, carrega `database/tests/00_harness_supabase.sql`
+(simula schemas `auth`/`storage`, roles e as tabelas legadas), executa as
+migrations em ordem, **repete a execução para provar idempotência** e roda as
+duas suítes de asserção. Qualquer falha aborta com a descrição do teste.
 
 ## Sequência de virada (produção)
 
-1. Rodar 01–07 em ordem.
+1. Rodar 01–09 em ordem.
 2. `select * from public.migrar_clientes_para_negocios(true);` — dry-run, conferir números.
 3. `select * from public.migrar_clientes_para_negocios(false);` — migra de verdade.
 4. `alter table public.clientes rename to clientes_legado;`
 5. Rodar o arquivo 01 novamente — agora ele cria a view de compatibilidade `clientes` (o frontend atual continua funcionando sem mudança).
 6. `select public.provisionar_defaults_tenant('<tenant_id>');` para cada tenant.
 7. `select * from public.backfill_tenant_dados_legados('<tenant_id_polatto>');` — carimba tenant nos dados legados.
-8. `select * from public.relatorio_rls();` — deve retornar **zero linhas**.
-9. `select * from public.testar_isolamento_tenant('<user_a>', '<user_b>');` — com usuários de tenants diferentes, deve dar OK.
-10. Adicionar na função `criar_usuario_equipe` (primeira linha do corpo): `perform public.enforce_rate_limit('criar_usuario_equipe', 10, interval '1 hour');`
+8. `select * from public.backfill_tenant_legado();` seguido de
+   `select * from public.diagnostico_tenant_legado();` (deve vir vazio) e
+   `select public.aplicar_rls_legado();` — fecha o isolamento das tabelas
+   legadas. A migration 09 já tenta fazer isso sozinha quando é seguro.
+9. `select * from public.relatorio_rls();` — deve retornar **zero linhas**.
+10. `select * from public.testar_isolamento_tenant('<user_a>', '<user_b>');` — com usuários de tenants diferentes, deve dar OK.
+11. Adicionar na função `criar_usuario_equipe` (primeira linha do corpo): `perform public.enforce_rate_limit('criar_usuario_equipe', 10, interval '1 hour');`
 
 ## Pós-virada
 

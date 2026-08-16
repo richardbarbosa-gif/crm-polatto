@@ -148,15 +148,20 @@ begin
     v_tenant := public.current_tenant_id();
 
     if v_tenant is not null then
-        -- Usuário comum: o tenant é SEMPRE o do vínculo (ignora o que veio do cliente)
+        -- Usuário logado: o tenant é SEMPRE o do vínculo. Ignora o que veio
+        -- do cliente — é isto que impede forjar tenant_id pelo frontend.
         new.tenant_id := v_tenant;
-    elsif public.is_system_admin() then
-        -- Superadmin sem vínculo: aceita o tenant informado, mas nunca null
-        if new.tenant_id is null then
-            raise exception 'Superadmin deve informar tenant_id explicitamente no insert em %.', tg_table_name;
-        end if;
+    elsif new.tenant_id is not null then
+        -- Sem usuário logado (service_role, SQL Editor, cron) ou superadmin
+        -- sem vínculo: aceita o tenant informado explicitamente. Não é uma
+        -- brecha: a RLS (tenant_filter) continua sendo a barreira real, e
+        -- ela nega qualquer requisição autenticada que não seja do tenant.
+        -- Sem esta ramificação o provisionamento de tenants é impossível.
+        null;
     else
-        raise exception 'tenant_id não pôde ser resolvido para o usuário autenticado (sem vínculo em utilizadores_empresas). Insert em % bloqueado.', tg_table_name;
+        raise exception
+            'tenant_id não pôde ser resolvido: usuário sem vínculo em utilizadores_empresas e nenhum tenant informado. Insert em % bloqueado.',
+            tg_table_name;
     end if;
 
     return new;
@@ -285,6 +290,38 @@ alter table if exists public.tarefas add column if not exists tenant_id uuid;
 alter table if exists public.funcionarios add column if not exists tenant_id uuid;
 alter table if exists public.atividades_lead add column if not exists tenant_id uuid;
 alter table if exists public.metas add column if not exists tenant_id uuid;
+
+-- ---------------------------------------------------------------------
+-- GRANTS: a RLS só entra em ação depois que o role tem permissão na tabela.
+-- Sem isto o frontend recebe "permission denied for table X" em tudo que a
+-- migration criou (o default privilege do projeto nem sempre cobre tabelas
+-- criadas por outro role no SQL Editor). Idempotente e seguro: a barreira de
+-- segurança continua sendo a RLS, não o GRANT.
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_tabela text;
+begin
+    foreach v_tabela in array array[
+        'negocios', 'organizacoes', 'pessoas', 'negocios_pessoas',
+        'pipelines', 'pipeline_stages', 'custom_fields',
+        'motivos_perda', 'tipos_atividade', 'tenant_features',
+        'consentimentos', 'politicas_retencao', 'planos', 'tenant_planos',
+        'audit_log', 'acessos_dados_pessoais', 'client_errors'
+    ] loop
+        if to_regclass('public.' || v_tabela) is not null then
+            execute format(
+                'grant select, insert, update, delete on public.%I to authenticated',
+                v_tabela
+            );
+        end if;
+    end loop;
+
+    -- Sequences das tabelas com identity/serial
+    execute 'grant usage on all sequences in schema public to authenticated';
+exception when insufficient_privilege then
+    raise notice 'Sem permissão para conceder GRANTs — verifique se o frontend acessa as tabelas novas.';
+end $$;
 
 -- ---------------------------------------------------------------------
 -- Item 1 do escopo: STORAGE lead-files isolado por tenant.

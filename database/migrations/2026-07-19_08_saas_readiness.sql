@@ -119,20 +119,27 @@ security definer
 set search_path = public
 as $$
 declare
+    v_tenant uuid;
     v_limite integer;
     v_usado bigint;
 begin
+    -- O tenant pode ainda não estar em new se a ordem de triggers mudar
+    v_tenant := coalesce(new.tenant_id, public.current_tenant_id());
+    if v_tenant is null then
+        return new;
+    end if;
+
     select pl.max_leads into v_limite
     from public.tenant_planos tp
     join public.planos pl on pl.id = tp.plano_id
-    where tp.tenant_id = new.tenant_id;
+    where tp.tenant_id = v_tenant;
 
     if v_limite is null then
-        return new; -- sem plano ou plano ilimitado
+        return new; -- sem plano vinculado ou plano ilimitado
     end if;
 
     select count(*) into v_usado from public.negocios n
-    where n.tenant_id = new.tenant_id and n.deleted_at is null;
+    where n.tenant_id = v_tenant and n.deleted_at is null;
 
     if v_usado >= v_limite then
         raise exception 'Limite de % leads do seu plano foi atingido. Faça upgrade para continuar.', v_limite
@@ -143,8 +150,13 @@ begin
 end;
 $$;
 
+-- ATENÇÃO À ORDEM: o Postgres dispara triggers BEFORE em ordem ALFABÉTICA.
+-- O prefixo "z_" garante que a checagem de limite rode DEPOIS de
+-- set_tenant_id — caso contrário new.tenant_id ainda estaria nulo e o
+-- limite do plano nunca seria aplicado.
 drop trigger if exists enforce_limite_leads on public.negocios;
-create trigger enforce_limite_leads
+drop trigger if exists z_enforce_limite_leads on public.negocios;
+create trigger z_enforce_limite_leads
 before insert on public.negocios
 for each row execute function public.fn_enforce_limite_leads();
 
@@ -155,24 +167,26 @@ security definer
 set search_path = public
 as $$
 declare
+    v_tenant uuid;
     v_limite integer;
     v_usado bigint;
 begin
-    if new.tenant_id is null then
+    v_tenant := coalesce(new.tenant_id, public.current_tenant_id());
+    if v_tenant is null then
         return new;
     end if;
 
     select pl.max_usuarios into v_limite
     from public.tenant_planos tp
     join public.planos pl on pl.id = tp.plano_id
-    where tp.tenant_id = new.tenant_id;
+    where tp.tenant_id = v_tenant;
 
     if v_limite is null then
         return new;
     end if;
 
     select count(*) into v_usado from public.funcionarios f
-    where f.tenant_id = new.tenant_id and coalesce(f.ativo, true) and f.deleted_at is null;
+    where f.tenant_id = v_tenant and coalesce(f.ativo, true) and f.deleted_at is null;
 
     if v_usado >= v_limite then
         raise exception 'Limite de % usuários do seu plano foi atingido. Faça upgrade para continuar.', v_limite
@@ -183,8 +197,10 @@ begin
 end;
 $$;
 
+-- Mesmo cuidado com a ordem alfabética dos triggers BEFORE (ver acima)
 drop trigger if exists enforce_limite_usuarios on public.funcionarios;
-create trigger enforce_limite_usuarios
+drop trigger if exists z_enforce_limite_usuarios on public.funcionarios;
+create trigger z_enforce_limite_usuarios
 before insert on public.funcionarios
 for each row execute function public.fn_enforce_limite_usuarios();
 
@@ -211,6 +227,7 @@ declare
     v_col text;
     v_role_col text;
     v_nome text;
+    v_pipeline_id uuid;
 begin
     v_user := auth.uid();
     if v_user is null then
@@ -287,24 +304,30 @@ begin
     -- Defaults do CRM (pipeline Vendas, etapas, motivos, tipos de atividade)
     perform public.provisionar_defaults_tenant(v_tenant);
 
-    -- Etapas default do pipeline (se o tenant não herdou nenhuma)
+    -- Etapas default do pipeline (se o tenant não herdou nenhuma).
+    -- O pipeline alvo é resolvido explicitamente: um cross join com LIMIT
+    -- daria resultado dependente da ordenação se houvesse mais de um funil.
     if not exists (
         select 1 from public.pipeline_stages ps where ps.tenant_id = v_tenant
     ) then
-        insert into public.pipeline_stages (tenant_id, pipeline_id, nome, cor, ordem, probabilidade, ganho, perdido)
-        select v_tenant, p.id, s.nome, s.cor, s.ordem, s.prob, s.ganho, s.perdido
-        from public.pipelines p,
-             (values
-                 ('Novo Lead', '#5d9cec', 1, 10, false, false),
-                 ('Contato Feito', '#8b5cf6', 2, 25, false, false),
-                 ('Proposta Enviada', '#ed8936', 3, 50, false, false),
-                 ('Em Negociação', '#3182ce', 4, 70, false, false),
-                 ('Fechado', '#82cf6e', 5, 100, true, false),
-                 ('Perdido', '#f56565', 6, 0, false, true)
-             ) as s(nome, cor, ordem, prob, ganho, perdido)
-        where p.tenant_id = v_tenant
-        order by p.ordem
-        limit 6;
+        select id into v_pipeline_id
+        from public.pipelines
+        where tenant_id = v_tenant
+        order by ordem, created_at
+        limit 1;
+
+        if v_pipeline_id is not null then
+            insert into public.pipeline_stages (tenant_id, pipeline_id, nome, cor, ordem, probabilidade, ganho, perdido)
+            select v_tenant, v_pipeline_id, s.nome, s.cor, s.ordem, s.prob, s.ganho, s.perdido
+            from (values
+                     ('Novo Lead', '#5d9cec', 1, 10, false, false),
+                     ('Contato Feito', '#8b5cf6', 2, 25, false, false),
+                     ('Proposta Enviada', '#ed8936', 3, 50, false, false),
+                     ('Em Negociação', '#3182ce', 4, 70, false, false),
+                     ('Fechado', '#82cf6e', 5, 100, true, false),
+                     ('Perdido', '#f56565', 6, 0, false, true)
+                 ) as s(nome, cor, ordem, prob, ganho, perdido);
+        end if;
     end if;
 
     -- Plano inicial: Starter

@@ -37,17 +37,20 @@ begin
       and c.relkind = 'r'
       and not c.relrowsecurity;
 
-    -- 2. Policies permissivas using(true) — anulam o isolamento por tenant
+    -- 2. Policies permissivas using(true) — anulam o isolamento por tenant.
+    --    "planos" é catálogo público de preços por definição, fica de fora.
     return query
     select (p.tablename || ' / ' || p.policyname)::text, 'policy'::text,
            'Policy com using(true) — não filtra por tenant'::text,
            'CRITICA'::text
     from pg_policies p
     where p.schemaname = 'public'
+      and p.tablename not in ('planos')
       and (btrim(coalesce(p.qual, '')) = 'true' or btrim(coalesce(p.with_check, '')) = 'true');
 
     -- 3. Views sem security_invoker — executam com privilégio do dono e
-    --    IGNORAM a RLS das tabelas de origem (vazamento cross-tenant)
+    --    IGNORAM a RLS das tabelas de origem (vazamento cross-tenant).
+    --    O Postgres grava a opção como "on", não "true".
     return query
     select c.relname::text, 'view'::text,
            'View sem security_invoker=on — bypassa a RLS das tabelas de origem'::text,
@@ -57,9 +60,9 @@ begin
     where n.nspname = 'public'
       and c.relkind = 'v'
       and not coalesce(
-          (select option_value = 'true'
+          (select lower(o.option_value) in ('true', 'on', '1', 'yes')
            from pg_options_to_table(c.reloptions) as o(option_name, option_value)
-           where option_name = 'security_invoker'
+           where o.option_name = 'security_invoker'
            limit 1),
           false
       );
