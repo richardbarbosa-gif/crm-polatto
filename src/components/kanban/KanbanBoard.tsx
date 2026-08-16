@@ -2,7 +2,7 @@ import React from "react";
 import type { CrudFilter } from "@refinedev/core";
 import { EmptyState } from "../ui";
 import { getStatusAccent } from "./types";
-import type { Stage } from "./types";
+import type { LeadNextTask, Stage } from "./types";
 import { KanbanColumn } from "./KanbanColumn";
 
 export interface KanbanBoardProps {
@@ -32,6 +32,7 @@ export interface KanbanBoardProps {
     kpiErrorMessage: string | null;
     totalLeads: number;
     isKpiLoading: boolean;
+    tasksByLead?: Map<string, LeadNextTask>;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -57,6 +58,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     openLeadEdit,
     stopActionPropagation,
     kpiError,
+    tasksByLead,
     hasKpiPolicyRecursion,
     kpiErrorMessage,
     totalLeads,
@@ -133,6 +135,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             openLeadDrawer={openLeadDrawer}
                             openLeadEdit={openLeadEdit}
                             stopActionPropagation={stopActionPropagation}
+                            tasksByLead={tasksByLead}
                         />
                     );
                 })}

@@ -16,7 +16,7 @@ import { Col, Progress, Row, Skeleton, Space, Table, Tag, Typography } from "ant
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Button, Card } from "../../components/ui";
+import { Button, Card, StatCard } from "../../components/ui";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, formatDateBR, normalizeText, parseCurrencyLikeValue } from "../../lib/formatters";
 
@@ -31,6 +31,13 @@ interface ICliente {
     responsavel?: string;
     created_at?: string;
     temperatura?: string;
+    stage_id?: string | number | null;
+}
+
+interface IPipelineStage {
+    id: string | number;
+    nome?: string | null;
+    probabilidade?: number | string | null;
 }
 
 const funnelSteps = [
@@ -59,6 +66,17 @@ export const DashboardPage = () => {
 
     const { data, isLoading } = listResult.query || listResult;
     const clientes = (data?.data || []) as ICliente[];
+
+    const { query: stagesQuery } = useList<IPipelineStage>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        queryOptions: { retry: false },
+    });
+
+    const stages = useMemo(
+        () => ((stagesQuery?.data?.data as IPipelineStage[]) || []).filter(Boolean),
+        [stagesQuery?.data?.data],
+    );
 
     const clientesVisiveis = useMemo(() => {
         if (canViewAllLeads) return clientes;
@@ -115,6 +133,44 @@ export const DashboardPage = () => {
             fechadosCount: fechados.length, perdidosCount: perdidos.length,
         };
     }, [clientesVisiveis]);
+
+    const forecast = useMemo(() => {
+        const probPorStageId = new Map<string, number>();
+        const probPorNome = new Map<string, number>();
+        let temProbabilidade = false;
+
+        stages.forEach((stage) => {
+            const prob = parseCurrencyLikeValue(stage.probabilidade) ?? 0;
+            if (prob > 0) temProbabilidade = true;
+            if (stage.id !== undefined && stage.id !== null) {
+                probPorStageId.set(String(stage.id), prob);
+            }
+            const nomeNormalizado = normalizeText(stage.nome);
+            if (nomeNormalizado) probPorNome.set(nomeNormalizado, prob);
+        });
+
+        if (!temProbabilidade) return { disponivel: false, valorPonderado: 0 };
+
+        const valorPonderado = clientesVisiveis.reduce((acc, c) => {
+            const statusNorm = normalizeText(c.status);
+            if (
+                statusNorm.includes("fechado") ||
+                statusNorm.includes("ganho") ||
+                statusNorm.includes("perdido")
+            ) {
+                return acc;
+            }
+            const valor = parseCurrencyLikeValue(c.valor || c.conta_energia_media) || 0;
+            if (valor <= 0) return acc;
+            const probabilidade =
+                (c.stage_id != null ? probPorStageId.get(String(c.stage_id)) : undefined) ??
+                probPorNome.get(statusNorm) ??
+                0;
+            return acc + (valor * probabilidade) / 100;
+        }, 0);
+
+        return { disponivel: true, valorPonderado };
+    }, [clientesVisiveis, stages]);
 
     const maxFunnel = Math.max(...Object.values(metrics.porStatus), 1);
 
@@ -224,6 +280,19 @@ export const DashboardPage = () => {
                         </div>
                     </Card>
                 </Col>
+
+                {/* Previsão ponderada */}
+                {forecast.disponivel ? (
+                    <Col xs={24} sm={12} lg={6}>
+                        <StatCard
+                            title="Previsão ponderada"
+                            value={formatCurrencyBRL(forecast.valorPonderado, "R$ 0")}
+                            subtitle="valor × probabilidade da etapa"
+                            accentColor="#8b5cf6"
+                            style={{ height: "100%" }}
+                        />
+                    </Col>
+                ) : null}
             </Row>
 
             {/* Funnel + Temperature Row */}

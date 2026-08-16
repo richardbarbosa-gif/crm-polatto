@@ -51,6 +51,7 @@ import { DashboardPage } from "./pages/dashboard";
 import { ConfiguracoesPage } from "./pages/configuracoes";
 import { OrganizacoesPage } from "./pages/organizacoes";
 import { PessoasPage } from "./pages/pessoas";
+import { HistoricoPage } from "./pages/historico";
 import { supabaseClient } from "./utility";
 
 import {
@@ -115,6 +116,11 @@ function App() {
                                         name: "pessoas",
                                         list: "/pessoas",
                                         meta: { canDelete: true, label: "Contatos", icon: <ContactsOutlined /> },
+                                    },
+                                    {
+                                        name: "historico",
+                                        list: "/historico",
+                                        meta: { label: "Histórico", icon: <ProfileOutlined /> },
                                     },
                                     {
                                         name: "funcionarios",
@@ -234,6 +240,7 @@ function App() {
                                             <Route path="/base-clientes" element={<BaseClientesPage />} />
                                             <Route path="/organizacoes" element={<OrganizacoesPage />} />
                                             <Route path="/pessoas" element={<PessoasPage />} />
+                                            <Route path="/historico" element={<HistoricoPage />} />
                                             <Route path="/insights" element={<InsightsPanelPage />} />
                                             <Route path="/insights/painel" element={<InsightsPanelPage />} />
                                             <Route path="/insights/roi" element={<InsightsROIPage />} />

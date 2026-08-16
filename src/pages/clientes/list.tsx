@@ -25,6 +25,7 @@ import {
     KanbanBoard,
     ListView,
     type Stage,
+    type LeadNextTask,
     type LeadPointerSession,
     DEFAULT_STAGE_BLUEPRINT,
     DRAG_ACTIVATION_DISTANCE,
@@ -136,6 +137,50 @@ export const ClienteList = () => {
         if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
         return ((motivosPerdaQuery?.data?.data as any[]) || []).filter((m) => m?.nome);
     }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
+
+    // ---- Próxima atividade por lead (visível no card, estilo Pipedrive) ----
+    const [tasksByLead, setTasksByLead] = useState<Map<string, LeadNextTask>>(new Map());
+
+    useEffect(() => {
+        let active = true;
+
+        const fetchNextTasks = async () => {
+            try {
+                const { data, error } = await supabaseClient
+                    .from("tarefas")
+                    .select("cliente_id,titulo,tipo,data_vencimento")
+                    .eq("concluido", false)
+                    .not("cliente_id", "is", null)
+                    .order("data_vencimento", { ascending: true })
+                    .limit(1000);
+
+                if (!active || error || !data) return;
+
+                const mapa = new Map<string, LeadNextTask>();
+                (data as Array<LeadNextTask & { cliente_id?: string | number | null }>).forEach(
+                    (tarefa) => {
+                        const chave = String(tarefa.cliente_id ?? "");
+                        if (!chave || mapa.has(chave)) return;
+                        mapa.set(chave, {
+                            titulo: tarefa.titulo,
+                            tipo: tarefa.tipo,
+                            data_vencimento: tarefa.data_vencimento,
+                        });
+                    },
+                );
+                setTasksByLead(mapa);
+            } catch {
+                // sem próxima atividade não pode quebrar o board
+            }
+        };
+
+        void fetchNextTasks();
+        const timer = window.setInterval(() => void fetchNextTasks(), 2 * 60 * 1000);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+        };
+    }, []);
 
     const [pendingLossDrop, setPendingLossDrop] = useState<{
         lead: any;
@@ -997,6 +1042,7 @@ export const ClienteList = () => {
                         kpiErrorMessage={kpiErrorMessage}
                         totalLeads={kpis.totalLeads}
                         isKpiLoading={kpiQuery?.isLoading}
+                        tasksByLead={tasksByLead}
                     />
                 ) : (
                     <ListView
@@ -1010,6 +1056,12 @@ export const ClienteList = () => {
                         resolveLeadStageName={resolveLeadStageName}
                         onView={openLeadDrawer}
                         onEdit={openLeadEdit}
+                        canDeleteRecords={canDeleteRecords}
+                        stages={stages}
+                        onRefresh={async () => {
+                            await listQuery?.refetch?.();
+                            await kpiQuery?.refetch?.();
+                        }}
                     />
                 )}
             </div>

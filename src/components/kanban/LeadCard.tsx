@@ -1,9 +1,16 @@
 import React from "react";
 import { Typography } from "antd";
-import { EditOutlined, EyeOutlined, ClockCircleOutlined } from "@ant-design/icons";
+import {
+    ClockCircleOutlined,
+    EditOutlined,
+    EnvironmentOutlined,
+    EyeOutlined,
+    PhoneOutlined,
+} from "@ant-design/icons";
 import { Button, TemperatureBadge } from "../ui";
-import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
+import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
+import type { LeadNextTask } from "./types";
 import dayjs from "dayjs";
 
 const { Text } = Typography;
@@ -20,7 +27,38 @@ export interface LeadCardProps {
     onEdit: (leadId: string | number) => void;
     onView: (lead: any) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
+    nextTask?: LeadNextTask;
 }
+
+const getNextTaskIcon = (tipo?: string | null) => {
+    const normalizado = normalizeText(tipo);
+    if (normalizado.includes("liga")) return <PhoneOutlined style={{ fontSize: 10 }} />;
+    if (normalizado.includes("visita")) return <EnvironmentOutlined style={{ fontSize: 10 }} />;
+    return <ClockCircleOutlined style={{ fontSize: 10 }} />;
+};
+
+const getNextTaskInfo = (
+    nextTask?: LeadNextTask,
+): { texto: string; cor: string } | null => {
+    if (!nextTask) return null;
+
+    const titulo = nextTask.titulo || "Atividade";
+    const vencimento = nextTask.data_vencimento ? dayjs(nextTask.data_vencimento) : null;
+
+    if (!vencimento || !vencimento.isValid()) {
+        return { texto: titulo, cor: "var(--crm-ink-500)" };
+    }
+
+    if (vencimento.isBefore(dayjs())) {
+        return { texto: `Atrasada · ${titulo}`, cor: "#dc2626" };
+    }
+
+    if (vencimento.isSame(dayjs(), "day")) {
+        return { texto: `Hoje ${vencimento.format("HH:mm")} · ${titulo}`, cor: "#d97706" };
+    }
+
+    return { texto: `${vencimento.format("DD/MM")} · ${titulo}`, cor: "var(--crm-ink-500)" };
+};
 
 const getLeadAge = (createdAt?: string | null): { days: number; label: string; isStale: boolean } => {
     if (!createdAt) return { days: 0, label: "", isStale: false };
@@ -42,12 +80,14 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     onEdit,
     onView,
     stopActionPropagation,
+    nextTask,
 }) => {
     const temperature = resolveLeadTemperature(lead);
     const hasTemperature = Boolean(temperature);
     const valor = Number(lead.conta_energia_media || lead.valor || 0);
     const hasValor = valor > 0;
     const age = getLeadAge(lead.created_at);
+    const nextTaskInfo = getNextTaskInfo(nextTask);
 
     return (
         <div
@@ -145,6 +185,51 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                         <Text style={{ fontSize: 11, color: "var(--crm-ink-400)" }}>
                             {formatDateBR(lead.created_at, "")}
                         </Text>
+                    </div>
+
+                    {/* Linha 4: Próxima atividade — card sem atividade é alerta visual */}
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 5,
+                            marginTop: 8,
+                            paddingTop: 7,
+                            borderTop: "1px dashed var(--crm-border-subtle)",
+                            minWidth: 0,
+                            pointerEvents: "none",
+                        }}
+                    >
+                        {nextTaskInfo ? (
+                            <>
+                                <span style={{ color: nextTaskInfo.cor, display: "inline-flex", flexShrink: 0 }}>
+                                    {getNextTaskIcon(nextTask?.tipo)}
+                                </span>
+                                <Text
+                                    style={{
+                                        fontSize: 11,
+                                        color: nextTaskInfo.cor,
+                                        fontWeight: 500,
+                                        overflow: "hidden",
+                                        textOverflow: "ellipsis",
+                                        whiteSpace: "nowrap",
+                                    }}
+                                    title={nextTaskInfo.texto}
+                                >
+                                    {nextTaskInfo.texto}
+                                </Text>
+                            </>
+                        ) : (
+                            <Text
+                                style={{
+                                    fontSize: 11,
+                                    color: "var(--crm-ink-300)",
+                                    fontStyle: "italic",
+                                }}
+                            >
+                                Sem próxima atividade
+                            </Text>
+                        )}
                     </div>
                 </div>
 

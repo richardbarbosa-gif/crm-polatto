@@ -55,6 +55,12 @@ export const DRAG_ACTIVATION_DELAY_MS = 0;
 export const KANBAN_PAGE_SIZE = 20;
 export const SEARCH_DEBOUNCE_MS = 400;
 
+export type LeadNextTask = {
+    titulo?: string | null;
+    tipo?: string | null;
+    data_vencimento?: string | null;
+};
+
 export type LeadPointerSession = {
     leadId: string;
     startX: number;

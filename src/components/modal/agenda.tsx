@@ -2,6 +2,7 @@ import { useCreate, useInvalidate, useList, useUpdate } from "@refinedev/core";
 import { DatePicker, Form, Input, Modal, Select, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
+import type { TipoAtividadeRecord } from "../../types/db";
 
 type ModalMode = "create" | "edit";
 
@@ -58,7 +59,13 @@ const TIPO_OPTIONS = [
     { value: "whatsapp", label: "WhatsApp" },
     { value: "email", label: "Email" },
 ];
-const TIPO_VALUES = new Set(TIPO_OPTIONS.map((item) => item.value));
+
+const normalizeTipoValue = (nome: string) =>
+    nome
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
 
 const normalizeId = (value: string | number | null | undefined) => {
     if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
@@ -74,9 +81,9 @@ const getTaskDateValue = (taskDate?: string | null, initialDate?: Dayjs | null) 
     return dayjs().add(1, "hour").startOf("hour");
 };
 
-const normalizeTipo = (tipo?: string | null) => {
-    if (!tipo) return "visita";
-    return TIPO_VALUES.has(tipo) ? tipo : "visita";
+const normalizeTipo = (tipo: string | null | undefined, valores: Set<string>, fallback: string) => {
+    if (tipo && valores.has(tipo)) return tipo;
+    return fallback;
 };
 
 const getContextLabel = (contextData?: TaskContextData | null) => {
@@ -109,6 +116,27 @@ export const TaskFormModal = ({
     const clientesQuery = clientesResult.query || clientesResult;
     const clientes: ClienteRecord[] = clientesQuery?.data?.data || [];
     const isLoadingClientes = Boolean(clientesQuery?.isLoading);
+
+    const { query: tiposAtividadeQuery } = useList<TipoAtividadeRecord>({
+        resource: "tipos_atividade",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
+    const tipoOptions = useMemo(() => {
+        const tipos = ((tiposAtividadeQuery?.data?.data as TipoAtividadeRecord[]) || []).filter(
+            (tipo) => tipo?.nome?.trim()
+        );
+        if (!tipos.length) return TIPO_OPTIONS;
+        return tipos.map((tipo) => ({
+            value: normalizeTipoValue(tipo.nome),
+            label: tipo.nome,
+        }));
+    }, [tiposAtividadeQuery?.data?.data]);
+
+    const tipoValues = useMemo(() => new Set(tipoOptions.map((item) => item.value)), [tipoOptions]);
 
     const clientesById = useMemo(() => {
         const map = new Map<string, ClienteRecord>();
@@ -163,11 +191,11 @@ export const TaskFormModal = ({
         form.setFieldsValue({
             cliente_id: initialClienteId ?? undefined,
             titulo: task?.titulo || "",
-            tipo: normalizeTipo(task?.tipo),
+            tipo: normalizeTipo(task?.tipo, tipoValues, tipoOptions[0]?.value ?? "visita"),
             data_vencimento: getTaskDateValue(task?.data_vencimento, initialDate),
             descricao: task?.descricao || "",
         });
-    }, [contextData?.clienteId, form, initialDate, lockedClienteId, open, task]);
+    }, [contextData?.clienteId, form, initialDate, lockedClienteId, open, task, tipoOptions, tipoValues]);
 
     const handleCancel = () => {
         form.resetFields();
@@ -307,7 +335,7 @@ export const TaskFormModal = ({
 
                 <div className="crm-toolbar-group">
                     <Form.Item label="Tipo" name="tipo" style={{ flex: 1 }}>
-                        <Select options={TIPO_OPTIONS} />
+                        <Select options={tipoOptions} />
                     </Form.Item>
 
                     <Form.Item

@@ -4,7 +4,7 @@ export { KanbanColumn } from "./KanbanColumn";
 export { LeadCard } from "./LeadCard";
 export { ListView } from "./ListView";
 
-export type { Stage, LeadPointerSession } from "./types";
+export type { Stage, LeadNextTask, LeadPointerSession } from "./types";
 export type { KanbanColumnProps } from "./KanbanColumn";
 export type { KanbanBoardProps } from "./KanbanBoard";
 export type { KanbanHeaderProps } from "./KanbanHeader";
