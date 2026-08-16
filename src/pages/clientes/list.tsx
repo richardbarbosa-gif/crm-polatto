@@ -104,9 +104,14 @@ export const ClienteList = () => {
     }, [pipelinesQuery?.data?.data, pipelinesQuery?.error]);
 
     const pipelineStorageKey = `crm_pipeline_${tenantId || "default"}`;
-    const [pipelineSelecionado, setPipelineSelecionado] = useState<string | undefined>(() => {
-        return window.localStorage.getItem(`crm_pipeline_${window.localStorage.getItem("crm_tenant_id") || "default"}`) || undefined;
-    });
+    const [pipelineSelecionado, setPipelineSelecionado] = useState<string | undefined>(undefined);
+
+    // Restaura a escolha do funil assim que o tenant é resolvido (o estado
+    // inicial não pode ler a chave certa porque tenantId ainda é null no mount)
+    useEffect(() => {
+        const persistido = window.localStorage.getItem(pipelineStorageKey);
+        if (persistido) setPipelineSelecionado(persistido);
+    }, [pipelineStorageKey]);
 
     const pipelineAtivo = useMemo(() => {
         if (pipelines.length === 0) return undefined;

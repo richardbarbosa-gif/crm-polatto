@@ -12,12 +12,9 @@ import {
 } from "@ant-design/icons";
 import { DateField } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
-import MDEditor from "@uiw/react-md-editor";
-import "@uiw/react-md-editor/markdown-editor.css";
-import "@uiw/react-markdown-preview/markdown.css";
 import { Alert, Divider, Empty, List, Select, Skeleton, Space, Timeline, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Card, TemperatureBadge } from "../../components/ui";
+import { Badge, Button, Card, MarkdownEditor, MarkdownViewer, TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
@@ -202,11 +199,8 @@ export const LeadDetails = ({
                     </Space>
                     {entry.description ? (
                         entry.type === "nota" ? (
-                            <div data-color-mode="light" style={{ margin: "6px 0 0 0" }}>
-                                <MDEditor.Markdown
-                                    source={entry.description}
-                                    style={{ background: "transparent", fontSize: 13 }}
-                                />
+                            <div style={{ margin: "6px 0 0 0" }}>
+                                <MarkdownViewer source={entry.description} />
                             </div>
                         ) : (
                             <Typography.Paragraph style={{ margin: "6px 0 0 0" }}>
@@ -684,15 +678,11 @@ export const LeadDetails = ({
                             ]}
                         />
                         <div style={{ flex: 1, minWidth: 260 }}>
-                            <MDEditor
+                            <MarkdownEditor
                                 value={activityText}
-                                onChange={(value) => setActivityText(value ?? "")}
-                                preview="edit"
+                                onChange={setActivityText}
                                 height={160}
-                                data-color-mode="light"
-                                textareaProps={{
-                                    placeholder: "Registrar contato, retorno ou observacao do lead",
-                                }}
+                                placeholder="Registrar contato, retorno ou observacao do lead"
                             />
                         </div>
                     </div>

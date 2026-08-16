@@ -357,9 +357,13 @@ export const ClienteCreate = () => {
             const documento = (values.cpf_cnpj || "").trim();
             const email = (values.email || "").trim();
 
-            if (telefone) condicoes.push(`telefone.eq.${telefone}`);
-            if (documento) condicoes.push(`cpf_cnpj.eq.${documento}`);
-            if (email) condicoes.push(`email.eq.${email}`);
+            // PostgREST trata ( ) , . como sintaxe no filtro .or() — valores
+            // como "(11) 99999-9999" precisam ir entre aspas duplas.
+            const comAspas = (valor: string) => `"${valor.replace(/"/g, '\\"')}"`;
+
+            if (telefone) condicoes.push(`telefone.eq.${comAspas(telefone)}`);
+            if (documento) condicoes.push(`cpf_cnpj.eq.${comAspas(documento)}`);
+            if (email) condicoes.push(`email.eq.${comAspas(email)}`);
             if (condicoes.length === 0) return true;
 
             const { data, error } = await supabaseClient
