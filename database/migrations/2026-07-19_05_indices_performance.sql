@@ -82,6 +82,13 @@ create index if not exists idx_motivos_perda_tenant on public.motivos_perda (ten
 create index if not exists idx_tipos_atividade_tenant on public.tipos_atividade (tenant_id, ordem);
 
 -- TAREFAS (agenda ordena por vencimento) --------------------------------
-create index if not exists idx_tarefas_vencimento
-    on public.tarefas (data_vencimento)
-    where coalesce(concluido, false) = false;
+-- Sob guarda: a tabela pode não existir em um ambiente novo e o erro
+-- abortaria o arquivo inteiro, deixando os índices seguintes de fora.
+do $$
+begin
+    if to_regclass('public.tarefas') is not null then
+        create index if not exists idx_tarefas_vencimento
+            on public.tarefas (data_vencimento)
+            where coalesce(concluido, false) = false;
+    end if;
+end $$;

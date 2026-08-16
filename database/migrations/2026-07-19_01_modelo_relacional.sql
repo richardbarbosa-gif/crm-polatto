@@ -519,11 +519,14 @@ begin
         returning id into v_pipeline_id;
     end if;
 
-    -- Vincula stages órfãos do tenant ao pipeline default
+    -- Vincula ao funil default apenas as etapas QUE JÁ SÃO DESTE TENANT.
+    -- Incluir tenant_id IS NULL faria o primeiro tenant provisionado
+    -- sequestrar as etapas legadas compartilhadas, e os demais tenants
+    -- ficariam sem funil. O backfill das órfãs é feito na migration 09.
     update public.pipeline_stages
     set pipeline_id = v_pipeline_id
     where pipeline_id is null
-      and (tenant_id = p_tenant_id or tenant_id is null);
+      and tenant_id = p_tenant_id;
 
     -- Motivos de perda default
     insert into public.motivos_perda (tenant_id, nome, ordem)
@@ -715,6 +718,9 @@ begin
             n.responsavel,
             n.responsavel_id,
             n.motivo_perda,
+            n.fechado_em as data_fechamento,
+            n.fechado_em,
+            n.data_prevista_fechamento,
             n.organizacao_id,
             n.pessoa_contato_principal_id,
             n.pipeline_id,
@@ -791,13 +797,14 @@ begin
     insert into public.negocios (
         tenant_id, organizacao_id, pessoa_contato_principal_id, titulo, valor,
         stage_id, pipeline_id, status, temperatura, responsavel, responsavel_id, motivo_perda,
-        dados_extras
+        fechado_em, dados_extras
     ) values (
         v_tenant, v_org_id, v_pessoa_id,
         coalesce(new.titulo, new.nome, 'Negócio sem título'),
         coalesce(new.valor, new.conta_energia_media),
         new.stage_id, new.pipeline_id, new.status, new.temperatura,
         new.responsavel, new.responsavel_id, new.motivo_perda,
+        new.data_fechamento,
         jsonb_strip_nulls(coalesce(new.dados_extras, '{}'::jsonb) || jsonb_build_object(
             'cep', new.cep,
             'endereco_instalacao', new.endereco_instalacao,
@@ -827,6 +834,8 @@ as $$
 declare
     v_pessoa_id uuid;
     v_tenant uuid;
+    v_compartilhada bigint;
+    v_nova_pessoa uuid;
 begin
     select pessoa_contato_principal_id, tenant_id into v_pessoa_id, v_tenant
     from public.negocios where id = old.id;
@@ -836,6 +845,37 @@ begin
     -- garante que nenhum caminho futuro permita editar negócio de outro tenant.
     if v_tenant is null or not public.tenant_filter(v_tenant) then
         raise exception 'Registro fora do seu tenant.' using errcode = '42501';
+    end if;
+
+    -- FORK-ON-WRITE: a mesma pessoa pode estar em vários negócios (é o
+    -- comportamento correto em B2B). Mas a tela antiga edita "o cliente"
+    -- como se fosse exclusivo do lead — sem esta cópia, renomear um lead
+    -- renomearia silenciosamente os outros negócios do mesmo contato.
+    if v_pessoa_id is not null then
+        select count(*) into v_compartilhada
+        from public.negocios
+        where pessoa_contato_principal_id = v_pessoa_id
+          and deleted_at is null;
+
+        if v_compartilhada > 1 then
+            insert into public.pessoas (tenant_id, organizacao_id, nome, email, telefone, ddi, cpf, cargo, dados_extras)
+            select tenant_id, organizacao_id,
+                   coalesce(new.nome, nome), new.email, new.telefone,
+                   coalesce(new.ddi, ddi),
+                   case when length(regexp_replace(coalesce(new.cpf_cnpj,''), '\D', '', 'g')) = 11
+                        then new.cpf_cnpj else cpf end,
+                   cargo, dados_extras
+            from public.pessoas where id = v_pessoa_id
+            returning id into v_nova_pessoa;
+
+            update public.negocios set pessoa_contato_principal_id = v_nova_pessoa where id = old.id;
+
+            update public.negocios_pessoas
+            set pessoa_id = v_nova_pessoa
+            where negocio_id = old.id and pessoa_id = v_pessoa_id;
+
+            v_pessoa_id := null;  -- já gravado na cópia
+        end if;
     end if;
 
     -- Campos de pessoa
@@ -863,7 +903,10 @@ begin
         responsavel = new.responsavel,
         responsavel_id = coalesce(new.responsavel_id, responsavel_id),
         motivo_perda = new.motivo_perda,
+        -- O frontend manda data_fechamento ao mover o card; quando não manda,
+        -- a etapa terminal (ganho/perdido) define o fechamento automaticamente.
         fechado_em = case
+            when new.data_fechamento is not null then new.data_fechamento
             when exists (
                 select 1 from public.pipeline_stages ps
                 where ps.id = new.stage_id and (ps.ganho or ps.perdido)

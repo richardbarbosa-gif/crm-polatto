@@ -176,6 +176,48 @@ begin
         anonimizada_em = now()
     where id = p_pessoa_id;
 
+    -- O nome do titular é COPIADO para outros lugares no fluxo normal do CRM
+    -- (título do negócio, razão social de PF, timeline). Sem limpar aqui, o
+    -- "direito ao esquecimento" seria apenas cosmético.
+    update public.negocios set titulo = 'Negócio de titular removido (LGPD)'
+    where pessoa_contato_principal_id = p_pessoa_id;
+
+    update public.organizacoes o set
+        razao_social = 'Organização de titular removido (LGPD)',
+        nome_fantasia = null,
+        email = null,
+        telefone = null
+    where exists (
+        select 1 from public.pessoas p
+        where p.id = p_pessoa_id and p.organizacao_id = o.id
+    )
+    and not exists (
+        -- Só anonimiza a organização se ela não tiver outros contatos ativos
+        select 1 from public.pessoas outra
+        where outra.organizacao_id = o.id
+          and outra.id <> p_pessoa_id
+          and outra.anonimizada_em is null
+          and outra.deleted_at is null
+    );
+
+    -- Timeline e auditoria: remove o conteúdo textual que possa conter dado
+    -- pessoal, preservando o registro de que a ação existiu.
+    if to_regclass('public.atividades_lead') is not null then
+        update public.atividades_lead a set
+            titulo = 'Registro anonimizado (LGPD)',
+            descricao = null
+        where exists (
+            select 1 from public.negocios n
+            where n.pessoa_contato_principal_id = p_pessoa_id
+              and (a.cliente_id = n.id::text or a.cliente_id = n.legado_cliente_id)
+        );
+    end if;
+
+    update public.audit_log set
+        dados_antes = jsonb_build_object('anonimizado', true),
+        dados_depois = jsonb_build_object('anonimizado', true)
+    where tabela = 'pessoas' and registro_id = p_pessoa_id::text;
+
     -- Revoga consentimentos
     update public.consentimentos set revogado_em = coalesce(revogado_em, now())
     where pessoa_id = p_pessoa_id;
@@ -220,6 +262,14 @@ declare
     v_politica record;
     v_count bigint;
 begin
+    -- Esta função é SECURITY DEFINER e apaga dados de TODOS os tenants.
+    -- Sem esta guarda qualquer usuário autenticado conseguiria executá-la.
+    -- Uso previsto: superadmin ou job agendado (service_role, sem auth.uid).
+    if auth.uid() is not null and not public.is_system_admin() then
+        raise exception 'Apenas superadmin ou rotina agendada pode aplicar a política de retenção.'
+            using errcode = '42501';
+    end if;
+
     for v_politica in
         select * from public.politicas_retencao where ativo
     loop
@@ -240,6 +290,8 @@ begin
             where n.tenant_id = v_politica.tenant_id
               and n.deleted_at is null
               and n.updated_at < now() - make_interval(days => v_politica.dias_retencao);
+        else
+            continue;  -- entidade desconhecida: não reporta contagem de outra iteração
         end if;
 
         get diagnostics v_count = row_count;
@@ -249,15 +301,20 @@ begin
         return next;
     end loop;
 
-    -- Anonimiza pessoas cujo único vínculo eram negócios já expurgados
+    -- Anonimiza pessoas cujo único vínculo eram negócios já expurgados.
+    -- O prazo de retenção também vale aqui: um contato recém-cadastrado que
+    -- ainda não tem negócio NÃO pode ser destruído no primeiro ciclo.
     update public.pessoas p
     set nome = 'Titular removido (retenção)',
         email = null, telefone = null, cpf = null, cargo = null,
         dados_extras = '{}'::jsonb,
         anonimizada_em = now()
+    from public.politicas_retencao pr
     where p.anonimizada_em is null
       and p.deleted_at is null
-      and exists (select 1 from public.politicas_retencao pr where pr.tenant_id = p.tenant_id and pr.ativo)
+      and pr.tenant_id = p.tenant_id
+      and pr.ativo
+      and p.created_at < now() - make_interval(days => pr.dias_retencao)
       and not exists (
           select 1 from public.negocios n
           where n.deleted_at is null

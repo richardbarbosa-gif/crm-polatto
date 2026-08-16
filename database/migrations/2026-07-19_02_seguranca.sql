@@ -82,12 +82,16 @@ begin
         security definer
         set search_path = public
         as $body$
+            -- ORDER BY explícito: sem ele, um usuário vinculado a mais de uma
+            -- empresa cairia em um tenant arbitrário (e instável entre queries).
             select ue.%I::uuid
             from public.utilizadores_empresas ue
             where ue.auth_uid = auth.uid()
+              and ue.%I is not null
+            order by ue.%I::text
             limit 1
         $body$;
-    $fn$, v_col);
+    $fn$, v_col, v_col, v_col);
 end $$;
 
 comment on function public.current_tenant_id() is 'Tenant do usuário autenticado, derivado de utilizadores_empresas.auth_uid = auth.uid(). FAIL-CLOSED: retorna null sem vínculo. Nunca usar header do cliente.';
@@ -252,6 +256,9 @@ begin
             select 1 from information_schema.columns
             where table_schema = 'public' and table_name = v_tabela and column_name = 'tenant_id'
         ) then
+            -- Só carimba o que está órfão. Linhas que já pertencem a outro
+            -- tenant nunca são tocadas (ver migration 09 para o backfill
+            -- que deriva o tenant das relações, em vez de assumir um só).
             execute format('update public.%I set tenant_id = $1 where tenant_id is null', v_tabela)
                 using p_tenant_id;
             get diagnostics v_count = row_count;

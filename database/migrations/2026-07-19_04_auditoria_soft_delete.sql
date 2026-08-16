@@ -117,6 +117,19 @@ end $$;
 -- TIMELINE AUTOMÁTICA: mudança de etapa do negócio registrada por trigger
 -- (substitui a dependência de o frontend lembrar de chamar addLeadActivity)
 -- ---------------------------------------------------------------------
+-- Helper: a tabela tem essa coluna? (atividades_lead acumulou variações de
+-- schema ao longo do tempo — tipo/activity_type, titulo/title, criado_por/author)
+create or replace function public.tem_coluna(p_tabela text, p_coluna text)
+returns boolean
+language sql
+stable
+as $$
+    select exists (
+        select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = p_tabela and column_name = p_coluna
+    );
+$$;
+
 create or replace function public.fn_registrar_mudanca_stage()
 returns trigger
 language plpgsql
@@ -126,38 +139,70 @@ as $$
 declare
     v_de text;
     v_para text;
+    v_titulo text;
+    v_autor text;
+    v_payload jsonb;
+    v_cols text;
+    v_vals text;
 begin
-    if old.stage_id is distinct from new.stage_id or old.status is distinct from new.status then
-        select nome into v_de from public.pipeline_stages where id = old.stage_id;
-        select nome into v_para from public.pipeline_stages where id = new.stage_id;
+    if old.stage_id is not distinct from new.stage_id
+       and old.status is not distinct from new.status then
+        return new;
+    end if;
 
-        if to_regclass('public.cliente_status_history') is not null then
-            insert into public.cliente_status_history (cliente_id, de_status, para_status, movido_por)
-            values (
-                nullif(regexp_replace(coalesce(new.legado_cliente_id, ''), '\D', '', 'g'), '')::bigint,
-                coalesce(v_de, old.status),
-                coalesce(v_para, new.status),
-                coalesce(auth.jwt() ->> 'email', 'sistema')
-            );
-        end if;
+    select nome into v_de from public.pipeline_stages where id = old.stage_id;
+    select nome into v_para from public.pipeline_stages where id = new.stage_id;
 
-        if to_regclass('public.atividades_lead') is not null then
-            insert into public.atividades_lead (cliente_id, tenant_id, activity_type, titulo, de_status, para_status, criado_por, data_atividade)
-            values (
-                new.id::text,
-                new.tenant_id,
-                'status',
-                format('Etapa alterada: %s -> %s', coalesce(v_de, old.status, '?'), coalesce(v_para, new.status, '?')),
-                coalesce(v_de, old.status),
-                coalesce(v_para, new.status),
-                coalesce(auth.jwt() ->> 'email', 'sistema'),
-                now()
-            );
+    v_de := coalesce(v_de, old.status);
+    v_para := coalesce(v_para, new.status);
+    v_titulo := format('Etapa alterada: %s -> %s', coalesce(v_de, '?'), coalesce(v_para, '?'));
+    v_autor := coalesce(auth.jwt() ->> 'email', 'sistema');
+
+    if to_regclass('public.cliente_status_history') is not null then
+        insert into public.cliente_status_history (cliente_id, de_status, para_status, movido_por)
+        values (
+            nullif(regexp_replace(coalesce(new.legado_cliente_id, ''), '\D', '', 'g'), '')::bigint,
+            v_de, v_para, v_autor
+        );
+    end if;
+
+    -- Monta o insert apenas com as colunas que a tabela realmente tem.
+    -- Um insert de colunas fixas falharia silencioso e a timeline
+    -- automática nunca funcionaria.
+    if to_regclass('public.atividades_lead') is not null then
+        v_payload := jsonb_strip_nulls(jsonb_build_object(
+            'cliente_id',    new.id::text,
+            'tenant_id',     new.tenant_id::text,
+            'activity_type', 'status',
+            'tipo',          'status',
+            'titulo',        v_titulo,
+            'title',         v_titulo,
+            'descricao',     v_titulo,
+            'de_status',     v_de,
+            'from_status',   v_de,
+            'para_status',   v_para,
+            'to_status',     v_para,
+            'criado_por',    v_autor,
+            'author',        v_autor
+        ));
+
+        select string_agg(quote_ident(k), ', '), string_agg(quote_literal(v), ', ')
+        into v_cols, v_vals
+        from jsonb_each_text(v_payload) as e(k, v)
+        where public.tem_coluna('atividades_lead', k);
+
+        if v_cols is not null then
+            if public.tem_coluna('atividades_lead', 'data_atividade') then
+                v_cols := v_cols || ', data_atividade';
+                v_vals := v_vals || ', now()';
+            end if;
+            execute format('insert into public.atividades_lead (%s) values (%s)', v_cols, v_vals);
         end if;
     end if;
 
     return new;
 exception when others then
+    -- A timeline nunca pode impedir a movimentação de um negócio
     return new;
 end;
 $$;
@@ -183,6 +228,7 @@ set search_path = public
 as $$
 declare
     v_permitidas text[] := array['negocios', 'pessoas', 'organizacoes', 'tarefas', 'funcionarios', 'documentos_lead'];
+    v_afetados integer;
 begin
     if not (p_tabela = any(v_permitidas)) then
         raise exception 'Tabela % não suporta restauração.', p_tabela;
@@ -193,7 +239,10 @@ begin
         p_tabela
     ) using p_id;
 
-    return found;
+    -- FOUND não é atualizado por EXECUTE em PL/pgSQL: sem GET DIAGNOSTICS
+    -- esta função retornava false mesmo quando a restauração funcionava.
+    get diagnostics v_afetados = row_count;
+    return v_afetados > 0;
 end;
 $$;
 

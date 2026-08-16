@@ -169,6 +169,54 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- TESTE V5b: editar um lead NÃO altera outro que compartilha o contato
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_pessoa uuid;
+    v_neg1 uuid;
+    v_neg2 uuid;
+    v_nome1 text;
+    v_nome2 text;
+begin
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+
+    -- Dois negócios do mesmo contato (dedup por telefone reaproveita a pessoa).
+    -- O valor distingue os dois: created_at é idêntico na mesma transação.
+    insert into public.clientes (nome, telefone, email, status, valor)
+    values ('Carlos Contato', '(11) 91234-5678', 'carlos@teste.com', 'Novo Lead', 1111);
+    insert into public.clientes (nome, telefone, email, status, valor)
+    values ('Carlos Contato', '(11) 91234-5678', 'carlos@teste.com', 'Novo Lead', 2222);
+
+    perform public.login_admin();
+
+    select id into v_neg1 from public.negocios where titulo = 'Carlos Contato' and valor = 1111;
+    select id into v_neg2 from public.negocios where titulo = 'Carlos Contato' and valor = 2222;
+    select pessoa_contato_principal_id into v_pessoa from public.negocios where id = v_neg1;
+
+    perform public.assert(
+        v_pessoa = (select pessoa_contato_principal_id from public.negocios where id = v_neg2),
+        'VIRADA: dedup reaproveita a mesma pessoa nos dois negócios'
+    );
+
+    -- Renomear pelo primeiro lead não pode afetar o segundo
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    update public.clientes set nome = 'Carlos Renomeado' where id = v_neg1;
+    perform public.login_admin();
+
+    select p.nome into v_nome1 from public.pessoas p
+    join public.negocios n on n.pessoa_contato_principal_id = p.id where n.id = v_neg1;
+    select p.nome into v_nome2 from public.pessoas p
+    join public.negocios n on n.pessoa_contato_principal_id = p.id where n.id = v_neg2;
+
+    perform public.assert(v_nome1 = 'Carlos Renomeado', 'VIRADA: edição aplica no lead editado');
+    perform public.assert(
+        v_nome2 = 'Carlos Contato',
+        'VIRADA: fork-on-write impede que a edição vaze para o outro negócio'
+    );
+end $$;
+
+-- ---------------------------------------------------------------------
 -- TESTE V6: DELETE pela view faz soft delete (não perde dado)
 -- ---------------------------------------------------------------------
 do $$

@@ -9,6 +9,7 @@ import {
 import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { normalizeText } from "../../lib/formatters";
 import {
     getSupabaseErrorMessage,
@@ -453,9 +454,8 @@ export const ClienteList = () => {
         fetchLead();
     }, [selectedLeadId]);
 
-    // ---- Realtime notification (apenas toast – dados atualizados via liveMode) ----
-    // Escuta as duas tabelas: "clientes" (modelo antigo) e "negocios" (modelo
-    // novo — a view clientes não emite eventos realtime). Só uma dispara.
+    // ---- Realtime ----
+    // Toast do lead novo pela tabela legada (enquanto "clientes" for tabela).
     useEffect(() => {
         const channel = supabaseClient
             .channel("crm-leads-realtime-notifications")
@@ -469,23 +469,20 @@ export const ClienteList = () => {
                     );
                 },
             )
-            .on(
-                "postgres_changes",
-                { event: "INSERT", schema: "public", table: "negocios" },
-                (payload) => {
-                    const registro = payload.new as Record<string, unknown>;
-                    const titulo = registro?.titulo ?? registro?.nome;
-                    message.info(
-                        `Novo lead recebido: ${typeof titulo === "string" ? titulo : "Sem nome"}`,
-                    );
-                },
-            )
             .subscribe();
 
         return () => {
             supabaseClient.removeChannel(channel);
         };
     }, []);
+
+    // Depois da virada, "clientes" é uma view e o Supabase não emite evento
+    // para views — o liveMode do Refine pararia de atualizar a tela sozinho.
+    // Este hook escuta a tabela real e revalida os recursos da página.
+    useRealtimeNegocios(["clientes", "vw_kanban_kpis"], (registro) => {
+        const titulo = registro?.titulo ?? registro?.nome;
+        message.info(`Novo lead recebido: ${typeof titulo === "string" ? titulo : "Sem nome"}`);
+    });
 
     // ---- Stage management ----
     const persistDefaultStagesIfNeeded = async () => {

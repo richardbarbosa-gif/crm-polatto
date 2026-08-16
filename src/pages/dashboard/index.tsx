@@ -18,6 +18,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, StatCard } from "../../components/ui";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
+import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { formatCurrencyBRL, formatDateBR, normalizeText, parseCurrencyLikeValue } from "../../lib/formatters";
 
 const { Title, Text } = Typography;
@@ -57,6 +58,9 @@ const temperatureColors: Record<string, { bg: string; text: string; label: strin
 export const DashboardPage = () => {
     const navigate = useNavigate();
     const { canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } = useCrmAccess();
+
+    // Mantém o dashboard vivo depois que "clientes" vira view (ver hook)
+    useRealtimeNegocios(["clientes"]);
 
     const listResult = useList<ICliente>({
         resource: "clientes",

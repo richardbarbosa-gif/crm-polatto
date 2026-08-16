@@ -26,6 +26,14 @@ security definer
 set search_path = public
 as $$
 begin
+    -- Esta função revela onde a segurança está fraca — é exatamente o mapa
+    -- que um atacante quer. Liberada só para superadmin ou execução
+    -- administrativa (SQL Editor / job, onde auth.uid() é nulo).
+    if auth.uid() is not null and not public.is_system_admin() then
+        raise exception 'Apenas superadmin pode consultar o relatório de RLS.'
+            using errcode = '42501';
+    end if;
+
     -- 1. Tabelas do schema public SEM RLS habilitada
     return query
     select c.relname::text, 'tabela'::text,
