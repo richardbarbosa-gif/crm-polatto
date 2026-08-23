@@ -6,7 +6,9 @@
 --   2. Remoção do default hardcoded de negocios.tenant_id → trigger
 --      BEFORE INSERT fail-closed via current_tenant_id()
 --   3. current_tenant_id()/is_system_admin() fail-closed derivados do
---      usuário AUTENTICADO (nunca do header x-tenant-id do frontend)
+--      usuário AUTENTICADO. A empresa ativa do seletor (header/claim) é
+--      respeitada, mas SEMPRE validada contra os vínculos reais — o valor
+--      enviado pelo cliente nunca é usado sem conferência.
 --   4. Rate limiting genérico (aplicar em criar_usuario_equipe)
 --   5. RLS por tenant nas tabelas do modelo novo
 --
@@ -44,13 +46,64 @@ as $$
 $$;
 
 -- ---------------------------------------------------------------------
--- current_tenant_id() — FAIL-CLOSED
--- Deriva o tenant do VÍNCULO do usuário autenticado (utilizadores_empresas),
--- nunca de header enviado pelo cliente. Sem vínculo → NULL → toda policy
--- "tenant_id = current_tenant_id()" nega acesso.
+-- current_tenant_id() — FAIL-CLOSED + respeita o seletor de empresa
+--
+-- Deriva o tenant do VÍNCULO do usuário autenticado (utilizadores_empresas).
+-- Sem vínculo → NULL → toda policy "tenant_filter(tenant_id)" nega acesso.
+--
+-- SELETOR DE EMPRESA: um usuário pode pertencer a mais de uma empresa e
+-- trocar de empresa na interface. A empresa ativa chega do cliente (claim
+-- do JWT ou header x-tenant-id) e é SEMPRE validada contra os vínculos
+-- reais — o valor do cliente nunca é usado diretamente. Se a empresa
+-- pedida não for dele (ou não vier), cai para a primeira empresa dele em
+-- ordem determinística.
+--
 -- A coluna de tenant da tabela de vínculo é detectada dinamicamente
 -- (empresa_id / tenant_id / company_id / id_empresa) para casar com produção.
 -- ---------------------------------------------------------------------
+
+-- Lê a empresa que o cliente diz ter selecionado. NÃO confere permissão:
+-- é apenas a intenção do cliente, validada por current_tenant_id().
+-- Tolerante a lixo: header ausente, JSON inválido ou UUID malformado → null.
+create or replace function public.tenant_solicitado()
+returns uuid
+language plpgsql
+stable
+as $$
+declare
+    v_bruto text;
+begin
+    -- 1) Claim do JWT (assinado — preferido quando o app o define)
+    begin
+        v_bruto := nullif(auth.jwt() ->> 'tenant_id', '');
+    exception when others then
+        v_bruto := null;
+    end;
+
+    -- 2) Header x-tenant-id (o que o frontend já envia hoje)
+    if v_bruto is null then
+        begin
+            v_bruto := nullif(
+                nullif(current_setting('request.headers', true), '')::json ->> 'x-tenant-id',
+                ''
+            );
+        exception when others then
+            v_bruto := null;
+        end;
+    end if;
+
+    if v_bruto is null then
+        return null;
+    end if;
+
+    begin
+        return v_bruto::uuid;
+    exception when others then
+        return null;  -- valor malformado é simplesmente ignorado
+    end;
+end;
+$$;
+
 do $$
 declare
     v_col text;
@@ -82,19 +135,30 @@ begin
         security definer
         set search_path = public
         as $body$
-            -- ORDER BY explícito: sem ele, um usuário vinculado a mais de uma
-            -- empresa cairia em um tenant arbitrário (e instável entre queries).
-            select ue.%I::uuid
-            from public.utilizadores_empresas ue
-            where ue.auth_uid = auth.uid()
-              and ue.%I is not null
-            order by ue.%I::text
-            limit 1
+            with vinculos as (
+                select ue.%I::uuid as tenant
+                from public.utilizadores_empresas ue
+                where ue.auth_uid = auth.uid()
+                  and ue.%I is not null
+            )
+            select coalesce(
+                -- 1) Empresa selecionada, SOMENTE se o usuário pertencer a ela.
+                --    O join contra "vinculos" é a validação: um id forjado
+                --    simplesmente não casa e é descartado.
+                (
+                    select v.tenant from vinculos v
+                    where v.tenant = public.tenant_solicitado()
+                    limit 1
+                ),
+                -- 2) Sem seleção válida: primeira empresa em ordem estável.
+                --    O ORDER BY evita que o tenant mude entre consultas.
+                (select v.tenant from vinculos v order by v.tenant::text limit 1)
+            );
         $body$;
-    $fn$, v_col, v_col, v_col);
+    $fn$, v_col, v_col);
 end $$;
 
-comment on function public.current_tenant_id() is 'Tenant do usuário autenticado, derivado de utilizadores_empresas.auth_uid = auth.uid(). FAIL-CLOSED: retorna null sem vínculo. Nunca usar header do cliente.';
+comment on function public.current_tenant_id() is 'Tenant ativo do usuário autenticado. Respeita a empresa selecionada (claim tenant_id ou header x-tenant-id) SEMPRE validada contra utilizadores_empresas; seleção inválida cai para a primeira empresa do usuário. FAIL-CLOSED: null sem vínculo.';
 
 -- Filtro padrão para policies (tenant do usuário OU superadmin)
 create or replace function public.tenant_filter(p_tenant_id uuid)

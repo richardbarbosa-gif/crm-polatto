@@ -25,8 +25,14 @@ begin
 end;
 $$;
 
--- Simula a sessão de um usuário autenticado (igual PostgREST faz)
-create or replace function public.login_como(p_user uuid, p_email text default null)
+-- Simula a sessão de um usuário autenticado (igual PostgREST faz).
+-- p_tenant_selecionado simula o header x-tenant-id que o frontend envia
+-- quando o usuário troca de empresa no seletor.
+create or replace function public.login_como(
+    p_user uuid,
+    p_email text default null,
+    p_tenant_selecionado uuid default null
+)
 returns void
 language plpgsql
 as $$
@@ -34,6 +40,11 @@ begin
     perform set_config(
         'request.jwt.claims',
         json_build_object('sub', p_user::text, 'email', coalesce(p_email, ''), 'role', 'authenticated')::text,
+        false
+    );
+    perform set_config(
+        'request.headers',
+        json_build_object('x-tenant-id', coalesce(p_tenant_selecionado::text, ''))::text,
         false
     );
     execute 'set role authenticated';
@@ -47,6 +58,7 @@ as $$
 begin
     execute 'reset role';
     perform set_config('request.jwt.claims', '', false);
+    perform set_config('request.headers', '', false);
 end;
 $$;
 
