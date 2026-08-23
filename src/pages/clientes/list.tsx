@@ -12,6 +12,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { normalizeText } from "../../lib/formatters";
 import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
+import { buildLeadCountByStageId, buildStagesVisiveis, type KpiRow } from "../../lib/kanbanStages";
 import {
     getSupabaseErrorMessage,
     isSupabaseMissingRelation,
@@ -233,7 +234,6 @@ export const ClienteList = () => {
         return DEFAULT_STAGE_BLUEPRINT.map((s) => ({ ...s, persisted: false }));
     }, [persistedStagesRaw, pipelineAtivo]);
 
-    const stageIdSet = useMemo(() => new Set(stages.map((s) => String(s.id ?? ""))), [stages]);
     const stageIdByName = useMemo(
         () => new Map(stages.map((s) => [normalizeText(s.nome), String(s.id ?? s.nome)])),
         [stages],
@@ -304,15 +304,15 @@ export const ClienteList = () => {
         [temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
     );
 
-    // ---- KPI query (View materializada – dados já agregados) ----
-    const { query: kpiQuery } = useList({
+    // ---- KPI query (View agregada – dados já somados no banco) ----
+    const { query: kpiQuery } = useList<KpiRow>({
         resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
         filters: kpiFilters,
         liveMode: "auto",
     });
 
-    const kpiRows = kpiQuery?.data?.data ?? [];
+    const kpiRows: KpiRow[] = kpiQuery?.data?.data ?? [];
     const kpiError = (kpiQuery?.error ?? null) as any;
     const hasKpiPolicyRecursion = isSupabasePolicyRecursion(kpiError);
     const kpiErrorMessage = getSupabaseErrorMessage(kpiError);
@@ -332,15 +332,11 @@ export const ClienteList = () => {
     }, [kpiRows]);
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
-    const leadCountByStageId = useMemo(() => {
-        return kpiRows.reduce<Record<string, number>>((acc, r: any) => {
-            const normalizedStatus = normalizeText(r.status);
-            const sid = stageIdByName.get(normalizedStatus) || "";
-            if (!sid) return acc;
-            acc[sid] = (acc[sid] || 0) + Number(r.total_leads || 0);
-            return acc;
-        }, {});
-    }, [kpiRows, stageIdByName]);
+    // Agregado por stage_id (a view expõe a coluna). A agregação por NOME
+    // somava etapas homônimas de funis diferentes e zerava a contagem quando
+    // o status divergia do nome — e contagem zero faz o fluxo de exclusão
+    // apagar a etapa sem mover os leads, deixando-os órfãos.
+    const leadCountByStageId = useMemo(() => buildLeadCountByStageId(kpiRows), [kpiRows]);
 
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) return 0;
@@ -355,15 +351,13 @@ export const ClienteList = () => {
     }, [manageableStages, stagePendingDelete]);
 
     // ---- stagesVisiveis (detecção de coluna "Outros") ----
-    const stagesVisiveis = useMemo(() => {
-        const hasOrphaned = kpiRows.some((r: any) => {
-            const normalizedStatus = normalizeText(r.status);
-            const sid = stageIdByName.get(normalizedStatus);
-            return !sid || !stageIdSet.has(sid);
-        });
-        if (!hasOrphaned) return stages;
-        return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [kpiRows, stageIdByName, stageIdSet, stages]);
+    // A coluna "Outros" consulta stage_id IS NULL; a detecção usa exatamente
+    // a mesma condição. Ver src/lib/kanbanStages.ts para os defeitos que a
+    // detecção anterior (por texto do status) causava.
+    const stagesVisiveis = useMemo(
+        () => buildStagesVisiveis(stages, kpiRows),
+        [stages, kpiRows],
+    );
 
     // ---- Responsáveis disponíveis (Lendo da tabela oficial de funcionários) ----
     useEffect(() => {
