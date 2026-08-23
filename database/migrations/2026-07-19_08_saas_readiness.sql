@@ -340,16 +340,26 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------
--- VIEW AGREGADA DO DASHBOARD (seção 8 — evita carregar todos os leads)
+-- VIEWS AGREGADAS DE KPI (seção 8 — evita carregar todos os leads)
+--
+-- vw_kanban_kpis é a view CANÔNICA: é o nome que o frontend consome em
+-- src/pages/clientes/list.tsx. Antes a migration criava apenas
+-- vw_dashboard_kpis, e em qualquer banco criado do zero pelas migrations o
+-- Kanban só exibia erro. vw_dashboard_kpis permanece como alias para não
+-- quebrar quem já a referencia.
+--
 -- security_invoker: respeita a RLS do usuário logado.
+-- Expõe stage_id e pipeline_id para permitir filtrar os KPIs por funil.
 -- ---------------------------------------------------------------------
 do $$
 begin
     execute $view$
-        create or replace view public.vw_dashboard_kpis as
+        create or replace view public.vw_kanban_kpis as
         select
             n.tenant_id,
             coalesce(ps.nome, n.status, 'Sem etapa') as status,
+            n.stage_id,
+            coalesce(n.pipeline_id, ps.pipeline_id) as pipeline_id,
             n.responsavel,
             n.temperatura,
             count(*)::bigint as total_leads,
@@ -361,9 +371,21 @@ begin
         from public.negocios n
         left join public.pipeline_stages ps on ps.id = n.stage_id
         where n.deleted_at is null
-        group by n.tenant_id, coalesce(ps.nome, n.status, 'Sem etapa'), n.responsavel, n.temperatura
+        group by
+            n.tenant_id,
+            coalesce(ps.nome, n.status, 'Sem etapa'),
+            n.stage_id,
+            coalesce(n.pipeline_id, ps.pipeline_id),
+            n.responsavel,
+            n.temperatura
     $view$;
+    execute 'alter view public.vw_kanban_kpis set (security_invoker = on)';
+
+    -- Alias: mesmo conteúdo, nome usado na documentação do dashboard
+    execute 'create or replace view public.vw_dashboard_kpis as select * from public.vw_kanban_kpis';
     execute 'alter view public.vw_dashboard_kpis set (security_invoker = on)';
+
+    execute 'grant select on public.vw_kanban_kpis, public.vw_dashboard_kpis to authenticated';
 exception when others then
-    raise notice 'vw_dashboard_kpis não criada (negocios ausente?): %', sqlerrm;
+    raise notice 'views de KPI não criadas (negocios ausente?): %', sqlerrm;
 end $$;

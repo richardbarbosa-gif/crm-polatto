@@ -53,3 +53,6 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/01_testes_isolamento.sql"
 
 echo "==> Suíte 2: virada da tabela clientes para a view de compatibilidade"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/02_teste_virada_view.sql"
+
+echo "==> Suíte 3: correções apontadas na revisão do PR #1"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/03_teste_correcoes_pr.sql"
