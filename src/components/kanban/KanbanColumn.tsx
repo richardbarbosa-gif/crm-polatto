@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { useInfiniteList, type CrudFilter } from "@refinedev/core";
 import { Spin, Typography } from "antd";
 import { KANBAN_PAGE_SIZE } from "./types";
-import type { Stage } from "./types";
+import type { LeadNextTask, Stage } from "./types";
 import { LeadCard } from "./LeadCard";
 import { formatCurrencyBRL } from "../../lib/formatters";
 
@@ -27,6 +27,7 @@ export interface KanbanColumnProps {
     openLeadDrawer: (lead: any) => void;
     openLeadEdit: (leadId: string | number) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
+    tasksByLead?: Map<string, LeadNextTask>;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -48,6 +49,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     openLeadDrawer,
     openLeadEdit,
     stopActionPropagation,
+    tasksByLead,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -153,6 +155,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 onEdit={openLeadEdit}
                                 onView={openLeadDrawer}
                                 stopActionPropagation={stopActionPropagation}
+                                nextTask={tasksByLead?.get(String(cliente.id))}
                             />
                         ))}
                         <div ref={sentinelRef} style={{ height: 1 }} />

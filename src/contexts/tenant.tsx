@@ -1,5 +1,5 @@
 import { useGetIdentity } from "@refinedev/core";
-import { Result, Spin } from "antd";
+import { Button, Form, Input, Modal, Result, Select, Spin, message } from "antd";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { isSupabaseMissingColumn, isSupabaseMissingRelation } from "../lib/supabaseErrors";
 import type { UsuarioEmpresa } from "../types/db";
@@ -179,8 +179,82 @@ export const useTenant = (): TenantContextValue => {
     return context;
 };
 
+const SEGMENTO_OPTIONS = [
+    { value: "energia_solar", label: "Energia Solar" },
+    { value: "software", label: "Software / Tecnologia" },
+    { value: "consultoria", label: "Consultoria / Serviços" },
+    { value: "outro", label: "Outro" },
+];
+
+/**
+ * Onboarding self-service: usuário autenticado sem vínculo cria a própria
+ * empresa via RPC provisionar_tenant (empresa + vínculo admin + pipeline
+ * default + plano Starter, tudo no servidor).
+ */
+const CriarEmpresaOnboarding = ({ onProvisionado }: { onProvisionado: () => Promise<void> }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isCreating, setIsCreating] = useState(false);
+    const [form] = Form.useForm<{ nome_empresa: string; segmento: string }>();
+
+    const criarEmpresa = async () => {
+        const values = await form.validateFields();
+        setIsCreating(true);
+        try {
+            const { error } = await supabaseClient.rpc("provisionar_tenant", {
+                p_nome_empresa: values.nome_empresa,
+                p_segmento: values.segmento,
+            });
+            if (error) {
+                message.error(`Não foi possível criar a empresa: ${error.message}`);
+                return;
+            }
+            message.success("Empresa criada! Preparando seu CRM...");
+            setIsModalOpen(false);
+            await onProvisionado();
+        } finally {
+            setIsCreating(false);
+        }
+    };
+
+    return (
+        <>
+            <Button type="primary" onClick={() => setIsModalOpen(true)}>
+                Criar minha empresa
+            </Button>
+            <Modal
+                title="Criar sua empresa no CRM"
+                open={isModalOpen}
+                onOk={criarEmpresa}
+                onCancel={() => setIsModalOpen(false)}
+                okText="Criar empresa"
+                cancelText="Cancelar"
+                okButtonProps={{ loading: isCreating }}
+                destroyOnHidden
+            >
+                <Form form={form} layout="vertical">
+                    <Form.Item
+                        label="Nome da empresa"
+                        name="nome_empresa"
+                        rules={[{ required: true, message: "Informe o nome da empresa." }]}
+                    >
+                        <Input placeholder="Ex.: Polatto Energia Solar" />
+                    </Form.Item>
+                    <Form.Item
+                        label="Segmento"
+                        name="segmento"
+                        initialValue="energia_solar"
+                        rules={[{ required: true }]}
+                    >
+                        <Select options={SEGMENTO_OPTIONS} />
+                    </Form.Item>
+                </Form>
+            </Modal>
+        </>
+    );
+};
+
 export const RequireTenant = ({ children }: { children: React.ReactNode }) => {
-    const { canAccessTenant, error, isLoading, isSystemAdmin } = useTenant();
+    const { canAccessTenant, error, isLoading, isSystemAdmin, refresh } = useTenant();
 
     if (isLoading) {
         return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center" }}><Spin size="large" tip="Validando acesso do tenant..." /></div>;
@@ -191,9 +265,16 @@ export const RequireTenant = ({ children }: { children: React.ReactNode }) => {
             <div style={{ padding: 24 }}>
                 <Result
                     status="403"
-                    title="Acesso não configurado"
-                    subTitle="Seu usuário não possui vínculo com empresa/tenant. Solicite vinculação ao administrador."
-                    extra={error ? <span style={{ color: "#b42318", fontSize: 12 }}>Detalhe técnico: {error}</span> : undefined}
+                    title="Bem-vindo! Falta configurar sua empresa"
+                    subTitle="Seu usuário ainda não está vinculado a nenhuma empresa. Crie a sua agora mesmo ou solicite o convite ao administrador da sua equipe."
+                    extra={
+                        <div style={{ display: "grid", gap: 12, justifyItems: "center" }}>
+                            <CriarEmpresaOnboarding onProvisionado={refresh} />
+                            {error ? (
+                                <span style={{ color: "#b42318", fontSize: 12 }}>Detalhe técnico: {error}</span>
+                            ) : null}
+                        </div>
+                    }
                 />
             </div>
         );

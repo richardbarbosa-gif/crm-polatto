@@ -9,6 +9,7 @@ import {
     Form,
     Input,
     InputNumber,
+    Modal,
     Row,
     Select,
     Typography,
@@ -35,6 +36,7 @@ import {
     type LeadTemperature,
     resolveAutomaticLeadTemperature,
 } from "../../lib/leadTemperature";
+import { supabaseClient } from "../../utility";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -346,7 +348,64 @@ export const ClienteCreate = () => {
         return false;
     };
 
+    // Detecção de duplicatas: avisa (sem bloquear) quando telefone, CPF/CNPJ
+    // ou e-mail já existem na base do tenant.
+    const confirmarSeDuplicado = async (values: ClienteCreateFormValues): Promise<boolean> => {
+        try {
+            const condicoes: string[] = [];
+            const telefone = (values.telefone || "").trim();
+            const documento = (values.cpf_cnpj || "").trim();
+            const email = (values.email || "").trim();
+
+            // PostgREST trata ( ) , . como sintaxe no filtro .or() — valores
+            // como "(11) 99999-9999" precisam ir entre aspas duplas.
+            const comAspas = (valor: string) => `"${valor.replace(/"/g, '\\"')}"`;
+
+            if (telefone) condicoes.push(`telefone.eq.${comAspas(telefone)}`);
+            if (documento) condicoes.push(`cpf_cnpj.eq.${comAspas(documento)}`);
+            if (email) condicoes.push(`email.eq.${comAspas(email)}`);
+            if (condicoes.length === 0) return true;
+
+            const { data, error } = await supabaseClient
+                .from("clientes")
+                .select("id,nome,telefone")
+                .or(condicoes.join(","))
+                .limit(3);
+
+            if (error || !data || data.length === 0) return true;
+
+            return await new Promise<boolean>((resolve) => {
+                Modal.confirm({
+                    title: "Possível duplicata",
+                    content: (
+                        <div>
+                            <p>Já existe cadastro com o mesmo telefone, documento ou e-mail:</p>
+                            <ul style={{ paddingLeft: 18, margin: 0 }}>
+                                {data.map((registro: { id: string | number; nome?: string | null; telefone?: string | null }) => (
+                                    <li key={String(registro.id)}>
+                                        <strong>{registro.nome || "Sem nome"}</strong>
+                                        {registro.telefone ? ` — ${registro.telefone}` : ""}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    ),
+                    okText: "Criar mesmo assim",
+                    cancelText: "Cancelar",
+                    onOk: () => resolve(true),
+                    onCancel: () => resolve(false),
+                });
+            });
+        } catch {
+            // Falha na verificação nunca bloqueia o cadastro
+            return true;
+        }
+    };
+
     const handleFinish = async (values: ClienteCreateFormValues) => {
+        const prosseguir = await confirmarSeDuplicado(values);
+        if (!prosseguir) return;
+
         const { temperature, responsavel_id, ...payload } = values;
         const nextStageId = coerceLeadStageIdValue(values.stage_id, leadStages);
         const nextStage = findLeadStageById(leadStages, nextStageId);
@@ -363,10 +422,16 @@ export const ClienteCreate = () => {
             enviadoPor: responsavelNome,
         };
 
+        // Carimba o funil da etapa escolhida: sem pipeline_id o lead nasce
+        // fora de qualquer funil e some do Kanban quando há mais de um.
+        const registroStage = stagesData.find((s) => String(s?.id) === String(nextStageId));
+        const pipelineDaStage = registroStage?.pipeline_id ?? undefined;
+
         return formProps.onFinish?.({
             ...payload,
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
+            ...(pipelineDaStage ? { pipeline_id: pipelineDaStage } : {}),
             status: nextStage?.nome || undefined,
             temperatura: nextTemperature || null,
             responsavel: responsavelNome,

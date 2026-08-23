@@ -2,6 +2,7 @@ import {
     CalendarOutlined,
     CheckCircleOutlined,
     ClockCircleOutlined,
+    DownloadOutlined,
     MessageOutlined,
     PhoneOutlined,
 } from "@ant-design/icons";
@@ -9,7 +10,8 @@ import { useList } from "@refinedev/core";
 import { Col, Row, Select, Skeleton, Space, Table, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
-import { Card, EmptyState, StatCard } from "../../components/ui";
+import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { exportRowsToCsv } from "../../lib/exportCsv";
 import {
     getTaskSituation,
     isDateInLastDays,
@@ -179,6 +181,24 @@ export const InsightsActivitiesPage = () => {
                             onChange={(value) => setTypeFilter(value)}
                             style={{ width: 150 }}
                         />
+                        <Button
+                            icon={<DownloadOutlined />}
+                            disabled={filteredTasks.length === 0}
+                            onClick={() =>
+                                exportRowsToCsv(
+                                    "relatorio-atividades",
+                                    filteredTasks.map((task) => ({
+                                        titulo: task.titulo ?? "",
+                                        tipo: task.tipo ?? "",
+                                        vencimento: task.data_vencimento ?? "",
+                                        concluida: task.concluido ? "sim" : "nao",
+                                        criada_em: task.created_at ?? "",
+                                    })),
+                                )
+                            }
+                        >
+                            Exportar CSV
+                        </Button>
                     </Space>
                 }
             />

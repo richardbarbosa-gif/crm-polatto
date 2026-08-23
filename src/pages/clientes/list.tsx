@@ -9,7 +9,10 @@ import {
 import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { normalizeText } from "../../lib/formatters";
+import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
+import { buildLeadCountByStageId, buildStagesVisiveis, type KpiRow } from "../../lib/kanbanStages";
 import {
     getSupabaseErrorMessage,
     isSupabaseMissingRelation,
@@ -25,6 +28,7 @@ import {
     KanbanBoard,
     ListView,
     type Stage,
+    type LeadNextTask,
     type LeadPointerSession,
     DEFAULT_STAGE_BLUEPRINT,
     DRAG_ACTIVATION_DISTANCE,
@@ -88,7 +92,113 @@ export const ClienteList = () => {
         return () => clearTimeout(timer);
     }, [searchText]);
 
-    // ---- Stages query (inalterada) ----
+    // ---- Pipelines (múltiplos funis por tenant) ----
+    const { query: pipelinesQuery } = useList({
+        resource: "pipelines",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
+    const pipelines = useMemo(() => {
+        if (isSupabaseMissingRelation(pipelinesQuery?.error)) return [];
+        return ((pipelinesQuery?.data?.data as any[]) || []).filter((p) => p?.id && p?.nome);
+    }, [pipelinesQuery?.data?.data, pipelinesQuery?.error]);
+
+    const pipelineStorageKey = `crm_pipeline_${tenantId || "default"}`;
+    const [pipelineSelecionado, setPipelineSelecionado] = useState<string | undefined>(undefined);
+
+    // Restaura a escolha do funil assim que o tenant é resolvido (o estado
+    // inicial não pode ler a chave certa porque tenantId ainda é null no mount)
+    useEffect(() => {
+        const persistido = window.localStorage.getItem(pipelineStorageKey);
+        if (persistido) setPipelineSelecionado(persistido);
+    }, [pipelineStorageKey]);
+
+    const pipelineAtivo = useMemo(() => {
+        if (pipelines.length === 0) return undefined;
+        const persistido = pipelines.find((p) => String(p.id) === pipelineSelecionado);
+        return persistido ? String(persistido.id) : String(pipelines[0].id);
+    }, [pipelines, pipelineSelecionado]);
+
+    const handlePipelineChange = (pipelineId: string) => {
+        setPipelineSelecionado(pipelineId);
+        window.localStorage.setItem(pipelineStorageKey, pipelineId);
+    };
+
+    const pipelineOptions = useMemo(
+        () => pipelines.map((p) => ({ value: String(p.id), label: String(p.nome) })),
+        [pipelines],
+    );
+
+    // ---- Motivos de perda (configuráveis por tenant) ----
+    const { query: motivosPerdaQuery } = useList({
+        resource: "motivos_perda",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
+    const motivosPerda = useMemo(() => {
+        if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
+        return ((motivosPerdaQuery?.data?.data as any[]) || []).filter((m) => m?.nome);
+    }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
+
+    // ---- Próxima atividade por lead (visível no card, estilo Pipedrive) ----
+    const [tasksByLead, setTasksByLead] = useState<Map<string, LeadNextTask>>(new Map());
+
+    useEffect(() => {
+        let active = true;
+
+        const fetchNextTasks = async () => {
+            try {
+                const { data, error } = await supabaseClient
+                    .from("tarefas")
+                    .select("cliente_id,titulo,tipo,data_vencimento")
+                    .eq("concluido", false)
+                    .not("cliente_id", "is", null)
+                    .order("data_vencimento", { ascending: true })
+                    .limit(1000);
+
+                if (!active || error || !data) return;
+
+                const mapa = new Map<string, LeadNextTask>();
+                (data as Array<LeadNextTask & { cliente_id?: string | number | null }>).forEach(
+                    (tarefa) => {
+                        const chave = String(tarefa.cliente_id ?? "");
+                        if (!chave || mapa.has(chave)) return;
+                        mapa.set(chave, {
+                            titulo: tarefa.titulo,
+                            tipo: tarefa.tipo,
+                            data_vencimento: tarefa.data_vencimento,
+                        });
+                    },
+                );
+                setTasksByLead(mapa);
+            } catch {
+                // sem próxima atividade não pode quebrar o board
+            }
+        };
+
+        void fetchNextTasks();
+        const timer = window.setInterval(() => void fetchNextTasks(), 2 * 60 * 1000);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+        };
+    }, []);
+
+    const [pendingLossDrop, setPendingLossDrop] = useState<{
+        lead: any;
+        novoStageId: string;
+    } | null>(null);
+    const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState<string | undefined>(undefined);
+    const [motivoPerdaLivre, setMotivoPerdaLivre] = useState("");
+    const [isSavingLossDrop, setIsSavingLossDrop] = useState(false);
+
+    // ---- Stages query ----
     const { query: stagesQuery } = useList({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
@@ -108,14 +218,22 @@ export const ClienteList = () => {
                 cor: s.cor ?? s.color,
                 ordem: s.ordem ?? s.order ?? s.sort_order,
                 persisted: s.id !== undefined && s.id !== null,
+                pipeline_id: s.pipeline_id ?? null,
+                probabilidade: s.probabilidade ?? null,
+                ganho: Boolean(s.ganho),
+                perdido: Boolean(s.perdido),
             }))
             .filter((s) => s.nome)
+            // Com funil ativo: mostra as etapas dele + legadas sem funil
+            .filter((s) => {
+                if (!pipelineAtivo) return true;
+                return s.pipeline_id == null || String(s.pipeline_id) === pipelineAtivo;
+            })
             .sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
         if (normalized.length > 0) return normalized;
         return DEFAULT_STAGE_BLUEPRINT.map((s) => ({ ...s, persisted: false }));
-    }, [persistedStagesRaw]);
+    }, [persistedStagesRaw, pipelineAtivo]);
 
-    const stageIdSet = useMemo(() => new Set(stages.map((s) => String(s.id ?? ""))), [stages]);
     const stageIdByName = useMemo(
         () => new Map(stages.map((s) => [normalizeText(s.nome), String(s.id ?? s.nome)])),
         [stages],
@@ -153,45 +271,20 @@ export const ClienteList = () => {
     const canDeleteAnyStage = manageableStages.length > 1;
 
     // ---- Server-side filters ----
-    const serverFilters = useMemo<CrudFilter[]>(() => {
-        const filters: CrudFilter[] = [];
-
-        if (debouncedSearch) {
-            filters.push({
-                operator: "or",
-                value: [
-                    { field: "nome", operator: "contains", value: debouncedSearch },
-                    { field: "telefone", operator: "contains", value: debouncedSearch },
-                ],
-            });
-        }
-
-        if (responsavelFiltro) {
-            filters.push({ field: "responsavel", operator: "eq", value: responsavelFiltro });
-        }
-
-        if (temperaturaFiltro !== "todas") {
-            if (temperaturaFiltro === "fechado") {
-                filters.push({
-                    operator: "or",
-                    value: [
-                        { field: "status", operator: "contains", value: "fechado" },
-                        { field: "status", operator: "contains", value: "ganho" },
-                    ],
-                });
-            } else if (temperaturaFiltro === "perdido") {
-                filters.push({ field: "status", operator: "contains", value: "perdido" });
-            } else {
-                filters.push({ field: "temperatura", operator: "eq", value: temperaturaFiltro });
-            }
-        }
-
-        if (!canViewAllLeads && ownerCandidates.length > 0) {
-            filters.push({ field: "responsavel", operator: "in", value: ownerCandidates });
-        }
-
-        return filters;
-    }, [debouncedSearch, responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidates]);
+    // A lógica de filtros vive em src/lib/leadFilters.ts para ser testável
+    // fora do componente (ver src/lib/__tests__/leadFilters.test.ts).
+    const serverFilters = useMemo<CrudFilter[]>(
+        () =>
+            buildLeadFilters({
+                busca: debouncedSearch,
+                responsavel: responsavelFiltro,
+                temperatura: temperaturaFiltro,
+                pipelineId: pipelineAtivo,
+                canViewAllLeads,
+                ownerCandidates,
+            }),
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+    );
 
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
 
@@ -200,35 +293,26 @@ export const ClienteList = () => {
     }, [serverFilters]);
 
     // ---- KPI filters (subset aplicável à View materializada) ----
-    const kpiFilters = useMemo<CrudFilter[]>(() => {
-        const filters: CrudFilter[] = [];
+    const kpiFilters = useMemo<CrudFilter[]>(
+        () =>
+            buildKpiFilters({
+                temperatura: temperaturaFiltro,
+                pipelineId: pipelineAtivo,
+                canViewAllLeads,
+                ownerCandidates,
+            }),
+        [temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+    );
 
-        if (temperaturaFiltro !== "todas") {
-            if (temperaturaFiltro === "fechado") {
-                filters.push({
-                    operator: "or",
-                    value: [
-                        { field: "status", operator: "contains", value: "fechado" },
-                        { field: "status", operator: "contains", value: "ganho" },
-                    ],
-                });
-            } else if (temperaturaFiltro === "perdido") {
-                filters.push({ field: "status", operator: "contains", value: "perdido" });
-            }
-        }
-
-        return filters;
-    }, [temperaturaFiltro]);
-
-    // ---- KPI query (View materializada – dados já agregados) ----
-    const { query: kpiQuery } = useList({
+    // ---- KPI query (View agregada – dados já somados no banco) ----
+    const { query: kpiQuery } = useList<KpiRow>({
         resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
         filters: kpiFilters,
         liveMode: "auto",
     });
 
-    const kpiRows = kpiQuery?.data?.data ?? [];
+    const kpiRows: KpiRow[] = kpiQuery?.data?.data ?? [];
     const kpiError = (kpiQuery?.error ?? null) as any;
     const hasKpiPolicyRecursion = isSupabasePolicyRecursion(kpiError);
     const kpiErrorMessage = getSupabaseErrorMessage(kpiError);
@@ -248,15 +332,11 @@ export const ClienteList = () => {
     }, [kpiRows]);
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
-    const leadCountByStageId = useMemo(() => {
-        return kpiRows.reduce<Record<string, number>>((acc, r: any) => {
-            const normalizedStatus = normalizeText(r.status);
-            const sid = stageIdByName.get(normalizedStatus) || "";
-            if (!sid) return acc;
-            acc[sid] = (acc[sid] || 0) + Number(r.total_leads || 0);
-            return acc;
-        }, {});
-    }, [kpiRows, stageIdByName]);
+    // Agregado por stage_id (a view expõe a coluna). A agregação por NOME
+    // somava etapas homônimas de funis diferentes e zerava a contagem quando
+    // o status divergia do nome — e contagem zero faz o fluxo de exclusão
+    // apagar a etapa sem mover os leads, deixando-os órfãos.
+    const leadCountByStageId = useMemo(() => buildLeadCountByStageId(kpiRows), [kpiRows]);
 
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) return 0;
@@ -271,15 +351,13 @@ export const ClienteList = () => {
     }, [manageableStages, stagePendingDelete]);
 
     // ---- stagesVisiveis (detecção de coluna "Outros") ----
-    const stagesVisiveis = useMemo(() => {
-        const hasOrphaned = kpiRows.some((r: any) => {
-            const normalizedStatus = normalizeText(r.status);
-            const sid = stageIdByName.get(normalizedStatus);
-            return !sid || !stageIdSet.has(sid);
-        });
-        if (!hasOrphaned) return stages;
-        return [...stages, { id: "outros", nome: "Outros", cor: "#94a3b8" }];
-    }, [kpiRows, stageIdByName, stageIdSet, stages]);
+    // A coluna "Outros" consulta stage_id IS NULL; a detecção usa exatamente
+    // a mesma condição. Ver src/lib/kanbanStages.ts para os defeitos que a
+    // detecção anterior (por texto do status) causava.
+    const stagesVisiveis = useMemo(
+        () => buildStagesVisiveis(stages, kpiRows),
+        [stages, kpiRows],
+    );
 
     // ---- Responsáveis disponíveis (Lendo da tabela oficial de funcionários) ----
     useEffect(() => {
@@ -337,7 +415,8 @@ export const ClienteList = () => {
         fetchLead();
     }, [selectedLeadId]);
 
-    // ---- Realtime notification (apenas toast – dados atualizados via liveMode) ----
+    // ---- Realtime ----
+    // Toast do lead novo pela tabela legada (enquanto "clientes" for tabela).
     useEffect(() => {
         const channel = supabaseClient
             .channel("crm-leads-realtime-notifications")
@@ -357,6 +436,14 @@ export const ClienteList = () => {
             supabaseClient.removeChannel(channel);
         };
     }, []);
+
+    // Depois da virada, "clientes" é uma view e o Supabase não emite evento
+    // para views — o liveMode do Refine pararia de atualizar a tela sozinho.
+    // Este hook escuta a tabela real e revalida os recursos da página.
+    useRealtimeNegocios(["clientes", "vw_kanban_kpis"], (registro) => {
+        const titulo = registro?.titulo ?? registro?.nome;
+        message.info(`Novo lead recebido: ${typeof titulo === "string" ? titulo : "Sem nome"}`);
+    });
 
     // ---- Stage management ----
     const persistDefaultStagesIfNeeded = async () => {
@@ -428,6 +515,7 @@ export const ClienteList = () => {
                     title: nome,
                     cor: newStageColor,
                     ordem: maxOrder + 1,
+                    ...(pipelineAtivo ? { pipeline_id: pipelineAtivo } : {}),
                 },
                 successNotification: false,
             });
@@ -666,24 +754,12 @@ export const ClienteList = () => {
         if (activeDropColumn !== stageId) setActiveDropColumn(stageId);
     };
 
-    const handleDrop = async (
-        event: React.DragEvent<HTMLDivElement>,
+    const moverLeadParaStage = async (
+        leadArrastado: any,
         novoStageId: string,
+        motivoPerda?: string,
     ) => {
-        event.preventDefault();
-        setActiveDropColumn(null);
-        setIsDragging(false);
-
-        const leadArrastado = draggedLead;
-        if (!leadArrastado) {
-            message.warning("Lead não encontrado.");
-            return;
-        }
-
         const leadId = String(leadArrastado.id);
-        const currentStageId = resolveLeadStageId(leadArrastado);
-        if (currentStageId === novoStageId) return;
-
         const nextStage = stageById.get(novoStageId);
         const nextStageName = nextStage?.nome || "Sem etapa";
         const fromStageName = resolveLeadStageName(leadArrastado);
@@ -698,6 +774,12 @@ export const ClienteList = () => {
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
                     data_fechamento: isFechado ? new Date().toISOString() : null,
+                    // Carimba o funil da etapa destino: sem isto o lead ficaria
+                    // sem pipeline_id e sumiria do filtro por funil.
+                    ...(nextStage?.pipeline_id || pipelineAtivo
+                        ? { pipeline_id: nextStage?.pipeline_id || pipelineAtivo }
+                        : {}),
+                    ...(motivoPerda ? { motivo_perda: motivoPerda } : {}),
                 },
                 successNotification: () => ({
                     message: `Movido para ${nextStageName}`,
@@ -732,7 +814,9 @@ export const ClienteList = () => {
                     tenantId,
                     activityType: "status",
                     title: "Mudança de etapa",
-                    description: `${fromStageName} -> ${nextStageName}`,
+                    description: motivoPerda
+                        ? `${fromStageName} -> ${nextStageName} (motivo: ${motivoPerda})`
+                        : `${fromStageName} -> ${nextStageName}`,
                     fromStatus: fromStageName,
                     toStatus: nextStageName,
                     author: ownerDisplayName,
@@ -740,6 +824,66 @@ export const ClienteList = () => {
             }
         } catch {
             // Error notification is handled by refine.
+        }
+    };
+
+    const handleDrop = async (
+        event: React.DragEvent<HTMLDivElement>,
+        novoStageId: string,
+    ) => {
+        event.preventDefault();
+        setActiveDropColumn(null);
+        setIsDragging(false);
+
+        const leadArrastado = draggedLead;
+        if (!leadArrastado) {
+            message.warning("Lead não encontrado.");
+            return;
+        }
+
+        const currentStageId = resolveLeadStageId(leadArrastado);
+        if (currentStageId === novoStageId) return;
+
+        // Etapa de perda: pede o motivo antes de mover (configurável por tenant)
+        const nextStage = stageById.get(novoStageId);
+        const isPerdido =
+            Boolean(nextStage?.perdido) ||
+            normalizeText(nextStage?.nome).includes("perdido");
+
+        if (isPerdido) {
+            setMotivoPerdaSelecionado(undefined);
+            setMotivoPerdaLivre("");
+            setPendingLossDrop({ lead: leadArrastado, novoStageId });
+            return;
+        }
+
+        await moverLeadParaStage(leadArrastado, novoStageId);
+    };
+
+    const cancelarMotivoPerda = () => {
+        setPendingLossDrop(null);
+        setMotivoPerdaSelecionado(undefined);
+        setMotivoPerdaLivre("");
+    };
+
+    const confirmarMotivoPerda = async () => {
+        if (!pendingLossDrop) return;
+        const motivo =
+            motivoPerdaSelecionado === "__outro__" || motivosPerda.length === 0
+                ? motivoPerdaLivre.trim()
+                : motivoPerdaSelecionado;
+
+        if (!motivo) {
+            message.warning("Informe o motivo da perda.");
+            return;
+        }
+
+        setIsSavingLossDrop(true);
+        try {
+            await moverLeadParaStage(pendingLossDrop.lead, pendingLossDrop.novoStageId, motivo);
+            cancelarMotivoPerda();
+        } finally {
+            setIsSavingLossDrop(false);
         }
     };
 
@@ -827,6 +971,9 @@ export const ClienteList = () => {
                 ownerDisplayName={ownerDisplayName}
                 onOpenStageManager={openStageManager}
                 kpis={kpis}
+                pipelineOptions={pipelineOptions}
+                pipelineSelecionado={pipelineAtivo}
+                onPipelineChange={handlePipelineChange}
             />
             <div
                 style={{
@@ -863,6 +1010,7 @@ export const ClienteList = () => {
                         kpiErrorMessage={kpiErrorMessage}
                         totalLeads={kpis.totalLeads}
                         isKpiLoading={kpiQuery?.isLoading}
+                        tasksByLead={tasksByLead}
                     />
                 ) : (
                     <ListView
@@ -876,6 +1024,12 @@ export const ClienteList = () => {
                         resolveLeadStageName={resolveLeadStageName}
                         onView={openLeadDrawer}
                         onEdit={openLeadEdit}
+                        canDeleteRecords={canDeleteRecords}
+                        stages={stages}
+                        onRefresh={async () => {
+                            await listQuery?.refetch?.();
+                            await kpiQuery?.refetch?.();
+                        }}
                     />
                 )}
             </div>
@@ -1029,6 +1183,46 @@ export const ClienteList = () => {
                 onClose={closeTaskModal}
                 contextData={taskContextData}
             />
+
+            <Modal
+                title="Motivo da perda"
+                open={Boolean(pendingLossDrop)}
+                onCancel={cancelarMotivoPerda}
+                onOk={confirmarMotivoPerda}
+                okText="Confirmar perda"
+                okButtonProps={{ danger: true, loading: isSavingLossDrop }}
+                cancelButtonProps={{ disabled: isSavingLossDrop }}
+                destroyOnClose
+            >
+                <Text style={{ display: "block", marginBottom: 12 }}>
+                    Por que o negócio{" "}
+                    <Text strong>{pendingLossDrop?.lead?.nome || pendingLossDrop?.lead?.titulo || ""}</Text>{" "}
+                    foi perdido?
+                </Text>
+                {motivosPerda.length > 0 ? (
+                    <Select
+                        value={motivoPerdaSelecionado}
+                        onChange={(value) => setMotivoPerdaSelecionado(value)}
+                        placeholder="Selecione o motivo"
+                        style={{ width: "100%", marginBottom: 10 }}
+                        options={[
+                            ...motivosPerda.map((m: any) => ({
+                                value: String(m.nome),
+                                label: String(m.nome),
+                            })),
+                            { value: "__outro__", label: "Outro motivo..." },
+                        ]}
+                    />
+                ) : null}
+                {motivoPerdaSelecionado === "__outro__" || motivosPerda.length === 0 ? (
+                    <Input.TextArea
+                        value={motivoPerdaLivre}
+                        onChange={(e) => setMotivoPerdaLivre(e.target.value)}
+                        placeholder="Descreva o motivo da perda"
+                        rows={3}
+                    />
+                ) : null}
+            </Modal>
         </div>
     );
 };

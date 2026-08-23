@@ -24,8 +24,10 @@ import { App as AntdApp, Button } from "antd";
 import { BrowserRouter, Outlet, Route, Routes, Link } from "react-router";
 
 import {
+    BankOutlined,
     BarChartOutlined,
     CalendarOutlined,
+    ContactsOutlined,
     DashboardOutlined,
     LineChartOutlined,
     ProjectOutlined,
@@ -47,6 +49,9 @@ import { BaseClientesPage } from "./pages/base-clientes";
 import { ClienteCreate, ClienteEdit, ClienteList, ClienteShow } from "./pages/clientes";
 import { DashboardPage } from "./pages/dashboard";
 import { ConfiguracoesPage } from "./pages/configuracoes";
+import { OrganizacoesPage } from "./pages/organizacoes";
+import { PessoasPage } from "./pages/pessoas";
+import { HistoricoPage } from "./pages/historico";
 import { supabaseClient } from "./utility";
 
 import {
@@ -103,6 +108,21 @@ function App() {
                                         meta: { label: "Base de Clientes", icon: <TeamOutlined /> },
                                     },
                                     {
+                                        name: "organizacoes",
+                                        list: "/organizacoes",
+                                        meta: { canDelete: true, label: "Organizações", icon: <BankOutlined /> },
+                                    },
+                                    {
+                                        name: "pessoas",
+                                        list: "/pessoas",
+                                        meta: { canDelete: true, label: "Contatos", icon: <ContactsOutlined /> },
+                                    },
+                                    {
+                                        name: "historico",
+                                        list: "/historico",
+                                        meta: { label: "Histórico", icon: <ProfileOutlined /> },
+                                    },
+                                    {
                                         name: "funcionarios",
                                         list: "/equipe",
                                         meta: { label: "Equipe", icon: <UsergroupAddOutlined /> },
@@ -150,7 +170,13 @@ function App() {
                                     { name: "atividades_lead" },
                                     { name: "tarefas" },
                                     { name: "pipeline_stages" },
-                                    { name: "cliente_status_history" }
+                                    { name: "cliente_status_history" },
+                                    { name: "pipelines" },
+                                    { name: "custom_fields" },
+                                    { name: "motivos_perda" },
+                                    { name: "tipos_atividade" },
+                                    { name: "negocios" },
+                                    { name: "tenant_features" }
                                 ]}
                                 options={{ syncWithLocation: true, warnWhenUnsavedChanges: true, projectId: "XZv4yn-qFPddw-0qWPSU" }}
                             >
@@ -212,6 +238,9 @@ function App() {
                                             </Route>
                                             <Route path="/agenda" element={<AgendaPage />} />
                                             <Route path="/base-clientes" element={<BaseClientesPage />} />
+                                            <Route path="/organizacoes" element={<OrganizacoesPage />} />
+                                            <Route path="/pessoas" element={<PessoasPage />} />
+                                            <Route path="/historico" element={<HistoricoPage />} />
                                             <Route path="/insights" element={<InsightsPanelPage />} />
                                             <Route path="/insights/painel" element={<InsightsPanelPage />} />
                                             <Route path="/insights/roi" element={<InsightsROIPage />} />

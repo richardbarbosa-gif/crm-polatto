@@ -1,23 +1,25 @@
 import { createClient } from "@refinedev/supabase";
+import { env } from "./env";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
-
-// Interceptador para injetar o Tenant ID em TODAS as requisições ao Supabase
+// Interceptador que injeta a empresa ativa em todas as requisições.
+// SEGURANÇA: o banco usa este header para saber QUAL das empresas do
+// usuário está selecionada, mas current_tenant_id() sempre valida o valor
+// contra os vínculos reais em utilizadores_empresas. Forjar este header
+// para uma empresa de terceiro não dá acesso a nada — a seleção inválida
+// é descartada e cai para uma empresa legítima do próprio usuário.
 const customFetch = (url: RequestInfo | URL, options?: RequestInit) => {
     const headers = new Headers(options?.headers);
-    
-    // Pega o tenant_id armazenado globalmente
+
     const tenantId = window.localStorage.getItem("crm_tenant_id");
-    
+
     if (tenantId) {
         headers.set("x-tenant-id", tenantId);
     }
-    
+
     return fetch(url, { ...options, headers });
 };
 
-export const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY, {
+export const supabaseClient = createClient(env.supabaseUrl, env.supabaseKey, {
     db: {
         schema: "public",
     },

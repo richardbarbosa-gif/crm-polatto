@@ -1,10 +1,20 @@
 import {
     BellOutlined,
     BgColorsOutlined,
+    CloseCircleOutlined,
+    FormOutlined,
+    FunnelPlotOutlined,
     GlobalOutlined,
+    ScheduleOutlined,
     SettingOutlined,
 } from "@ant-design/icons";
 import { Card, Divider, Select, Switch, Tabs, Typography } from "antd";
+import {
+    CustomFieldsConfig,
+    MotivosPerdaConfig,
+    PipelinesConfig,
+    TiposAtividadeConfig,
+} from "./crm";
 
 const { Title, Text } = Typography;
 
@@ -139,6 +149,86 @@ export const ConfiguracoesPage = () => {
                                     <Text type="secondary" style={{ fontSize: 12 }}>
                                         Essas preferencias sao locais da interface nesta etapa.
                                     </Text>
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "funis",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <FunnelPlotOutlined /> Funis e etapas
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Funis de venda
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Crie múltiplos funis (Vendas, Pós-venda...) e configure as etapas
+                                        com cor, ordem e probabilidade de fechamento.
+                                    </Text>
+                                    <PipelinesConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "campos",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <FormOutlined /> Campos customizados
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Campos do seu negócio
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Cada empresa cadastra os campos que fazem sentido para o seu segmento
+                                        — sem depender de desenvolvimento.
+                                    </Text>
+                                    <CustomFieldsConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "motivos-perda",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <CloseCircleOutlined /> Motivos de perda
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Motivos de perda
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        O vendedor escolhe um destes motivos ao marcar um negócio como
+                                        perdido — os relatórios de ganhos e perdas usam essa lista.
+                                    </Text>
+                                    <MotivosPerdaConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "tipos-atividade",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <ScheduleOutlined /> Tipos de atividade
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Tipos de atividade
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Configure os tipos usados na agenda e na timeline dos negócios
+                                        (Ligação, Reunião, Demo, Follow-up...).
+                                    </Text>
+                                    <TiposAtividadeConfig />
                                 </div>
                             ),
                         },

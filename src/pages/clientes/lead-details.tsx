@@ -12,9 +12,9 @@ import {
 } from "@ant-design/icons";
 import { DateField } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
-import { Alert, Divider, Empty, Input, List, Select, Skeleton, Space, Timeline, Typography, message } from "antd";
+import { Alert, Divider, Empty, List, Select, Skeleton, Space, Timeline, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Badge, Button, Card, TemperatureBadge } from "../../components/ui";
+import { Badge, Button, Card, MarkdownEditor, MarkdownViewer, TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
@@ -198,9 +198,15 @@ export const LeadDetails = ({
                         </Text>
                     </Space>
                     {entry.description ? (
-                        <Typography.Paragraph style={{ margin: "6px 0 0 0" }}>
-                            {entry.description}
-                        </Typography.Paragraph>
+                        entry.type === "nota" ? (
+                            <div style={{ margin: "6px 0 0 0" }}>
+                                <MarkdownViewer source={entry.description} />
+                            </div>
+                        ) : (
+                            <Typography.Paragraph style={{ margin: "6px 0 0 0" }}>
+                                {entry.description}
+                            </Typography.Paragraph>
+                        )
                     ) : null}
                     {entry.fileUrl ? (
                         <a href={entry.fileUrl} target="_blank" rel="noreferrer">
@@ -661,7 +667,7 @@ export const LeadDetails = ({
 
             <Card title="Timeline / historico">
                 <div style={{ marginBottom: 12 }}>
-                    <Space.Compact block>
+                    <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
                         <Select
                             style={{ width: 160 }}
                             value={activityType}
@@ -671,13 +677,15 @@ export const LeadDetails = ({
                                 { value: "ligacao", label: "Ligacao" },
                             ]}
                         />
-                        <Input.TextArea
-                            autoSize={{ minRows: 1, maxRows: 3 }}
-                            value={activityText}
-                            onChange={(event) => setActivityText(event.target.value)}
-                            placeholder="Registrar contato, retorno ou observacao do lead"
-                        />
-                    </Space.Compact>
+                        <div style={{ flex: 1, minWidth: 260 }}>
+                            <MarkdownEditor
+                                value={activityText}
+                                onChange={setActivityText}
+                                height={160}
+                                placeholder="Registrar contato, retorno ou observacao do lead"
+                            />
+                        </div>
+                    </div>
                     <div style={{ marginTop: 8 }}>
                         <Button
                             type="primary"

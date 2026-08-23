@@ -1,6 +1,7 @@
 import {
     CheckCircleOutlined,
     CloseCircleOutlined,
+    DownloadOutlined,
     FundProjectionScreenOutlined,
     WarningOutlined,
 } from "@ant-design/icons";
@@ -8,7 +9,8 @@ import { useList } from "@refinedev/core";
 import { Col, Progress, Row, Select, Skeleton, Space, Table, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
-import { Card, EmptyState, StatCard } from "../../components/ui";
+import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { exportRowsToCsv } from "../../lib/exportCsv";
 import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
 import {
     buildOwnerPerformance,
@@ -125,12 +127,31 @@ export const InsightsGainsLossesPage = () => {
                 title="Ganhos e perdas"
                 subtitle="Leia a saude de fechamento por volume, valor e ritmo de conversao."
                 extra={
-                    <Select
-                        value={periodDays}
-                        options={PERIOD_OPTIONS}
-                        onChange={(value) => setPeriodDays(value)}
-                        style={{ width: 140 }}
-                    />
+                    <Space wrap>
+                        <Select
+                            value={periodDays}
+                            options={PERIOD_OPTIONS}
+                            onChange={(value) => setPeriodDays(value)}
+                            style={{ width: 140 }}
+                        />
+                        <Button
+                            icon={<DownloadOutlined />}
+                            disabled={trend.length === 0}
+                            onClick={() =>
+                                exportRowsToCsv(
+                                    "ganhos-e-perdas",
+                                    trend.map((linha) => ({
+                                        mes: linha.month,
+                                        ganhos: linha.wins,
+                                        perdas: linha.losses,
+                                        taxa_ganho_pct: linha.winRate,
+                                    })),
+                                )
+                            }
+                        >
+                            Exportar CSV
+                        </Button>
+                    </Space>
                 }
             />
 
