@@ -422,10 +422,16 @@ export const ClienteCreate = () => {
             enviadoPor: responsavelNome,
         };
 
+        // Carimba o funil da etapa escolhida: sem pipeline_id o lead nasce
+        // fora de qualquer funil e some do Kanban quando há mais de um.
+        const registroStage = stagesData.find((s) => String(s?.id) === String(nextStageId));
+        const pipelineDaStage = registroStage?.pipeline_id ?? undefined;
+
         return formProps.onFinish?.({
             ...payload,
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
+            ...(pipelineDaStage ? { pipeline_id: pipelineDaStage } : {}),
             status: nextStage?.nome || undefined,
             temperatura: nextTemperature || null,
             responsavel: responsavelNome,

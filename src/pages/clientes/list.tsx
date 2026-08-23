@@ -11,6 +11,7 @@ import { TaskFormModal, type TaskContextData } from "../../components/modal/agen
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { normalizeText } from "../../lib/formatters";
+import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
 import {
     getSupabaseErrorMessage,
     isSupabaseMissingRelation,
@@ -270,45 +271,20 @@ export const ClienteList = () => {
     const canDeleteAnyStage = manageableStages.length > 1;
 
     // ---- Server-side filters ----
-    const serverFilters = useMemo<CrudFilter[]>(() => {
-        const filters: CrudFilter[] = [];
-
-        if (debouncedSearch) {
-            filters.push({
-                operator: "or",
-                value: [
-                    { field: "nome", operator: "contains", value: debouncedSearch },
-                    { field: "telefone", operator: "contains", value: debouncedSearch },
-                ],
-            });
-        }
-
-        if (responsavelFiltro) {
-            filters.push({ field: "responsavel", operator: "eq", value: responsavelFiltro });
-        }
-
-        if (temperaturaFiltro !== "todas") {
-            if (temperaturaFiltro === "fechado") {
-                filters.push({
-                    operator: "or",
-                    value: [
-                        { field: "status", operator: "contains", value: "fechado" },
-                        { field: "status", operator: "contains", value: "ganho" },
-                    ],
-                });
-            } else if (temperaturaFiltro === "perdido") {
-                filters.push({ field: "status", operator: "contains", value: "perdido" });
-            } else {
-                filters.push({ field: "temperatura", operator: "eq", value: temperaturaFiltro });
-            }
-        }
-
-        if (!canViewAllLeads && ownerCandidates.length > 0) {
-            filters.push({ field: "responsavel", operator: "in", value: ownerCandidates });
-        }
-
-        return filters;
-    }, [debouncedSearch, responsavelFiltro, temperaturaFiltro, canViewAllLeads, ownerCandidates]);
+    // A lógica de filtros vive em src/lib/leadFilters.ts para ser testável
+    // fora do componente (ver src/lib/__tests__/leadFilters.test.ts).
+    const serverFilters = useMemo<CrudFilter[]>(
+        () =>
+            buildLeadFilters({
+                busca: debouncedSearch,
+                responsavel: responsavelFiltro,
+                temperatura: temperaturaFiltro,
+                pipelineId: pipelineAtivo,
+                canViewAllLeads,
+                ownerCandidates,
+            }),
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+    );
 
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
 
@@ -317,25 +293,16 @@ export const ClienteList = () => {
     }, [serverFilters]);
 
     // ---- KPI filters (subset aplicável à View materializada) ----
-    const kpiFilters = useMemo<CrudFilter[]>(() => {
-        const filters: CrudFilter[] = [];
-
-        if (temperaturaFiltro !== "todas") {
-            if (temperaturaFiltro === "fechado") {
-                filters.push({
-                    operator: "or",
-                    value: [
-                        { field: "status", operator: "contains", value: "fechado" },
-                        { field: "status", operator: "contains", value: "ganho" },
-                    ],
-                });
-            } else if (temperaturaFiltro === "perdido") {
-                filters.push({ field: "status", operator: "contains", value: "perdido" });
-            }
-        }
-
-        return filters;
-    }, [temperaturaFiltro]);
+    const kpiFilters = useMemo<CrudFilter[]>(
+        () =>
+            buildKpiFilters({
+                temperatura: temperaturaFiltro,
+                pipelineId: pipelineAtivo,
+                canViewAllLeads,
+                ownerCandidates,
+            }),
+        [temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+    );
 
     // ---- KPI query (View materializada – dados já agregados) ----
     const { query: kpiQuery } = useList({
@@ -813,6 +780,11 @@ export const ClienteList = () => {
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
                     data_fechamento: isFechado ? new Date().toISOString() : null,
+                    // Carimba o funil da etapa destino: sem isto o lead ficaria
+                    // sem pipeline_id e sumiria do filtro por funil.
+                    ...(nextStage?.pipeline_id || pipelineAtivo
+                        ? { pipeline_id: nextStage?.pipeline_id || pipelineAtivo }
+                        : {}),
                     ...(motivoPerda ? { motivo_perda: motivoPerda } : {}),
                 },
                 successNotification: () => ({

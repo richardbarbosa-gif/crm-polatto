@@ -251,6 +251,92 @@ begin
     );
 end $$;
 
+-- =====================================================================
+-- PROBLEMA 3 — filtro de funil precisa de pipeline_id persistido
+--
+-- O frontend passou a filtrar leads e KPIs por pipeline_id. Isso só
+-- funciona se o valor for gravado ao criar o lead e ao movê-lo de etapa.
+-- (A montagem dos filtros é coberta em src/lib/__tests__/leadFilters.test.ts.)
+-- =====================================================================
+
+-- 3.1 — a view de compatibilidade aceita pipeline_id na escrita
+do $$
+declare
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_pipeline uuid;
+    v_gravado uuid;
+begin
+    select id into v_pipeline from public.pipelines where tenant_id = v_tenant_a limit 1;
+    perform public.assert(v_pipeline is not null, 'FUNIL: tenant tem um funil para o teste');
+
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    insert into public.clientes (nome, status, pipeline_id, valor)
+    values ('Lead com funil', 'Novo Lead', v_pipeline, 999);
+    perform public.login_admin();
+
+    select pipeline_id into v_gravado from public.negocios where titulo = 'Lead com funil';
+
+    perform public.assert(
+        v_gravado = v_pipeline,
+        'FUNIL: lead criado pela view grava o pipeline_id escolhido'
+    );
+end $$;
+
+-- 3.2 — mover de etapa mantém/atualiza o funil (fluxo do Kanban)
+do $$
+declare
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_pipeline uuid;
+    v_stage bigint;
+    v_id uuid;
+    v_gravado uuid;
+begin
+    select id into v_pipeline from public.pipelines where tenant_id = v_tenant_a limit 1;
+    select id into v_stage from public.pipeline_stages
+    where tenant_id = v_tenant_a and pipeline_id = v_pipeline limit 1;
+
+    -- Garante a etapa do teste em vez de pular a verificação
+    if v_stage is null then
+        insert into public.pipeline_stages (tenant_id, pipeline_id, nome, cor, ordem)
+        values (v_tenant_a, v_pipeline, 'Etapa do teste de funil', '#5d9cec', 99)
+        returning id into v_stage;
+    end if;
+
+    select id into v_id from public.negocios where titulo = 'Lead com funil';
+
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    update public.clientes
+    set stage_id = v_stage, status = 'Movido', pipeline_id = v_pipeline
+    where id = v_id;
+    perform public.login_admin();
+
+    select pipeline_id into v_gravado from public.negocios where id = v_id;
+
+    perform public.assert(
+        v_gravado = v_pipeline,
+        'FUNIL: mover o lead de etapa preserva o pipeline_id'
+    );
+end $$;
+
+-- 3.3 — o KPI consegue ser filtrado por funil (coluna existe e é útil)
+do $$
+declare
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_pipeline uuid;
+    v_linhas bigint;
+begin
+    select id into v_pipeline from public.pipelines where tenant_id = v_tenant_a limit 1;
+
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    select count(*) into v_linhas from public.vw_kanban_kpis where pipeline_id = v_pipeline;
+    perform public.login_admin();
+
+    perform public.assert(
+        v_linhas > 0,
+        'FUNIL: vw_kanban_kpis pode ser filtrada por pipeline_id e retorna dados'
+    );
+end $$;
+
 do $$
 begin
     raise notice '';
