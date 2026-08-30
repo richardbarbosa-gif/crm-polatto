@@ -1,11 +1,12 @@
 import React from "react";
-import { Typography } from "antd";
+import { Dropdown, Typography } from "antd";
 import {
     ClockCircleOutlined,
     EditOutlined,
     EnvironmentOutlined,
     EyeOutlined,
     PhoneOutlined,
+    SwapOutlined,
 } from "@ant-design/icons";
 import { Button, TemperatureBadge } from "../ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
@@ -28,6 +29,9 @@ export interface LeadCardProps {
     onView: (lead: any) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
     nextTask?: LeadNextTask;
+    /** Etapas para a ação "Mover" (alternativa por toque ao arraste) */
+    stageMoveOptions?: { value: string; label: string }[];
+    onMoveToStage?: (lead: any, stageId: string) => void;
 }
 
 const getNextTaskIcon = (tipo?: string | null) => {
@@ -81,6 +85,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     onView,
     stopActionPropagation,
     nextTask,
+    stageMoveOptions,
+    onMoveToStage,
 }) => {
     const temperature = resolveLeadTemperature(lead);
     const hasTemperature = Boolean(temperature);
@@ -241,6 +247,45 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                         background: "rgba(248,250,252,0.4)",
                     }}
                 >
+                    {stageMoveOptions && stageMoveOptions.length > 0 && onMoveToStage ? (
+                        <Dropdown
+                            trigger={["click"]}
+                            menu={{
+                                items: stageMoveOptions.map((opcao) => ({
+                                    key: opcao.value,
+                                    label: opcao.label,
+                                    onClick: () => onMoveToStage(lead, opcao.value),
+                                })),
+                            }}
+                        >
+                            <button
+                                data-no-card-open="true"
+                                aria-label="Mover para outra etapa"
+                                onPointerDown={(e) => stopActionPropagation(e)}
+                                onClick={(e) => stopActionPropagation(e)}
+                                style={{
+                                    flex: 1,
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    gap: 5,
+                                    padding: "7px 0",
+                                    fontSize: 12,
+                                    fontWeight: 500,
+                                    color: "var(--crm-ink-500)",
+                                    background: "transparent",
+                                    border: "none",
+                                    borderRight: "1px solid var(--crm-border-subtle)",
+                                    cursor: "pointer",
+                                    transition: "color 0.15s, background 0.15s",
+                                }}
+                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.04)"; e.currentTarget.style.color = "#3b82f6"; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--crm-ink-500)"; }}
+                            >
+                                <SwapOutlined style={{ fontSize: 12 }} /> Mover
+                            </button>
+                        </Dropdown>
+                    ) : null}
                     <button
                         data-no-card-open="true"
                         onPointerDown={(e) => stopActionPropagation(e)}

@@ -132,6 +132,7 @@ export const ClienteList = () => {
         [pipelines],
     );
 
+
     // ---- Motivos de perda (configuráveis por tenant) ----
     const { query: motivosPerdaQuery } = useList({
         resource: "motivos_perda",
@@ -240,6 +241,13 @@ export const ClienteList = () => {
     );
     const stageById = useMemo(
         () => new Map(stages.map((s) => [String(s.id ?? s.nome), s])),
+        [stages],
+    );
+
+    // Etapas oferecidas na ação "Mover" do card — alternativa ao arraste,
+    // que usa drag HTML5 e não dispara em tela de toque.
+    const stageMoveOptions = useMemo(
+        () => stages.map((s) => ({ value: String(s.id ?? s.nome), label: s.nome })),
         [stages],
     );
 
@@ -841,10 +849,20 @@ export const ClienteList = () => {
             return;
         }
 
-        const currentStageId = resolveLeadStageId(leadArrastado);
+        await solicitarMoverLead(leadArrastado, novoStageId);
+    };
+
+    /**
+     * Ponto único de decisão para mover um lead de etapa — usado tanto pelo
+     * arraste (desktop) quanto pela ação "Mover" do card (toque/celular).
+     * Etapa de perda exige motivo antes de concluir.
+     */
+    const solicitarMoverLead = async (lead: any, novoStageId: string) => {
+        if (!lead) return;
+
+        const currentStageId = resolveLeadStageId(lead);
         if (currentStageId === novoStageId) return;
 
-        // Etapa de perda: pede o motivo antes de mover (configurável por tenant)
         const nextStage = stageById.get(novoStageId);
         const isPerdido =
             Boolean(nextStage?.perdido) ||
@@ -853,11 +871,11 @@ export const ClienteList = () => {
         if (isPerdido) {
             setMotivoPerdaSelecionado(undefined);
             setMotivoPerdaLivre("");
-            setPendingLossDrop({ lead: leadArrastado, novoStageId });
+            setPendingLossDrop({ lead, novoStageId });
             return;
         }
 
-        await moverLeadParaStage(leadArrastado, novoStageId);
+        await moverLeadParaStage(lead, novoStageId);
     };
 
     const cancelarMotivoPerda = () => {
@@ -1011,6 +1029,8 @@ export const ClienteList = () => {
                         totalLeads={kpis.totalLeads}
                         isKpiLoading={kpiQuery?.isLoading}
                         tasksByLead={tasksByLead}
+                        stageMoveOptions={stageMoveOptions}
+                        onMoveLeadToStage={solicitarMoverLead}
                     />
                 ) : (
                     <ListView
