@@ -30,6 +30,8 @@ import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import type { OrganizacaoRecord, PessoaRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
+import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 const { Title, Text } = Typography;
 
@@ -41,6 +43,8 @@ type PessoaFormValues = {
     cpf?: string;
     cargo?: string;
     organizacao_id?: string;
+    /** Valores dos campos customizados do tenant (jsonb) */
+    dados_extras?: Record<string, NonNullable<unknown>>;
 };
 
 const DDI_OPTIONS = [
@@ -66,6 +70,7 @@ const baixarJson = (nomeArquivo: string, conteudo: unknown) => {
 export const PessoasPage = () => {
     const { tenantId } = useTenant();
     const { canDeleteRecords } = useCrmAccess();
+    const { campos: camposCustomizados } = useCustomFields("pessoa");
 
     const [busca, setBusca] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,6 +144,10 @@ export const PessoasPage = () => {
             cpf: pessoa.cpf ? formatCpfCnpj(pessoa.cpf) : undefined,
             cargo: pessoa.cargo || undefined,
             organizacao_id: pessoa.organizacao_id || undefined,
+            dados_extras: dadosExtrasParaFormulario(
+                pessoa.dados_extras as Record<string, unknown> | undefined,
+                camposCustomizados,
+            ),
         });
         setIsModalOpen(true);
         // LGPD: registra o acesso ao dado pessoal (fire-and-forget)
@@ -149,8 +158,11 @@ export const PessoasPage = () => {
 
     const salvar = async () => {
         const values = await form.validateFields();
+        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
+        const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
         const payload = {
-            ...values,
+            ...limpo,
+            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
             organizacao_id: values.organizacao_id || null,
             tenant_id: tenantId || undefined,
         };
@@ -420,6 +432,7 @@ export const PessoasPage = () => {
                     <Form.Item label="Cargo" name="cargo">
                         <Input placeholder="Ex.: Diretor, Comprador, Engenheiro" />
                     </Form.Item>
+                    <CustomFieldsForm campos={camposCustomizados} />
                     <Form.Item label="Organização" name="organizacao_id">
                         <Select
                             options={organizacaoOptions}

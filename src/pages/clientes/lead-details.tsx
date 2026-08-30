@@ -19,6 +19,8 @@ import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
+import { CustomFieldsView } from "../../components/custom-fields";
+import { useCustomFields } from "../../hooks/useCustomFields";
 import {
     LEAD_TEMPERATURE_LABELS,
     LEAD_TEMPERATURE_OPTIONS,
@@ -56,6 +58,7 @@ type LeadRecord = {
     cep?: string | null;
     email?: string | null;
     cpf_cnpj?: string | null;
+    dados_extras?: Record<string, unknown> | null;
     created_at?: string | null;
     stage_id?: string | number | null;
     status?: string | null;
@@ -132,6 +135,7 @@ export const LeadDetails = ({
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
     const canDeleteDocuments = canDelete(role, isSystemAdmin);
     const { isEnergiaSolar } = useTenantSegmento();
+    const { campos: camposCustomizados } = useCustomFields("negocio");
 
     useEffect(() => {
         setTemperatureTag(resolveLeadTemperature(record));
@@ -540,6 +544,20 @@ export const LeadDetails = ({
                         <DateField value={record.created_at} format="DD/MM/YYYY" />
                     </div>
                 </div>
+
+                {camposCustomizados.length > 0 ? (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--crm-border)" }}>
+                        <Text type="secondary" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", fontWeight: 600 }}>
+                            Informações adicionais
+                        </Text>
+                        <div style={{ marginTop: 8 }}>
+                            <CustomFieldsView
+                                campos={camposCustomizados}
+                                dadosExtras={record.dados_extras as Record<string, unknown> | undefined}
+                            />
+                        </div>
+                    </div>
+                ) : null}
             </Card>
 
             <Card title={isEnergiaSolar ? "Arquivos do lead (PDF)" : "Documentos do lead (PDF)"}>

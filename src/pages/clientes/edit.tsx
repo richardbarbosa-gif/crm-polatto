@@ -1,4 +1,6 @@
 import { Edit, useForm } from "@refinedev/antd";
+import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 import { useList } from "@refinedev/core";
 import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
 import { useEffect, useMemo, useState } from "react";
@@ -32,6 +34,8 @@ type ClienteEditFormValues = {
     responsavel_id?: string; // Alterado para suportar o Select
     stage_id?: string;
     temperature?: LeadTemperature;
+    /** Valores dos campos customizados do tenant (jsonb) */
+    dados_extras?: Record<string, unknown>;
 };
 
 export const ClienteEdit = () => {
@@ -40,6 +44,7 @@ export const ClienteEdit = () => {
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
 
     const { formProps, saveButtonProps, form, query } = useForm<any, any, ClienteEditFormValues>({});
+    const { campos: camposCustomizados } = useCustomFields("negocio");
 
     const record = (query?.data?.data as any) ?? null;
     const isRecordLoading = Boolean(query?.isLoading || query?.isFetching);
@@ -124,6 +129,19 @@ export const ClienteEdit = () => {
         form.setFieldValue("cpf_cnpj", formatCpfCnpj(currentDocument));
     }, [form, record?.cpf_cnpj]);
 
+    // Carrega os valores já gravados dos campos customizados no formulário.
+    // Sem isto o campo abriria vazio e salvar apagaria o que estava lá.
+    useEffect(() => {
+        if (!camposCustomizados.length) return;
+        const valores = dadosExtrasParaFormulario(
+            record?.dados_extras as Record<string, unknown> | undefined,
+            camposCustomizados,
+        );
+        if (Object.keys(valores).length) {
+            form.setFieldValue("dados_extras", valores);
+        }
+    }, [form, camposCustomizados, record?.dados_extras]);
+
     const handleCpfCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         form.setFieldValue("cpf_cnpj", formatCpfCnpj(event.target.value));
     };
@@ -139,8 +157,13 @@ export const ClienteEdit = () => {
         const responsavelSelecionado = listaResponsaveis.find(opt => opt.value === responsavel_id);
         const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : (record?.responsavel || ownerDisplayName);
 
+        // Campos customizados do tenant → dados_extras (jsonb)
+        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
+        const { dados_extras: _descartado, ...payloadLimpo } = payload as Record<string, unknown>;
+
         return formProps.onFinish?.({
-            ...payload,
+            ...payloadLimpo,
+            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
             status: nextStage?.nome || undefined,
@@ -238,6 +261,9 @@ export const ClienteEdit = () => {
                 <Form.Item label="Temperatura" name="temperature" extra={automaticTemperature ? `Automatica: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}` : "Manual para leads em aberto."}>
                     <Select allowClear placeholder={automaticTemperature ? "Temperatura automatica" : "Selecione"} disabled={Boolean(automaticTemperature)} options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({ value: option.value, label: <TemperatureBadge value={option.value} /> }))} />
                 </Form.Item>
+                {camposCustomizados.length > 0 ? (
+                    <CustomFieldsForm campos={camposCustomizados} />
+                ) : null}
             </Form>
         </Edit>
     );

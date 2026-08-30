@@ -917,13 +917,21 @@ begin
             ) then null
             else fechado_em
         end,
-        dados_extras = jsonb_strip_nulls(coalesce(dados_extras, '{}'::jsonb) || jsonb_build_object(
-            'cep', new.cep,
-            'endereco_instalacao', new.endereco_instalacao,
-            'numero', new.numero,
-            'complemento', new.complemento,
-            'conta_energia_media', new.conta_energia_media
-        ))
+        -- Preserva o que já existe, aplica os campos customizados que o
+        -- cliente enviou (new.dados_extras) e por último os campos fixos do
+        -- formulário legado. Sem o new.dados_extras aqui, todo valor de campo
+        -- customizado editado pela tela era descartado em silêncio.
+        dados_extras = jsonb_strip_nulls(
+            coalesce(dados_extras, '{}'::jsonb)
+            || coalesce(new.dados_extras, '{}'::jsonb)
+            || jsonb_build_object(
+                'cep', new.cep,
+                'endereco_instalacao', new.endereco_instalacao,
+                'numero', new.numero,
+                'complemento', new.complemento,
+                'conta_energia_media', new.conta_energia_media
+            )
+        )
     where id = old.id;
 
     return new;

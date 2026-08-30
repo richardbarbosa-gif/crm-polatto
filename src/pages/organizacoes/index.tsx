@@ -21,6 +21,8 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import type { OrganizacaoRecord } from "../../types/db";
+import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 const { Title, Text } = Typography;
 
@@ -33,6 +35,8 @@ type OrganizacaoFormValues = {
     tamanho?: string;
     telefone?: string;
     email?: string;
+    /** Valores dos campos customizados do tenant (jsonb) */
+    dados_extras?: Record<string, NonNullable<unknown>>;
 };
 
 const TAMANHO_OPTIONS = [
@@ -45,6 +49,7 @@ const TAMANHO_OPTIONS = [
 export const OrganizacoesPage = () => {
     const { tenantId } = useTenant();
     const { canDeleteRecords } = useCrmAccess();
+    const { campos: camposCustomizados } = useCustomFields("organizacao");
 
     const [busca, setBusca] = useState("");
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -95,13 +100,23 @@ export const OrganizacoesPage = () => {
             tamanho: org.tamanho || undefined,
             telefone: org.telefone || undefined,
             email: org.email || undefined,
+            dados_extras: dadosExtrasParaFormulario(
+                org.dados_extras as Record<string, unknown> | undefined,
+                camposCustomizados,
+            ),
         });
         setIsModalOpen(true);
     };
 
     const salvar = async () => {
         const values = await form.validateFields();
-        const payload = { ...values, tenant_id: tenantId || undefined };
+        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
+        const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
+        const payload = {
+            ...limpo,
+            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
+            tenant_id: tenantId || undefined,
+        };
         try {
             if (editando) {
                 await updateOrganizacao({ resource: "organizacoes", id: editando.id, values: payload });
@@ -298,6 +313,7 @@ export const OrganizacoesPage = () => {
                     >
                         <Input placeholder="contato@empresa.com.br" />
                     </Form.Item>
+                    <CustomFieldsForm campos={camposCustomizados} />
                 </Form>
             </Modal>
         </div>
