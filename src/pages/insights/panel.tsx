@@ -198,7 +198,7 @@ export const InsightsPanelPage = () => {
                     <Space wrap>
                         <Button onClick={() => navigate("/insights/roi")}>ROI</Button>
                         <Button onClick={() => navigate("/insights/logs")}>Registros</Button>
-                        <Button type="primary" onClick={() => navigate("/insights/goals")}>
+                        <Button type="primary" onClick={() => navigate("/metas")}>
                             Definir metas
                         </Button>
                     </Space>

@@ -69,7 +69,7 @@ export const BaseClientesPage = () => {
                 .select(
                     "id,nome,telefone,email,endereco_instalacao,numero,cep,conta_energia_media,responsavel,status,created_at",
                 )
-                .ilike("status", "fechado")
+                .or("status.ilike.%fechado%,status.ilike.%ganho%")
                 .order("created_at", { ascending: false });
 
             if (error) {

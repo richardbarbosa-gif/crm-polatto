@@ -389,3 +389,68 @@ begin
 exception when others then
     raise notice 'views de KPI não criadas (negocios ausente?): %', sqlerrm;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- SEGMENTO DO TENANT
+-- O frontend (useTenantSegmento) chama esta RPC para decidir quais campos
+-- específicos do ramo exibir. Ela não existia: a chamada falhava, o hook
+-- caía no fallback e TODO tenant era tratado como energia solar — o que
+-- anulava a proposta de servir a qualquer segmento.
+-- ---------------------------------------------------------------------
+create or replace function public.get_tenant_segmento(p_tenant_id uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+    select coalesce(
+        (select e.segmento from public.empresas e
+          where e.id = p_tenant_id
+            and (public.tenant_filter(p_tenant_id) or public.is_system_admin())),
+        'energia_solar'
+    );
+$$;
+
+grant execute on function public.get_tenant_segmento(uuid) to authenticated;
+
+-- ---------------------------------------------------------------------
+-- VW_PERFORMANCE_VENDEDORES
+-- Consumida pela tela de Metas para comparar meta x realizado. Não existia,
+-- então o quadro de desempenho aparecia sempre zerado.
+--
+-- "Realizado" = negócios em etapa de ganho, agrupados pelo mês do
+-- fechamento. security_invoker para respeitar a RLS do usuário.
+-- ---------------------------------------------------------------------
+do $$
+begin
+    execute $view$
+        create or replace view public.vw_performance_vendedores as
+        select
+            n.tenant_id,
+            f.id as funcionario_id,
+            date_trunc('month', coalesce(n.fechado_em, n.updated_at, n.created_at))::date as mes_referencia,
+            count(*)::bigint as vendas_qtd,
+            coalesce(sum(
+                coalesce(n.valor, public.to_numeric_seguro(n.dados_extras->>'conta_energia_media'))
+            ), 0)::numeric as vendas_valor
+        from public.negocios n
+        join public.funcionarios f
+          on f.tenant_id = n.tenant_id
+         and (
+             f.id = n.responsavel_id
+             or lower(btrim(f.nome)) = lower(btrim(coalesce(n.responsavel, '')))
+         )
+        left join public.pipeline_stages ps on ps.id = n.stage_id
+        where n.deleted_at is null
+          and coalesce(ps.ganho, false) = true
+        group by
+            n.tenant_id,
+            f.id,
+            date_trunc('month', coalesce(n.fechado_em, n.updated_at, n.created_at))::date
+    $view$;
+    execute 'alter view public.vw_performance_vendedores set (security_invoker = on)';
+    execute 'grant select on public.vw_performance_vendedores to authenticated';
+exception when others then
+    raise notice 'vw_performance_vendedores não criada: %', sqlerrm;
+end $$;
