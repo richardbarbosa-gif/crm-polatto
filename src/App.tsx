@@ -41,6 +41,7 @@ import {
 } from "@ant-design/icons";
 
 import authProvider from "./authProvider";
+import { i18nProvider } from "./i18n/ptBR";
 import { Header } from "./components/header";
 import { ColorModeContextProvider } from "./contexts/color-mode";
 import { RequireTenant, TenantProvider } from "./contexts/tenant";
@@ -83,6 +84,7 @@ function App() {
                                 authProvider={authProvider}
                                 routerProvider={routerProvider}
                                 notificationProvider={useNotificationProvider}
+                                i18nProvider={i18nProvider}
                                 resources={[
                                     {
                                         name: "dashboard",
