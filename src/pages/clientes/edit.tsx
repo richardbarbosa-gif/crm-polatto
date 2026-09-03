@@ -214,7 +214,9 @@ export const ClienteEdit = () => {
                     <Input />
                 </Form.Item>
 
-                <Form.Item label="E-mail" name="email" rules={[{ required: true, message: "Por favor, insira o e-mail." }]}>
+                {/* Não obrigatório: o cadastro não pede e-mail. Exigir aqui travava a
+                    edição de todo lead criado sem ele — inclusive os importados. */}
+                <Form.Item label="E-mail" name="email" rules={[{ type: "email", message: "E-mail inválido." }]}>
                     <Input />
                 </Form.Item>
 

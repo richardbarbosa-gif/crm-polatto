@@ -281,3 +281,7 @@ begin
 exception when insufficient_privilege then
     raise notice 'Sem permissão para GRANT — conferir acesso do role authenticated.';
 end $$;
+
+-- Meta de QUANTIDADE de vendas, ao lado da meta de valor. A tela de Metas
+-- grava e lê esta coluna; sem ela, "Salvar quotas" falhava no PostgREST.
+alter table public.metas add column if not exists target_wins integer not null default 0;

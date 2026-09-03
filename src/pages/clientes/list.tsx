@@ -520,7 +520,6 @@ export const ClienteList = () => {
                 values: {
                     tenant_id: tenantId || undefined,
                     nome,
-                    title: nome,
                     cor: newStageColor,
                     ordem: maxOrder + 1,
                     ...(pipelineAtivo ? { pipeline_id: pipelineAtivo } : {}),
