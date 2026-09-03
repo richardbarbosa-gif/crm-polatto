@@ -20,6 +20,9 @@ export interface TarefaRecord {
     tipo?: string | null;
     descricao?: string | null;
     data_vencimento?: string | null;
+    /** Agendamento concluído — controla o sino e a próxima atividade do card */
+    concluido?: boolean | null;
+    responsavel?: string | null;
 }
 
 export interface TaskContextData {

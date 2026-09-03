@@ -1,11 +1,14 @@
 import {
     CalendarOutlined,
+    CheckOutlined,
+    DeleteOutlined,
     EditOutlined,
     EyeOutlined,
     ReloadOutlined,
+    UndoOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { useList, useInvalidate } from "@refinedev/core"; // <-- Adicionado useInvalidate
+import { useList, useInvalidate, useUpdate, useDelete } from "@refinedev/core";
 import {
     Alert,
     Badge,
@@ -83,7 +86,48 @@ type ClienteAgendaRecord = {
 };
 
 export const AgendaPage = () => {
-    const invalidate = useInvalidate(); // <-- Inicializando o invalidate do Refine
+    const invalidate = useInvalidate();
+    const { mutateAsync: atualizarTarefa } = useUpdate();
+    const { mutateAsync: excluirTarefa } = useDelete();
+
+    /**
+     * Concluir/reabrir agendamento.
+     *
+     * Não existia nenhuma forma de fechar uma tarefa: elas se acumulavam
+     * para sempre, o sino de notificações só crescia e a "próxima
+     * atividade" do card do Kanban nunca mudava.
+     */
+    const alternarConclusao = async (tarefa: TarefaRecord) => {
+        const concluir = !tarefa.concluido;
+        try {
+            await atualizarTarefa({
+                resource: "tarefas",
+                id: tarefa.id,
+                values: { concluido: concluir },
+                successNotification: () => ({
+                    message: concluir ? "Agendamento concluído" : "Agendamento reaberto",
+                    type: "success",
+                }),
+            });
+            invalidate({ resource: "tarefas", invalidates: ["list"] });
+        } catch {
+            // notificação de erro é tratada pelo Refine
+        }
+    };
+
+    const removerTarefa = (tarefa: TarefaRecord) => {
+        Modal.confirm({
+            title: "Excluir agendamento?",
+            content: tarefa.titulo || "Este agendamento será removido da agenda.",
+            okText: "Excluir",
+            okButtonProps: { danger: true },
+            cancelText: "Cancelar",
+            onOk: async () => {
+                await excluirTarefa({ resource: "tarefas", id: tarefa.id });
+                invalidate({ resource: "tarefas", invalidates: ["list"] });
+            },
+        });
+    }; // <-- Inicializando o invalidate do Refine
 
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
@@ -450,6 +494,18 @@ export const AgendaPage = () => {
                                     onClick={() => abrirDrawerTarefa(tarefa)}
                                     actions={[
                                         <Button
+                                            key={`concluir-${tarefa.id}`}
+                                            size="small"
+                                            type={tarefa.concluido ? "default" : "primary"}
+                                            icon={tarefa.concluido ? <UndoOutlined /> : <CheckOutlined />}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void alternarConclusao(tarefa);
+                                            }}
+                                        >
+                                            {tarefa.concluido ? "Reabrir" : "Concluir"}
+                                        </Button>,
+                                        <Button
                                             key={`view-${tarefa.id}`}
                                             size="small"
                                             icon={<EyeOutlined />}
@@ -460,6 +516,17 @@ export const AgendaPage = () => {
                                         >
                                             Ver
                                         </Button>,
+                                        <Button
+                                            key={`excluir-${tarefa.id}`}
+                                            size="small"
+                                            danger
+                                            icon={<DeleteOutlined />}
+                                            aria-label="Excluir agendamento"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                removerTarefa(tarefa);
+                                            }}
+                                        />,
                                     ]}
                                 >
                                     <div style={{ width: "100%" }}>
