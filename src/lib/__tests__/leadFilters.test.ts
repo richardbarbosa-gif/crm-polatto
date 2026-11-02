@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildKpiFilters, buildLeadFilters } from "../leadFilters";
+import { buildKpiFilters, buildLeadFilters, filtroDeFunil, sanitizarBusca } from "../leadFilters";
 
 /** Procura um filtro simples (campo/operador/valor) na lista. */
 const temFiltro = (
@@ -107,5 +107,60 @@ describe("buildKpiFilters", () => {
 
     it("perdido filtra pelo status", () => {
         expect(temFiltro(buildKpiFilters({ temperatura: "perdido" }), "status")).toBe(true);
+    });
+});
+
+describe("filtroDeFunil", () => {
+    it("REGRESSÃO: negócio sem pipeline_id mas numa etapa do funil continua visível", () => {
+        expect(filtroDeFunil("funil-a", [10, "11"])).toEqual({
+            operator: "or",
+            value: [
+                { field: "pipeline_id", operator: "eq", value: "funil-a" },
+                { field: "stage_id", operator: "in", value: ["10", "11"] },
+            ],
+        });
+    });
+
+    it("ignora etapas ainda não gravadas (ids de exemplo como 'novo')", () => {
+        expect(filtroDeFunil("funil-a", ["novo", "visita"])).toEqual({
+            field: "pipeline_id",
+            operator: "eq",
+            value: "funil-a",
+        });
+    });
+
+    it("sem funil não filtra", () => {
+        expect(filtroDeFunil(undefined, [1])).toBeNull();
+    });
+
+    it("lista e KPIs usam exatamente o mesmo filtro de funil", () => {
+        const entrada = { pipelineId: "funil-a", etapasDoFunil: [1, 2] };
+        const doBoard = buildLeadFilters(entrada).find((f) => f.operator === "or");
+        const dosKpis = buildKpiFilters(entrada).find((f) => f.operator === "or");
+        expect(dosKpis).toEqual(doBoard);
+    });
+});
+
+describe("buildKpiFilters acompanha os filtros do board", () => {
+    it("REGRESSÃO: filtro de responsável também restringe os KPIs", () => {
+        expect(temFiltro(buildKpiFilters({ responsavel: "Ana" }), "responsavel", "Ana")).toBe(true);
+    });
+
+    it("REGRESSÃO: temperatura quente/morno/frio também restringe os KPIs", () => {
+        expect(temFiltro(buildKpiFilters({ temperatura: "quente" }), "temperatura", "quente")).toBe(true);
+    });
+
+    it("busca por texto não vai para a view (ela não tem nome)", () => {
+        expect(buildKpiFilters({ busca: "maria" })).toEqual([]);
+    });
+});
+
+describe("sanitizarBusca", () => {
+    it("remove aspas e barra invertida que quebravam o filtro .or()", () => {
+        expect(sanitizarBusca('Jo"ão \\ Silva')).toBe("Jo ão Silva");
+    });
+
+    it("busca só com espaços não gera filtro", () => {
+        expect(buildLeadFilters({ busca: "   " })).toEqual([]);
     });
 });

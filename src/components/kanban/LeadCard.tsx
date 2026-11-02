@@ -11,27 +11,28 @@ import {
 import { Button, TemperatureBadge } from "../ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
-import type { LeadNextTask } from "./types";
+import { valorDoLead } from "../../lib/pipelineMetrics";
+import type { KanbanLead, LeadNextTask } from "./types";
 import dayjs from "dayjs";
 
 const { Text } = Typography;
 
 export interface LeadCardProps {
-    lead: any;
+    lead: KanbanLead;
     accentColor: string;
     onPointerDown: (e: React.PointerEvent<HTMLDivElement>, leadId: string) => void;
     onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
-    onPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: any) => void;
+    onPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onPointerCancel: () => void;
-    onDragStart: (e: React.DragEvent<HTMLDivElement>, lead: any) => void;
+    onDragStart: (e: React.DragEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onDragEnd: (e: React.DragEvent<HTMLDivElement>) => void;
     onEdit: (leadId: string | number) => void;
-    onView: (lead: any) => void;
+    onView: (lead: KanbanLead) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
     nextTask?: LeadNextTask;
     /** Etapas para a ação "Mover" (alternativa por toque ao arraste) */
     stageMoveOptions?: { value: string; label: string }[];
-    onMoveToStage?: (lead: any, stageId: string) => void;
+    onMoveToStage?: (lead: KanbanLead, stageId: string) => void;
 }
 
 const getNextTaskIcon = (tipo?: string | null) => {
@@ -90,7 +91,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
 }) => {
     const temperature = resolveLeadTemperature(lead);
     const hasTemperature = Boolean(temperature);
-    const valor = Number(lead.conta_energia_media || lead.valor || 0);
+    // Valor do negócio primeiro; a conta de luz é só o fallback do modelo solar.
+    const valor = valorDoLead(lead);
     const hasValor = valor > 0;
     const age = getLeadAge(lead.created_at);
     const nextTaskInfo = getNextTaskInfo(nextTask);

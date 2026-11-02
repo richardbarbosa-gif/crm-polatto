@@ -18,8 +18,14 @@ import {
     isSupabaseMissingRelation,
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
-import { addLeadActivity } from "../../lib/leadTimeline";
+import { registrarMudancaDeEtapa } from "../../lib/leadTimeline";
 import { type LeadTemperatureTag } from "../../lib/leadTemperature";
+import {
+    resumirFunil,
+    textoIndicaGanho,
+    textoIndicaPerda,
+    totaisPorEtapa,
+} from "../../lib/pipelineMetrics";
 import { LeadDetails } from "./lead-details";
 import { supabaseClient } from "../../utility";
 
@@ -251,6 +257,13 @@ export const ClienteList = () => {
         [stages],
     );
 
+    // Etapas gravadas do funil ativo: um negócio pertence ao funil se tiver
+    // pipeline_id = funil OU estiver numa destas etapas (ver filtroDeFunil).
+    const etapasDoFunil = useMemo(
+        () => stages.filter((s) => s.persisted && s.id != null).map((s) => String(s.id)),
+        [stages],
+    );
+
     const resolveLeadStageId = (cliente: any): string => {
         const rawStageId = cliente?.stage_id ?? cliente?.stageId;
         if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
@@ -273,7 +286,9 @@ export const ClienteList = () => {
     };
 
     const manageableStages = useMemo(
-        () => stages.filter((s) => s.nome !== "Outros"),
+        // A coluna sintética "Outros" (id "outros") só existe em stagesVisiveis;
+        // uma etapa real chamada "Outros" precisa continuar gerenciável.
+        () => stages.filter((s) => s.id !== "outros"),
         [stages],
     );
     const canDeleteAnyStage = manageableStages.length > 1;
@@ -288,10 +303,11 @@ export const ClienteList = () => {
                 responsavel: responsavelFiltro,
                 temperatura: temperaturaFiltro,
                 pipelineId: pipelineAtivo,
+                etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
             }),
-        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
     );
 
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
@@ -300,16 +316,18 @@ export const ClienteList = () => {
         setListPage(1);
     }, [serverFilters]);
 
-    // ---- KPI filters (subset aplicável à View materializada) ----
+    // ---- KPI filters (todos os filtros do board, exceto a busca por texto) ----
     const kpiFilters = useMemo<CrudFilter[]>(
         () =>
             buildKpiFilters({
+                responsavel: responsavelFiltro,
                 temperatura: temperaturaFiltro,
                 pipelineId: pipelineAtivo,
+                etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
             }),
-        [temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
     );
 
     // ---- KPI query (View agregada – dados já somados no banco) ----
@@ -320,24 +338,32 @@ export const ClienteList = () => {
         liveMode: "auto",
     });
 
-    const kpiRows: KpiRow[] = kpiQuery?.data?.data ?? [];
-    const kpiError = (kpiQuery?.error ?? null) as any;
+    const kpiRows = useMemo<KpiRow[]>(() => kpiQuery?.data?.data ?? [], [kpiQuery?.data?.data]);
+    const kpiError = kpiQuery?.error ?? null;
     const hasKpiPolicyRecursion = isSupabasePolicyRecursion(kpiError);
     const kpiErrorMessage = getSupabaseErrorMessage(kpiError);
 
     // ---- KPIs ----
+    // Ganho/perdido pelos flags da etapa (resumirFunil), não pelo texto do
+    // status: etapa "Contrato assinado" marcada como ganho não entrava na
+    // conversão porque o nome não continha "fechado".
     const kpis = useMemo(() => {
-        const totalLeads = kpiRows.reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
-        const totalValor = kpiRows.reduce((acc: number, r: any) => acc + Number(r.valor_total || 0), 0);
-        const fechados = kpiRows
-            .filter((r: any) => {
-                const s = normalizeText(r.status);
-                return s.includes("fechado") || s.includes("ganho");
-            })
-            .reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
-        const taxaConversao = totalLeads > 0 ? ((fechados / totalLeads) * 100).toFixed(1) : "0";
-        return { totalLeads, totalValor, taxaConversao };
-    }, [kpiRows]);
+        const resumo = resumirFunil(kpiRows, persistedStagesRaw);
+        return {
+            totalLeads: resumo.totalLeads,
+            totalValor: resumo.valorTotal,
+            taxaConversao: resumo.conversao.toFixed(1),
+        };
+    }, [kpiRows, persistedStagesRaw]);
+
+    // Total e valor de cada coluna vêm da view agregada. Somar os cards
+    // carregados (20 por vez, rolagem infinita) dava um total errado assim
+    // que a coluna passava de 20 negócios. A busca por texto não chega à
+    // view; com busca ativa a coluna soma o que carregou.
+    const valoresPorEtapa = useMemo(
+        () => (debouncedSearch.trim() ? undefined : totaisPorEtapa(kpiRows)),
+        [debouncedSearch, kpiRows],
+    );
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
     // Agregado por stage_id (a view expõe a coluna). A agregação por NOME
@@ -346,10 +372,15 @@ export const ClienteList = () => {
     // apagar a etapa sem mover os leads, deixando-os órfãos.
     const leadCountByStageId = useMemo(() => buildLeadCountByStageId(kpiRows), [kpiRows]);
 
+    // Contagem da etapa a excluir direto no banco, sem os filtros do board:
+    // a contagem dos KPIs respeita responsável/temperatura/funil e podia dar
+    // zero com negócios na etapa — a etapa era apagada sem mover ninguém.
+    const [leadsNaEtapaPendente, setLeadsNaEtapaPendente] = useState<number | null>(null);
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) return 0;
+        if (leadsNaEtapaPendente !== null) return leadsNaEtapaPendente;
         return leadCountByStageId[String(stagePendingDelete.id ?? "")] || 0;
-    }, [leadCountByStageId, stagePendingDelete]);
+    }, [leadCountByStageId, leadsNaEtapaPendente, stagePendingDelete]);
 
     const deleteStageDestinationOptions = useMemo(() => {
         if (!stagePendingDelete) return [];
@@ -374,7 +405,8 @@ export const ClienteList = () => {
             let query = supabaseClient
                 .from("funcionarios")
                 .select("nome")
-                .eq("ativo", true) // Pega apenas os vendedores ativos
+                .eq("ativo", true) // apenas vendedores ativos
+                .is("deleted_at", null)
                 .not("nome", "is", null);
 
             // Se for um vendedor comum (Sem Modo Deus), ele só vê a si mesmo no filtro
@@ -412,15 +444,26 @@ export const ClienteList = () => {
             setSelectedLead(null);
             return;
         }
-        const fetchLead = async () => {
-            const { data } = await supabaseClient
-                .from("clientes")
-                .select("*")
-                .eq("id", selectedLeadId)
-                .single();
-            setSelectedLead(data ?? null);
+        // Cliques rápidos em cards diferentes: a resposta antiga não pode
+        // sobrescrever o lead aberto agora.
+        let ativo = true;
+        setSelectedLead(null);
+        void supabaseClient
+            .from("clientes")
+            .select("*")
+            .eq("id", selectedLeadId)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (!ativo) return;
+                if (error) {
+                    message.error("Não foi possível abrir o lead.");
+                    return;
+                }
+                setSelectedLead((data as Record<string, unknown> | null) ?? null);
+            });
+        return () => {
+            ativo = false;
         };
-        fetchLead();
     }, [selectedLeadId]);
 
     // ---- Realtime ----
@@ -554,15 +597,27 @@ export const ClienteList = () => {
             return;
         }
         setStagePendingDelete(stage);
+        setLeadsNaEtapaPendente(null);
         const defaultDestinationRaw = manageableStages.find((item) => item.nome !== stage.nome)?.id;
         const defaultDestination =
             defaultDestinationRaw == null ? undefined : String(defaultDestinationRaw);
         setDeleteDestinationStage(defaultDestination);
+
+        if (stage.id != null) {
+            void supabaseClient
+                .from("clientes")
+                .select("id", { count: "exact", head: true })
+                .eq("stage_id", String(stage.id))
+                .then(({ count, error }) => {
+                    if (!error && typeof count === "number") setLeadsNaEtapaPendente(count);
+                });
+        }
     };
 
     const cancelDeleteStage = () => {
         setStagePendingDelete(null);
         setDeleteDestinationStage(undefined);
+        setLeadsNaEtapaPendente(null);
     };
 
     const confirmDeleteStage = async () => {
@@ -587,7 +642,10 @@ export const ClienteList = () => {
 
         setIsDeletingStage(true);
         try {
-            if (leadsInPendingDeleteStage > 0 && deleteDestinationStage) {
+            // Move sempre que houver destino: não depende de a contagem estar
+            // certa (mover zero negócios é inofensivo; apagar a etapa com
+            // negócios dentro os deixaria sem etapa).
+            if (deleteDestinationStage && deleteDestinationStage !== String(stagePendingDelete.id)) {
                 const destinationStage = stageById.get(deleteDestinationStage);
                 const { error: moveError } = await supabaseClient
                     .from("clientes")
@@ -595,6 +653,9 @@ export const ClienteList = () => {
                         tenant_id: tenantId || undefined,
                         stage_id: deleteDestinationStage,
                         status: destinationStage?.nome || undefined,
+                        ...(destinationStage?.pipeline_id
+                            ? { pipeline_id: destinationStage.pipeline_id }
+                            : {}),
                     })
                     .eq("stage_id", String(stagePendingDelete.id));
                 if (moveError) throw moveError;
@@ -770,7 +831,11 @@ export const ClienteList = () => {
         const nextStage = stageById.get(novoStageId);
         const nextStageName = nextStage?.nome || "Sem etapa";
         const fromStageName = resolveLeadStageName(leadArrastado);
-        const isFechado = nextStageName.toLowerCase().includes("fechado");
+        // Flags da etapa primeiro; o nome é só o fallback (etapa "Contrato
+        // assinado" marcada como ganho também fecha o negócio).
+        const isGanho = Boolean(nextStage?.ganho) || textoIndicaGanho(nextStageName);
+        const isPerda = Boolean(nextStage?.perdido) || textoIndicaPerda(nextStageName);
+        const isTerminal = isGanho || isPerda;
 
         try {
             await updateLead({
@@ -780,13 +845,14 @@ export const ClienteList = () => {
                     tenant_id: tenantId || undefined,
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
-                    data_fechamento: isFechado ? new Date().toISOString() : null,
+                    data_fechamento: isTerminal ? new Date().toISOString() : null,
                     // Carimba o funil da etapa destino: sem isto o lead ficaria
                     // sem pipeline_id e sumiria do filtro por funil.
                     ...(nextStage?.pipeline_id || pipelineAtivo
                         ? { pipeline_id: nextStage?.pipeline_id || pipelineAtivo }
                         : {}),
-                    ...(motivoPerda ? { motivo_perda: motivoPerda } : {}),
+                    // Reaberto (saiu de "perdido"): o motivo antigo deixa de valer.
+                    motivo_perda: isPerda ? motivoPerda ?? leadArrastado.motivo_perda ?? null : null,
                 },
                 successNotification: () => ({
                     message: `Movido para ${nextStageName}`,
@@ -800,37 +866,19 @@ export const ClienteList = () => {
                 }),
             });
 
-            const { error: historyError } = await supabaseClient
-                .from("cliente_status_history")
-                .insert({
-                    tenant_id: tenantId || undefined,
-                    cliente_id: leadArrastado.id,
-                    de_status: fromStageName,
-                    para_status: nextStageName,
-                    movido_em: new Date().toISOString(),
-                    movido_por: ownerDisplayName || null,
-                });
-
-            if (historyError && !isSupabaseMissingRelation(historyError)) {
-                message.warning("Status atualizado, mas não foi possível registrar no histórico.");
-            }
-
-            if (leadArrastado.id != null) {
-                await addLeadActivity({
-                    leadId: String(leadArrastado.id),
-                    tenantId,
-                    activityType: "status",
-                    title: "Mudança de etapa",
-                    description: motivoPerda
-                        ? `${fromStageName} -> ${nextStageName} (motivo: ${motivoPerda})`
-                        : `${fromStageName} -> ${nextStageName}`,
-                    fromStatus: fromStageName,
-                    toStatus: nextStageName,
-                    author: ownerDisplayName,
-                });
+            const historicoGravado = await registrarMudancaDeEtapa({
+                leadId: leadArrastado.id,
+                tenantId,
+                de: fromStageName,
+                para: nextStageName,
+                motivoPerda,
+                autor: ownerDisplayName,
+            });
+            if (!historicoGravado) {
+                message.warning("Etapa atualizada, mas não foi possível registrar no histórico.");
             }
         } catch {
-            // Error notification is handled by refine.
+            // A notificação de erro da mudança de etapa é exibida pelo Refine.
         }
     };
 
@@ -863,9 +911,7 @@ export const ClienteList = () => {
         if (currentStageId === novoStageId) return;
 
         const nextStage = stageById.get(novoStageId);
-        const isPerdido =
-            Boolean(nextStage?.perdido) ||
-            normalizeText(nextStage?.nome).includes("perdido");
+        const isPerdido = Boolean(nextStage?.perdido) || textoIndicaPerda(nextStage?.nome);
 
         if (isPerdido) {
             setMotivoPerdaSelecionado(undefined);
@@ -1025,8 +1071,7 @@ export const ClienteList = () => {
                         kpiError={kpiError}
                         hasKpiPolicyRecursion={hasKpiPolicyRecursion}
                         kpiErrorMessage={kpiErrorMessage}
-                        totalLeads={kpis.totalLeads}
-                        isKpiLoading={kpiQuery?.isLoading}
+                        valoresPorEtapa={valoresPorEtapa}
                         tasksByLead={tasksByLead}
                         stageMoveOptions={stageMoveOptions}
                         onMoveLeadToStage={solicitarMoverLead}
