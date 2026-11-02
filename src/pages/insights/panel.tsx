@@ -131,7 +131,7 @@ export const InsightsPanelPage = () => {
                 getTaskSituation(
                     task.data_vencimento,
                     nowRef,
-                    resolveTaskExecutionStatus(task as Record<string, any>),
+                    resolveTaskExecutionStatus(task),
                 ) === "atrasada",
         ).length;
         const todayTasks = tarefas.filter((task) => {

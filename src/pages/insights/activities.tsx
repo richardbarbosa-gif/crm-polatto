@@ -133,7 +133,7 @@ export const InsightsActivitiesPage = () => {
                 getTaskSituation(
                     task.data_vencimento,
                     now,
-                    resolveTaskExecutionStatus(task as Record<string, any>),
+                    resolveTaskExecutionStatus(task),
                 ) === "atrasada",
         ).length;
         const today = filteredTasks.filter(
@@ -141,7 +141,7 @@ export const InsightsActivitiesPage = () => {
                 getTaskSituation(
                     task.data_vencimento,
                     now,
-                    resolveTaskExecutionStatus(task as Record<string, any>),
+                    resolveTaskExecutionStatus(task),
                 ) === "hoje",
         ).length;
         const visits = filteredTasks.filter((task) => task.tipo === "visita").length;
@@ -304,7 +304,7 @@ export const InsightsActivitiesPage = () => {
                                 width: 110,
                                 render: (_, record: InsightTaskRecord) => {
                                     const executionStatus = resolveTaskExecutionStatus(
-                                        record as Record<string, any>,
+                                        record,
                                     );
                                     return getSituationTag(
                                         getTaskSituation(
