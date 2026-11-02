@@ -34,6 +34,7 @@ import {
     KanbanBoard,
     ListView,
     type Stage,
+    type KanbanLead,
     type LeadNextTask,
     type LeadPointerSession,
     DEFAULT_STAGE_BLUEPRINT,
@@ -425,7 +426,7 @@ export const ClienteList = () => {
         fetchResponsaveis();
     }, [canViewAllLeads, ownerCandidates, isLoadingAccess]);
     // ---- List view query (paginação server-side) ----
-    const { query: listQuery } = useList({
+    const { query: listQuery } = useList<KanbanLead>({
         resource: "clientes",
         pagination: { currentPage: listPage, pageSize: 12 },
         filters: serverFilters,

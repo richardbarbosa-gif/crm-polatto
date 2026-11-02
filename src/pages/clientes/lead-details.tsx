@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, MarkdownEditor, MarkdownViewer, TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
+import { valorDoLead } from "../../lib/pipelineMetrics";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
 import { CustomFieldsView } from "../../components/custom-fields";
@@ -52,6 +53,7 @@ type LeadRecord = {
     telefone?: string | null;
     responsavel?: string | null;
     conta_energia_media?: number | string | null;
+    valor?: number | string | null;
     endereco_instalacao?: string | null;
     numero?: string | null;
     complemento?: string | null;
@@ -93,7 +95,7 @@ const getTimelineColor = (entry: LeadTimelineEntry): string => {
 
 const getTimelineTypeLabel = (entry: LeadTimelineEntry): string => {
     if (entry.type === "status") return "Status";
-    if (entry.type === "ligacao") return "Ligacao";
+    if (entry.type === "ligacao") return "Ligação";
     if (entry.type === "upload") return "Upload";
     if (entry.type === "nota") return "Nota";
     return "Atividade";
@@ -153,7 +155,7 @@ export const LeadDetails = ({
             setTimeline(entries);
         } catch (error: any) {
             setTimeline([]);
-            message.error(error?.message || "Nao foi possivel carregar o historico do lead.");
+            message.error(error?.message || "Não foi possível carregar o histórico do lead.");
         } finally {
             setIsLoadingTimeline(false);
         }
@@ -176,7 +178,7 @@ export const LeadDetails = ({
             );
         } catch (error: any) {
             setFiles([]);
-            message.warning(error?.message || "Nao foi possivel listar arquivos anexados.");
+            message.warning(error?.message || "Não foi possível listar os arquivos anexados.");
         } finally {
             setIsLoadingFiles(false);
         }
@@ -262,23 +264,23 @@ export const LeadDetails = ({
                 leadId: record.id,
                 tenantId,
                 activityType: activityType,
-                title: activityType === "ligacao" ? "Ligacao com lead" : "Nota manual",
+                title: activityType === "ligacao" ? "Ligação com o lead" : "Nota",
                 description: activityText.trim(),
                 author: currentUserLabel,
             });
 
             if (!persisted) {
                 message.warning(
-                    "Atividade salva apenas localmente: tabela atividades_lead nao encontrada.",
+                    "A atividade não foi salva: a tabela de histórico não existe neste banco.",
                 );
             } else {
-                message.success("Atividade registrada no historico.");
+                message.success("Atividade registrada no histórico.");
             }
 
             setActivityText("");
             await loadTimeline();
         } catch (error: any) {
-            message.error(error?.message || "Nao foi possivel salvar a atividade.");
+            message.error(error?.message || "Não foi possível salvar a atividade.");
         } finally {
             setIsSavingActivity(false);
         }
@@ -367,10 +369,10 @@ export const LeadDetails = ({
                 storagePath: file.caminhoStorage,
                 tenantId,
             });
-            message.success("Documento excluido com sucesso.");
+            message.success("Documento excluído.");
             await Promise.all([loadFiles(), loadTimeline()]);
         } catch (error: any) {
-            message.error(error?.message || "Nao foi possivel excluir o documento.");
+            message.error(error?.message || "Não foi possível excluir o documento.");
         }
     };
 
@@ -404,7 +406,7 @@ export const LeadDetails = ({
                         allowClear
                         placeholder={
                             automaticTemperature
-                                ? `Automatica: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
+                                ? `Automática: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}`
                                 : "Editar temperatura"
                         }
                         value={isAutomaticTemperature ? undefined : temperatureTag}
@@ -417,7 +419,7 @@ export const LeadDetails = ({
                     />
                     {automaticTemperature ? (
                         <Text type="secondary" style={{ fontSize: 12 }}>
-                            Temperatura automatica pelo status.
+                            Temperatura automática pela etapa.
                         </Text>
                     ) : null}
                 </Space>
@@ -445,7 +447,7 @@ export const LeadDetails = ({
                             fontWeight: 700,
                         }}
                     >
-                        Agendar visita
+                        {isEnergiaSolar ? "Agendar visita" : "Agendar atividade"}
                     </Button>
                 ) : null}
             </div>
@@ -476,21 +478,27 @@ export const LeadDetails = ({
                     </div>
 
                     <div style={{ textAlign: "right" }}>
-                        <Text type="secondary">Conta media</Text>
+                        <Text type="secondary">Valor do negócio</Text>
                         <div style={{ fontSize: 28, fontWeight: 700, color: "#15803d" }}>
-                            {formatCurrencyBRL(record.conta_energia_media, "R$ 0,00")}
+                            {formatCurrencyBRL(valorDoLead(record), "R$ 0,00")}
                         </div>
+                        {isEnergiaSolar && record.conta_energia_media ? (
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                Conta média: {formatCurrencyBRL(record.conta_energia_media, "-")}
+                            </Text>
+                        ) : null}
                     </div>
                 </div>
 
                 <Divider />
 
+                {isEnergiaSolar || record.endereco_instalacao ? (
                 <div
                     style={{
-                        background: "#f5f7fa",
+                        background: "var(--crm-surface-2, #f5f7fa)",
                         padding: 16,
                         borderRadius: 10,
-                        border: "1px solid #e7edf5",
+                        border: "1px solid var(--crm-border, #e7edf5)",
                     }}
                 >
                     <div
@@ -504,22 +512,28 @@ export const LeadDetails = ({
                     >
                         <div>
                             <Title level={5} style={{ margin: 0 }}>
-                                <EnvironmentOutlined /> Local da instalacao
+                                <EnvironmentOutlined /> {isEnergiaSolar ? "Local da instalação" : "Endereço"}
                             </Title>
                             <Text style={{ fontSize: 15 }}>
-                                {record.endereco_instalacao}, {record.numero}{" "}
+                                {[record.endereco_instalacao, record.numero].filter(Boolean).join(", ") || "Endereço não informado"}{" "}
                                 {record.complemento ? `- ${record.complemento}` : ""}
                             </Text>
                             <br />
                             <Text type="secondary">CEP: {record.cep || "-"}</Text>
                         </div>
-                        <Button type="default" icon={<GoogleOutlined />} onClick={handleOpenMap}>
+                        <Button
+                            type="default"
+                            icon={<GoogleOutlined />}
+                            onClick={handleOpenMap}
+                            disabled={!record.endereco_instalacao && !record.cep}
+                        >
                             Ver no mapa
                         </Button>
                     </div>
                 </div>
+                ) : null}
 
-                <Divider />
+                {isEnergiaSolar || record.endereco_instalacao ? <Divider /> : null}
 
                 <div
                     style={{
@@ -683,7 +697,7 @@ export const LeadDetails = ({
                 )}
             </Card>
 
-            <Card title="Timeline / historico">
+            <Card title="Histórico do lead">
                 <div style={{ marginBottom: 12 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
                         <Select
@@ -692,7 +706,7 @@ export const LeadDetails = ({
                             onChange={(value) => setActivityType(value)}
                             options={[
                                 { value: "nota", label: "Nota" },
-                                { value: "ligacao", label: "Ligacao" },
+                                { value: "ligacao", label: "Ligação" },
                             ]}
                         />
                         <div style={{ flex: 1, minWidth: 260 }}>
@@ -700,7 +714,7 @@ export const LeadDetails = ({
                                 value={activityText}
                                 onChange={setActivityText}
                                 height={160}
-                                placeholder="Registrar contato, retorno ou observacao do lead"
+                                placeholder="Registre contato, retorno ou observação sobre o lead"
                             />
                         </div>
                     </div>
@@ -711,7 +725,7 @@ export const LeadDetails = ({
                             loading={isSavingActivity}
                             onClick={handleAddActivity}
                         >
-                            Registrar no historico
+                            Registrar no histórico
                         </Button>
                     </div>
                 </div>
@@ -719,12 +733,12 @@ export const LeadDetails = ({
                 {isLoadingTimeline ? (
                     <Skeleton active />
                 ) : timelineItems.length === 0 ? (
-                    <Empty description="Sem historico registrado para este lead." />
+                    <Empty description="Sem histórico registrado para este lead." />
                 ) : (
                     <Timeline items={timelineItems} />
                 )}
                 <Text type="secondary" style={{ fontSize: 12 }}>
-                    <ClockCircleOutlined /> Atualizado em tempo real conforme mudancas de status e atividades.
+                    <ClockCircleOutlined /> Atualizado a cada mudança de etapa e atividade registrada.
                 </Text>
             </Card>
         </div>
