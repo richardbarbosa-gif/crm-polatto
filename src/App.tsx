@@ -53,6 +53,7 @@ import { OrganizacoesPage } from "./pages/organizacoes";
 import { PessoasPage } from "./pages/pessoas";
 import { HistoricoPage } from "./pages/historico";
 import { supabaseClient } from "./utility";
+import { comPaginacaoCompleta } from "./lib/dataProviderPaginado";
 
 import {
     InsightsActivitiesPage,
@@ -70,6 +71,9 @@ const CustomTitle = ({ collapsed }: { collapsed?: boolean }) => (
     </div>
 );
 
+// Paginação "off" passa a trazer todas as linhas (ver dataProviderPaginado).
+const dataProviderCrm = comPaginacaoCompleta(dataProvider(supabaseClient));
+
 function App() {
     return (
         <BrowserRouter>
@@ -78,7 +82,7 @@ function App() {
                     <AntdApp>
                         <DevtoolsProvider>
                             <Refine
-                                dataProvider={dataProvider(supabaseClient)}
+                                dataProvider={dataProviderCrm}
                                 liveProvider={liveProvider(supabaseClient)}
                                 authProvider={authProvider}
                                 routerProvider={routerProvider}
