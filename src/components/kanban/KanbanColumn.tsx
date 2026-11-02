@@ -28,6 +28,8 @@ export interface KanbanColumnProps {
     openLeadEdit: (leadId: string | number) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
     tasksByLead?: Map<string, LeadNextTask>;
+    stageMoveOptions?: { value: string; label: string }[];
+    onMoveLeadToStage?: (lead: any, stageId: string) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -50,6 +52,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     openLeadEdit,
     stopActionPropagation,
     tasksByLead,
+    stageMoveOptions,
+    onMoveLeadToStage,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -156,6 +160,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 onView={openLeadDrawer}
                                 stopActionPropagation={stopActionPropagation}
                                 nextTask={tasksByLead?.get(String(cliente.id))}
+                                stageMoveOptions={stageMoveOptions}
+                                onMoveToStage={onMoveLeadToStage}
                             />
                         ))}
                         <div ref={sentinelRef} style={{ height: 1 }} />

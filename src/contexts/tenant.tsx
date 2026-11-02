@@ -11,8 +11,16 @@ type IdentityRecord = {
     [key: string]: unknown;
 };
 
+export type EmpresaDoUsuario = {
+    id: string;
+    nome: string;
+    segmento?: string | null;
+};
+
 type TenantContextValue = {
     tenantId: string | null;
+    /** Empresas às quais o usuário pertence (alimenta o seletor do topo) */
+    empresas: EmpresaDoUsuario[];
     role: string | null;
     membership: UsuarioEmpresa | null;
     isSystemAdmin: boolean;
@@ -49,26 +57,51 @@ const mapMembership = (row: Record<string, unknown>): UsuarioEmpresa => {
 };
 
 /**
- * Busca o vínculo do usuário na utilizadores_empresas.
- * A tabela só tem auth_uid (uuid) — não tem coluna email.
+ * Busca TODOS os vínculos do usuário em utilizadores_empresas.
+ *
+ * Antes trazia apenas o primeiro (limit 1). Com isso o app não sabia que o
+ * usuário pertencia a mais de uma empresa: o seletor não tinha o que listar
+ * e a escolha do usuário era sobrescrita pelo primeiro vínculo a cada carga.
  */
-const fetchMembership = async (userId?: string | null): Promise<UsuarioEmpresa | null> => {
+const fetchMemberships = async (userId?: string | null): Promise<UsuarioEmpresa[]> => {
     const normalizedUserId = toStringValue(userId);
-    if (!normalizedUserId) return null;
+    if (!normalizedUserId) return [];
 
     const { data, error } = await supabaseClient
         .from("utilizadores_empresas")
         .select("*")
-        .eq("auth_uid", normalizedUserId)
-        .limit(1)
-        .maybeSingle();
+        .eq("auth_uid", normalizedUserId);
 
     if (error) {
-        if (isSupabaseMissingRelation(error) || isSupabaseMissingColumn(error)) return null;
+        if (isSupabaseMissingRelation(error) || isSupabaseMissingColumn(error)) return [];
         throw error;
     }
 
-    return data ? mapMembership(data as Record<string, unknown>) : null;
+    return ((data as Record<string, unknown>[]) || [])
+        .map(mapMembership)
+        .filter((m) => Boolean(m.tenant_id));
+};
+
+/** Nome das empresas às quais o usuário pertence, para o seletor do topo. */
+const fetchNomesEmpresas = async (
+    tenantIds: string[],
+): Promise<Record<string, { nome: string; segmento?: string | null }>> => {
+    if (!tenantIds.length) return {};
+    try {
+        const { data, error } = await supabaseClient
+            .from("empresas")
+            .select("id,nome,segmento")
+            .in("id", tenantIds);
+        if (error || !data) return {};
+        return Object.fromEntries(
+            (data as Array<{ id: string; nome?: string; segmento?: string }>).map((e) => [
+                String(e.id),
+                { nome: e.nome || "Empresa", segmento: e.segmento },
+            ]),
+        );
+    } catch {
+        return {};
+    }
 };
 
 /**
@@ -110,6 +143,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
     const identityUserId = toStringValue(identity?.id);
 
     const [membership, setMembership] = useState<UsuarioEmpresa | null>(null);
+    const [empresas, setEmpresas] = useState<EmpresaDoUsuario[]>([]);
     const [isMembershipLoading, setIsMembershipLoading] = useState(false);
     const [membershipError, setMembershipError] = useState<string | null>(null);
     const [isSystemAdmin, setIsSystemAdmin] = useState(false);
@@ -117,6 +151,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
     const loadMembership = async () => {
         if (!identityEmail && !identityUserId) {
             setMembership(null);
+            setEmpresas([]);
             setMembershipError(null);
             setIsMembershipLoading(false);
             setIsSystemAdmin(false);
@@ -131,20 +166,44 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             const adminCheck = await checkIsSystemAdmin(identityEmail);
             setIsSystemAdmin(adminCheck);
 
-            const nextMembership = await fetchMembership(identityUserId);
+            const vinculos = await fetchMemberships(identityUserId);
+
+            // Respeita a empresa que o usuário escolheu no seletor, DESDE QUE
+            // ela seja realmente dele. Antes o vínculo era sempre sobrescrito
+            // pelo primeiro da lista e a troca de empresa não durava um reload.
+            const escolhida = window.localStorage.getItem("crm_tenant_id");
+            const valida = vinculos.find((v) => v.tenant_id === escolhida);
+            const ordenados = [...vinculos].sort((a, b) =>
+                String(a.tenant_id).localeCompare(String(b.tenant_id)),
+            );
+            const nextMembership = valida || ordenados[0] || null;
+
             setMembership(nextMembership);
-            
+
             if (nextMembership?.tenant_id) {
                 window.localStorage.setItem("crm_tenant_id", nextMembership.tenant_id);
             } else {
                 window.localStorage.removeItem("crm_tenant_id");
             }
+
+            // Nomes para o seletor do topo (a RPC listar_empresas_usuario
+            // não existe no schema; a lista é montada aqui)
+            const ids = vinculos.map((v) => String(v.tenant_id));
+            const nomes = await fetchNomesEmpresas(ids);
+            setEmpresas(
+                vinculos.map((v) => ({
+                    id: String(v.tenant_id),
+                    nome: nomes[String(v.tenant_id)]?.nome || "Empresa",
+                    segmento: nomes[String(v.tenant_id)]?.segmento ?? null,
+                })),
+            );
         } catch (error: unknown) {
             const message = typeof error === "object" && error && "message" in error
                 ? String((error as { message?: unknown }).message || "Falha ao carregar vinculo do tenant.")
                 : "Falha ao carregar vinculo do tenant.";
             setMembershipError(message);
             setMembership(null);
+            setEmpresas([]);
             setIsSystemAdmin(false);
             window.localStorage.removeItem("crm_tenant_id");
         } finally {
@@ -162,12 +221,12 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
 
     const value = useMemo<TenantContextValue>(
         () => ({
-            tenantId, role, membership, isSystemAdmin,
+            tenantId, role, membership, isSystemAdmin, empresas,
             isLoading: isIdentityLoading || isMembershipLoading,
             error: membershipError, canAccessTenant, identityEmail, identityUserId,
             refresh: loadMembership,
         }),
-        [canAccessTenant, identityEmail, identityUserId, isIdentityLoading, isMembershipLoading, isSystemAdmin, membership, membershipError, role, tenantId]
+        [canAccessTenant, empresas, identityEmail, identityUserId, isIdentityLoading, isMembershipLoading, isSystemAdmin, membership, membershipError, role, tenantId]
     );
 
     return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;

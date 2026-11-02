@@ -4,6 +4,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 
 | Arquivo | O que faz |
 |---|---|
+| `2026-07-19_00_base.sql` | **Tabelas base** (empresas, vínculo de usuários, clientes, funil, equipe, agenda, timeline, documentos, metas). Sem ela um projeto Supabase novo não sobe. |
 | `2026-07-19_01_modelo_relacional.sql` | Modelo organizacoes/pessoas/negocios, pipelines múltiplos, custom fields, motivos de perda, tipos de atividade, FKs formais, view de compatibilidade `clientes` |
 | `2026-07-19_02_seguranca.sql` | `current_tenant_id()` fail-closed, trigger de tenant_id (remove default hardcoded), RLS por tenant, isolamento do Storage `lead-files`, rate limiting |
 | `2026-07-19_03_lgpd.sql` | Consentimentos, exportação do titular, direito ao esquecimento, política de retenção, log de acesso a dado pessoal |
@@ -33,7 +34,7 @@ duas suítes de asserção. Qualquer falha aborta com a descrição do teste.
 
 ## Sequência de virada (produção)
 
-1. Rodar 01–09 em ordem.
+1. Rodar 00–09 em ordem.
 2. `select * from public.migrar_clientes_para_negocios(true);` — dry-run, conferir números.
 3. `select * from public.migrar_clientes_para_negocios(false);` — migra de verdade.
 4. `alter table public.clientes rename to clientes_legado;`

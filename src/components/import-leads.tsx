@@ -30,8 +30,40 @@ export const ImportLeadsButton = () => {
 
                     message.loading({ content: "Analisando planilha e checando duplicatas...", key: "import-status" });
 
+                    // Etapas do funil, para converter o texto do status em
+                    // stage_id. Sem isso o lead importado nasce sem etapa e não
+                    // aparece em nenhuma coluna do Kanban (que filtram por
+                    // stage_id) — cai apenas na coluna "Outros".
+                    const { data: etapas } = await supabaseClient
+                        .from("pipeline_stages")
+                        .select("id,nome,ordem,pipeline_id")
+                        .order("ordem", { ascending: true });
+
+                    const listaEtapas = (etapas || []) as Array<{
+                        id: string | number;
+                        nome?: string | null;
+                        pipeline_id?: string | null;
+                    }>;
+
+                    const normalizar = (v: unknown) =>
+                        String(v ?? "").trim().toLowerCase();
+
+                    const etapaPorNome = new Map(
+                        listaEtapas
+                            .filter((e) => e.nome)
+                            .map((e) => [normalizar(e.nome), e]),
+                    );
+                    const etapaPadrao = listaEtapas[0];
+
+                    const resolverEtapa = (statusTexto: string) =>
+                        etapaPorNome.get(normalizar(statusTexto)) || etapaPadrao;
+
                     // 1. Mapear e higienizar os dados do CSV
-                    const mappedLeads = rows.map((item) => ({
+                    const mappedLeads = rows.map((item) => {
+                        const statusTexto =
+                            item.Status || item.status || item.Etapa || "Novo Lead";
+                        const etapa = resolverEtapa(statusTexto);
+                        return {
                         tenant_id: tenantId || undefined,
                         nome: item.Nome || item.nome || item.Name || "Lead Sem Nome",
                         email: (item.Email || item.email || "").trim() || null,
@@ -40,9 +72,14 @@ export const ImportLeadsButton = () => {
                         responsavel: item.Responsavel || item.responsavel || item.Responsável || ownerDisplayName,
                         conta_energia_media: Number(item.conta_energia_media || item.Conta_Energia || 0) || 0,
                         valor: Number(item.valor || item.Valor || 0) || 0,
-                        status: item.Status || item.status || item.Etapa || "Novo Lead",
+                        // Usa o nome da etapa encontrada para o status ficar
+                        // consistente com o funil, não com o texto da planilha
+                        status: etapa?.nome || statusTexto,
+                        stage_id: etapa?.id ?? null,
+                        ...(etapa?.pipeline_id ? { pipeline_id: etapa.pipeline_id } : {}),
                         temperatura: item.Temperatura || item.temperatura || null,
-                    }));
+                        };
+                    });
 
                     // 2. Extrair valores válidos para a "Malha Fina" tripla
                     const telefonesParaChecar = mappedLeads

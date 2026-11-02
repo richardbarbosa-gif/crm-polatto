@@ -37,6 +37,8 @@ import {
     resolveAutomaticLeadTemperature,
 } from "../../lib/leadTemperature";
 import { supabaseClient } from "../../utility";
+import { CustomFieldsForm } from "../../components/custom-fields";
+import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -53,6 +55,8 @@ type ClienteCreateFormValues = {
     responsavel_id?: string; // Alterado para ID
     stage_id: string;
     temperature?: LeadTemperature;
+    /** Valores dos campos customizados do tenant (jsonb) */
+    dados_extras?: Record<string, unknown>;
 };
 
 const { Text, Title } = Typography;
@@ -62,6 +66,7 @@ export const ClienteCreate = () => {
     const { tenantId } = useTenant();
     const { ownerDisplayName } = useCrmAccess();
     const { isEnergiaSolar } = useTenantSegmento();
+    const { campos: camposCustomizados } = useCustomFields("negocio");
     
     const pendingFilesRef = useRef<{
         propostaFile: File | null;
@@ -427,8 +432,14 @@ export const ClienteCreate = () => {
         const registroStage = stagesData.find((s) => String(s?.id) === String(nextStageId));
         const pipelineDaStage = registroStage?.pipeline_id ?? undefined;
 
+        // Campos customizados do tenant viajam em dados_extras (jsonb).
+        // Sem isto, tudo que o admin definisse em Configurações era ignorado.
+        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
+        const { dados_extras: _descartado, ...payloadLimpo } = payload as Record<string, unknown>;
+
         return formProps.onFinish?.({
-            ...payload,
+            ...payloadLimpo,
+            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
             ...(pipelineDaStage ? { pipeline_id: pipelineDaStage } : {}),
@@ -552,6 +563,16 @@ export const ClienteCreate = () => {
                 </Row>
 
                 <Card size="small" style={{ marginTop: 8, borderRadius: 10, border: "1px solid #e5e7eb", background: "#f8fafc" }}>
+                    {camposCustomizados.length > 0 ? (
+                        <div className="crm-form-section" style={{ marginBottom: 16 }}>
+                            <Row gutter={20}>
+                                <Col xs={24} lg={12}>
+                                    <CustomFieldsForm campos={camposCustomizados} />
+                                </Col>
+                            </Row>
+                        </div>
+                    ) : null}
+
                     <Title level={5} style={{ margin: 0 }}>Documentos iniciais do lead</Title>
                     <Text type="secondary">Opcional no cadastro: anexe proposta e/ou conta de luz em PDF.</Text>
 

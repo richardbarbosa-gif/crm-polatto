@@ -37,10 +37,10 @@ import {
     UsergroupAddOutlined,
     ProfileOutlined,
     FlagOutlined,
-    MessageOutlined,
 } from "@ant-design/icons";
 
 import authProvider from "./authProvider";
+import { i18nProvider } from "./i18n/ptBR";
 import { Header } from "./components/header";
 import { ColorModeContextProvider } from "./contexts/color-mode";
 import { RequireTenant, TenantProvider } from "./contexts/tenant";
@@ -83,6 +83,7 @@ function App() {
                                 authProvider={authProvider}
                                 routerProvider={routerProvider}
                                 notificationProvider={useNotificationProvider}
+                                i18nProvider={i18nProvider}
                                 resources={[
                                     {
                                         name: "dashboard",
@@ -162,11 +163,15 @@ function App() {
                                         list: "/insights/logs",
                                         meta: { label: "Logs", parent: "insights", icon: <ProfileOutlined /> },
                                     },
-                                    {
-    name: "chat",
-    list: "/chat",
-    meta: { label: "Chat", icon: <MessageOutlined /> },
-},
+                                    // Chat fica FORA do menu enquanto for "em breve": anunciar
+                                    // na navegação principal algo que não existe passa impressão
+                                    // de produto inacabado. A rota /chat continua ativa — para
+                                    // reexibir, basta devolver este recurso à lista.
+                                    // {
+                                    //     name: "chat",
+                                    //     list: "/chat",
+                                    //     meta: { label: "Chat", icon: <MessageOutlined /> },
+                                    // },
                                     { name: "atividades_lead" },
                                     { name: "tarefas" },
                                     { name: "pipeline_stages" },

@@ -33,6 +33,8 @@ export interface KanbanBoardProps {
     totalLeads: number;
     isKpiLoading: boolean;
     tasksByLead?: Map<string, LeadNextTask>;
+    stageMoveOptions?: { value: string; label: string }[];
+    onMoveLeadToStage?: (lead: any, stageId: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -59,6 +61,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     stopActionPropagation,
     kpiError,
     tasksByLead,
+    stageMoveOptions,
+    onMoveLeadToStage,
     hasKpiPolicyRecursion,
     kpiErrorMessage,
     totalLeads,
@@ -136,6 +140,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             openLeadEdit={openLeadEdit}
                             stopActionPropagation={stopActionPropagation}
                             tasksByLead={tasksByLead}
+                            stageMoveOptions={stageMoveOptions}
+                            onMoveLeadToStage={onMoveLeadToStage}
                         />
                     );
                 })}

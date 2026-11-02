@@ -337,6 +337,66 @@ begin
     );
 end $$;
 
+-- =====================================================================
+-- CAMPOS CUSTOMIZADOS — o valor precisa sobreviver ao ciclo completo
+--
+-- O admin define o campo em Configurações e o formulário grava em
+-- dados_extras. O UPDATE da view de compatibilidade ignorava
+-- new.dados_extras, então toda edição de campo customizado era
+-- descartada em silêncio.
+-- =====================================================================
+
+do $$
+declare
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_id uuid;
+    v_lido text;
+begin
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+
+    -- Criação com campo customizado (ex.: "kWp" de um tenant solar)
+    insert into public.clientes (nome, status, dados_extras)
+    values ('Lead com campo custom', 'Novo Lead', '{"kwp": "12.5", "tipo_telhado": "Metálico"}'::jsonb);
+
+    perform public.login_admin();
+    select id into v_id from public.negocios where titulo = 'Lead com campo custom';
+    select dados_extras ->> 'kwp' into v_lido from public.negocios where id = v_id;
+
+    perform public.assert(
+        v_lido = '12.5',
+        'CUSTOM: campo customizado é gravado na criação pela view'
+    );
+
+    -- Edição de OUTRO campo não pode apagar o customizado
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    update public.clientes set status = 'Em Negociacao' where id = v_id;
+    perform public.login_admin();
+
+    select dados_extras ->> 'kwp' into v_lido from public.negocios where id = v_id;
+    perform public.assert(
+        v_lido = '12.5',
+        'CUSTOM: editar outro campo preserva o valor customizado'
+    );
+
+    -- Edição do próprio campo customizado precisa persistir
+    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    update public.clientes set dados_extras = '{"kwp": "18.0"}'::jsonb where id = v_id;
+    perform public.login_admin();
+
+    select dados_extras ->> 'kwp' into v_lido from public.negocios where id = v_id;
+    perform public.assert(
+        v_lido = '18.0',
+        'CUSTOM: editar o campo customizado pela view persiste o novo valor'
+    );
+
+    -- E não pode ter apagado os outros campos do jsonb
+    select dados_extras ->> 'tipo_telhado' into v_lido from public.negocios where id = v_id;
+    perform public.assert(
+        v_lido = 'Metálico',
+        'CUSTOM: atualização parcial não apaga os demais campos customizados'
+    );
+end $$;
+
 do $$
 begin
     raise notice '';
