@@ -1,4 +1,4 @@
-import { BellOutlined, MoonOutlined, SunOutlined, UserOutlined } from "@ant-design/icons";
+import { BellOutlined, MoonOutlined, SearchOutlined, SunOutlined, UserOutlined } from "@ant-design/icons";
 import { useGetIdentity } from "@refinedev/core";
 import { Avatar, Badge, Button, Layout as AntdLayout, Popover, Switch, Typography } from "antd";
 import dayjs from "dayjs";
@@ -7,6 +7,7 @@ import { useNavigate } from "react-router";
 import { ColorModeContext } from "../../contexts/color-mode";
 import { useTenant } from "../../contexts/tenant";
 import { supabaseClient } from "../../utility";
+import { GlobalSearch } from "../global-search";
 import { CompanySelector } from "./company-selector";
 
 const { Text } = Typography;
@@ -145,9 +146,16 @@ const NotificationBell = () => {
     );
 };
 
+type Identidade = {
+    name?: string | null;
+    email?: string | null;
+    avatar?: string | null;
+};
+
 export const Header = () => {
-    const { data } = useGetIdentity<any>();
+    const { data } = useGetIdentity<Identidade>();
     const { mode, setMode } = useContext(ColorModeContext);
+    const [buscaAberta, setBuscaAberta] = useState(false);
 
     const userName = data?.name || "Usuário";
     const userEmail = data?.email || "";
@@ -156,6 +164,18 @@ export const Header = () => {
         <AntdLayout.Header className="crm-topbar">
             <div className="crm-topbar-inner">
                 <div className="crm-topbar-actions">
+                    {/* Busca global (negócios, organizações, contatos). O componente
+                        existia mas não estava montado em lugar nenhum. Atalho: Ctrl+K. */}
+                    <Button
+                        type="text"
+                        icon={<SearchOutlined />}
+                        onClick={() => setBuscaAberta(true)}
+                        aria-label="Buscar (Ctrl+K)"
+                        title="Buscar (Ctrl+K)"
+                        className="crm-focusable"
+                    />
+                    <GlobalSearch open={buscaAberta} setOpen={setBuscaAberta} />
+
                     <NotificationBell />
 
                     {/* Seletor de empresa */}
