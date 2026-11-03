@@ -1,5 +1,6 @@
 import { Edit, useForm } from "@refinedev/antd";
-import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { CustomFieldsForm } from "../../components/custom-fields";
+import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 import { useList, type HttpError } from "@refinedev/core";
 import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";

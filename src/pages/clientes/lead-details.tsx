@@ -43,10 +43,11 @@ import {
     uploadLeadPdf,
 } from "../../lib/leadTimeline";
 import { canDelete } from "../../lib/permissions";
+import type { PipelineStageRecord } from "../../types/db";
 
 const { Title, Text } = Typography;
 
-type LeadRecord = {
+export type LeadDetalhe = {
     id?: string | number | null;
     nome?: string | null;
     ddi?: string | null;
@@ -67,7 +68,7 @@ type LeadRecord = {
 };
 
 type LeadDetailsProps = {
-    record?: LeadRecord | null;
+    record?: LeadDetalhe | null;
     isLoading?: boolean;
     currentUserLabel?: string;
     onScheduleVisit?: (context: {
@@ -123,12 +124,12 @@ export const LeadDetails = ({
     const propostaInputRef = useRef<HTMLInputElement | null>(null);
     const contaInputRef = useRef<HTMLInputElement | null>(null);
 
-    const { query: stagesQuery } = useList({
+    const { query: stagesQuery } = useList<PipelineStageRecord>({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
         sorters: [{ field: "ordem", order: "asc" }],
     });
-    const stagesData = (stagesQuery?.data?.data as any[]) || [];
+    const stagesData = stagesQuery?.data?.data;
     const leadStages = useMemo(() => buildLeadStages(stagesData), [stagesData]);
     const currentStage = findLeadStageById(leadStages, record?.stage_id);
     const stageDisplayName = currentStage?.nome || record?.status || "Sem etapa";
@@ -153,9 +154,9 @@ export const LeadDetails = ({
         try {
             const entries = await fetchLeadTimeline(record.id);
             setTimeline(entries);
-        } catch (error: any) {
+        } catch (error: unknown) {
             setTimeline([]);
-            message.error(error?.message || "Não foi possível carregar o histórico do lead.");
+            message.error((error as { message?: string })?.message || "Não foi possível carregar o histórico do lead.");
         } finally {
             setIsLoadingTimeline(false);
         }
@@ -176,9 +177,9 @@ export const LeadDetails = ({
                     canDelete: canDeleteDocuments,
                 })),
             );
-        } catch (error: any) {
+        } catch (error: unknown) {
             setFiles([]);
-            message.warning(error?.message || "Não foi possível listar os arquivos anexados.");
+            message.warning((error as { message?: string })?.message || "Não foi possível listar os arquivos anexados.");
         } finally {
             setIsLoadingFiles(false);
         }
@@ -279,8 +280,8 @@ export const LeadDetails = ({
 
             setActivityText("");
             await loadTimeline();
-        } catch (error: any) {
-            message.error(error?.message || "Não foi possível salvar a atividade.");
+        } catch (error: unknown) {
+            message.error((error as { message?: string })?.message || "Não foi possível salvar a atividade.");
         } finally {
             setIsSavingActivity(false);
         }
@@ -340,9 +341,9 @@ export const LeadDetails = ({
             });
             message.success("Arquivo enviado com sucesso.");
             await Promise.all([loadFiles(), loadTimeline()]);
-        } catch (error: any) {
+        } catch (error: unknown) {
             message.error(
-                error?.message ||
+                (error as { message?: string })?.message ||
                     "Falha no upload. Verifique se o bucket `lead-files` existe no Supabase Storage.",
             );
         } finally {
@@ -371,8 +372,8 @@ export const LeadDetails = ({
             });
             message.success("Documento excluído.");
             await Promise.all([loadFiles(), loadTimeline()]);
-        } catch (error: any) {
-            message.error(error?.message || "Não foi possível excluir o documento.");
+        } catch (error: unknown) {
+            message.error((error as { message?: string })?.message || "Não foi possível excluir o documento.");
         }
     };
 

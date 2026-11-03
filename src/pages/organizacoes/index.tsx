@@ -24,7 +24,8 @@ import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import type { OrganizacaoRecord } from "../../types/db";
-import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { CustomFieldsForm } from "../../components/custom-fields";
+import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 const { Title, Text } = Typography;

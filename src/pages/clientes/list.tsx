@@ -26,7 +26,8 @@ import {
     textoIndicaPerda,
     totaisPorEtapa,
 } from "../../lib/pipelineMetrics";
-import { LeadDetails } from "./lead-details";
+import { LeadDetails, type LeadDetalhe } from "./lead-details";
+import type { MotivoPerdaRecord, PipelineRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 
 import {
@@ -45,6 +46,22 @@ import {
 } from "../../components/kanban";
 
 const { Text } = Typography;
+
+/** Linha de pipeline_stages como vem do banco (com aliases de bases antigas). */
+type EtapaBruta = {
+    id: string | number;
+    nome?: string | null;
+    name?: string | null;
+    cor?: string | null;
+    color?: string | null;
+    ordem?: number | null;
+    order?: number | null;
+    sort_order?: number | null;
+    pipeline_id?: string | null;
+    probabilidade?: number | null;
+    ganho?: boolean | null;
+    perdido?: boolean | null;
+};
 
 /* ------------------------------------------------------------------ */
 /*  ClienteList – componente principal                                 */
@@ -66,13 +83,12 @@ export const ClienteList = () => {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(undefined);
     const [temperaturaFiltro, setTemperaturaFiltro] = useState<"todas" | LeadTemperatureTag>("todas");
-    const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-    const [draggedLead, setDraggedLead] = useState<any>(null);
+    const [draggedLead, setDraggedLead] = useState<KanbanLead | null>(null);
     const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false);
     const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
-    const [selectedLead, setSelectedLead] = useState<Record<string, any> | null>(null);
+    const [selectedLead, setSelectedLead] = useState<LeadDetalhe | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
     const [isStageManagerOpen, setIsStageManagerOpen] = useState(false);
@@ -100,7 +116,7 @@ export const ClienteList = () => {
     }, [searchText]);
 
     // ---- Pipelines (múltiplos funis por tenant) ----
-    const { query: pipelinesQuery } = useList({
+    const { query: pipelinesQuery } = useList<PipelineRecord>({
         resource: "pipelines",
         pagination: { mode: "off" },
         filters: [{ field: "ativo", operator: "eq", value: true }],
@@ -110,7 +126,7 @@ export const ClienteList = () => {
 
     const pipelines = useMemo(() => {
         if (isSupabaseMissingRelation(pipelinesQuery?.error)) return [];
-        return ((pipelinesQuery?.data?.data as any[]) || []).filter((p) => p?.id && p?.nome);
+        return (pipelinesQuery?.data?.data ?? []).filter((p) => p?.id && p?.nome);
     }, [pipelinesQuery?.data?.data, pipelinesQuery?.error]);
 
     const pipelineStorageKey = `crm_pipeline_${tenantId || "default"}`;
@@ -141,7 +157,7 @@ export const ClienteList = () => {
 
 
     // ---- Motivos de perda (configuráveis por tenant) ----
-    const { query: motivosPerdaQuery } = useList({
+    const { query: motivosPerdaQuery } = useList<MotivoPerdaRecord>({
         resource: "motivos_perda",
         pagination: { mode: "off" },
         filters: [{ field: "ativo", operator: "eq", value: true }],
@@ -151,7 +167,7 @@ export const ClienteList = () => {
 
     const motivosPerda = useMemo(() => {
         if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
-        return ((motivosPerdaQuery?.data?.data as any[]) || []).filter((m) => m?.nome);
+        return (motivosPerdaQuery?.data?.data ?? []).filter((m) => m?.nome);
     }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
 
     // ---- Próxima atividade por lead (visível no card, estilo Pipedrive) ----
@@ -199,7 +215,7 @@ export const ClienteList = () => {
     }, []);
 
     const [pendingLossDrop, setPendingLossDrop] = useState<{
-        lead: any;
+        lead: KanbanLead;
         novoStageId: string;
     } | null>(null);
     const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState<string | undefined>(undefined);
@@ -207,7 +223,7 @@ export const ClienteList = () => {
     const [isSavingLossDrop, setIsSavingLossDrop] = useState(false);
 
     // ---- Stages query ----
-    const { query: stagesQuery } = useList({
+    const { query: stagesQuery } = useList<EtapaBruta>({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
         sorters: [{ field: "ordem", order: "asc" }],
@@ -215,7 +231,7 @@ export const ClienteList = () => {
     });
 
     const persistedStagesRaw = useMemo(() => {
-        return ((stagesQuery?.data?.data as any[]) || []).filter((s) => s !== null);
+        return (stagesQuery?.data?.data ?? []).filter((s) => s !== null);
     }, [stagesQuery?.data?.data]);
 
     const stages = useMemo(() => {
@@ -223,8 +239,8 @@ export const ClienteList = () => {
             .map((s) => ({
                 id: s.id,
                 nome: s.nome ?? s.name ?? "",
-                cor: s.cor ?? s.color,
-                ordem: s.ordem ?? s.order ?? s.sort_order,
+                cor: s.cor ?? s.color ?? undefined,
+                ordem: s.ordem ?? s.order ?? s.sort_order ?? undefined,
                 persisted: s.id !== undefined && s.id !== null,
                 pipeline_id: s.pipeline_id ?? null,
                 probabilidade: s.probabilidade ?? null,
@@ -265,7 +281,7 @@ export const ClienteList = () => {
         [stages],
     );
 
-    const resolveLeadStageId = (cliente: any): string => {
+    const resolveLeadStageId = (cliente: KanbanLead): string => {
         const rawStageId = cliente?.stage_id ?? cliente?.stageId;
         if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
             return String(rawStageId);
@@ -275,7 +291,7 @@ export const ClienteList = () => {
         return stageIdByName.get(normalizedStatus) || "";
     };
 
-    const resolveLeadStageName = (cliente: any): string => {
+    const resolveLeadStageName = (cliente: KanbanLead): string => {
         const stageId = resolveLeadStageId(cliente);
         if (stageId && stageById.has(stageId)) {
             return stageById.get(stageId)?.nome || cliente?.status || "Sem etapa";
@@ -418,7 +434,7 @@ export const ClienteList = () => {
             const { data } = await query.limit(1000);
             
             const unique = [
-                ...new Set((data || []).map((d: any) => d.nome as string).filter(Boolean)),
+                ...new Set(((data ?? []) as Array<{ nome?: string | null }>).map((d) => d.nome ?? "").filter(Boolean)),
             ].sort((a, b) => a.localeCompare(b));
             
             setResponsaveisDisponiveis(unique);
@@ -436,7 +452,7 @@ export const ClienteList = () => {
 
     const listData = listQuery?.data?.data ?? [];
     const listTotal = listQuery?.data?.total ?? 0;
-    const listError = (listQuery?.error ?? null) as any;
+    const listError = listQuery?.error ?? null;
     const listErrorMessage = getSupabaseErrorMessage(listError);
 
     // ---- Selected lead (fetch direto para o drawer) ----
@@ -500,8 +516,8 @@ export const ClienteList = () => {
     // ---- Stage management ----
     const persistDefaultStagesIfNeeded = async () => {
         const refreshed = await stagesQuery?.refetch?.();
-        const existingRows = ((refreshed?.data?.data as any[]) || persistedStagesRaw).filter(
-            (s: any) => s !== null && s !== undefined,
+        const existingRows = (refreshed?.data?.data ?? persistedStagesRaw).filter(
+            (s) => s !== null && s !== undefined,
         );
         if (existingRows.length > 0) return true;
 
@@ -581,8 +597,8 @@ export const ClienteList = () => {
                     boardRef.current.scrollTo({ left: boardRef.current.scrollWidth + 1500, behavior: "smooth" });
                 }
             }, 600);
-        } catch (error: any) {
-            message.error("Erro: " + (error?.message || "Não foi possível criar a coluna."));
+        } catch (error: unknown) {
+            message.error((error as { message?: string })?.message || "Não foi possível criar a coluna.");
         } finally {
             setIsCreatingStage(false);
         }
@@ -738,7 +754,7 @@ export const ClienteList = () => {
         session.draggableElement.draggable = true;
     };
 
-    const handleLeadPointerUp = (event: React.PointerEvent<HTMLDivElement>, lead: any) => {
+    const handleLeadPointerUp = (event: React.PointerEvent<HTMLDivElement>, lead: KanbanLead) => {
         const session = leadPointerSessionRef.current;
         if (!session || session.leadId !== String(lead.id)) return;
         const deltaX = event.clientX - session.startX;
@@ -751,7 +767,7 @@ export const ClienteList = () => {
         if (shouldOpenLead) openLeadDrawer(lead);
     };
 
-    const handleDragStart = (event: React.DragEvent<HTMLDivElement>, lead: any) => {
+    const handleDragStart = (event: React.DragEvent<HTMLDivElement>, lead: KanbanLead) => {
         const id = String(lead.id);
         const activeSession = leadPointerSessionRef.current;
         if (activeSession && activeSession.leadId === id) {
@@ -761,7 +777,6 @@ export const ClienteList = () => {
                 activeSession.timerId = null;
             }
         }
-        setDraggedItemId(id);
         setDraggedLead(lead);
         setIsDragging(true);
         setActiveDropColumn(null);
@@ -777,7 +792,6 @@ export const ClienteList = () => {
         event.currentTarget.style.opacity = "1";
         event.currentTarget.style.cursor = "grab";
         clearLeadPointerSession();
-        setDraggedItemId(null);
         setDraggedLead(null);
         setIsDragging(false);
         setActiveDropColumn(null);
@@ -824,7 +838,7 @@ export const ClienteList = () => {
     };
 
     const moverLeadParaStage = async (
-        leadArrastado: any,
+        leadArrastado: KanbanLead,
         novoStageId: string,
         motivoPerda?: string,
     ) => {
@@ -905,7 +919,7 @@ export const ClienteList = () => {
      * arraste (desktop) quanto pela ação "Mover" do card (toque/celular).
      * Etapa de perda exige motivo antes de concluir.
      */
-    const solicitarMoverLead = async (lead: any, novoStageId: string) => {
+    const solicitarMoverLead = async (lead: KanbanLead, novoStageId: string) => {
         if (!lead) return;
 
         const currentStageId = resolveLeadStageId(lead);
@@ -952,7 +966,7 @@ export const ClienteList = () => {
     };
 
     // ---- Drawer / modal helpers ----
-    const openLeadDrawer = (lead: any) => {
+    const openLeadDrawer = (lead: KanbanLead) => {
         setSelectedLeadId(lead.id);
         setIsLeadDrawerOpen(true);
     };
@@ -1271,7 +1285,7 @@ export const ClienteList = () => {
                         placeholder="Selecione o motivo"
                         style={{ width: "100%", marginBottom: 10 }}
                         options={[
-                            ...motivosPerda.map((m: any) => ({
+                            ...motivosPerda.map((m) => ({
                                 value: String(m.nome),
                                 label: String(m.nome),
                             })),

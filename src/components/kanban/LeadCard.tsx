@@ -8,7 +8,7 @@ import {
     PhoneOutlined,
     SwapOutlined,
 } from "@ant-design/icons";
-import { Button, TemperatureBadge } from "../ui";
+import { TemperatureBadge } from "../ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
 import { valorDoLead } from "../../lib/pipelineMetrics";

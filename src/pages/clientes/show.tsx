@@ -4,12 +4,12 @@ import { Alert } from "antd";
 import { useMemo, useState } from "react";
 import { TaskFormModal } from "../../components/modal/agenda";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
-import { LeadDetails } from "./lead-details";
+import { LeadDetails, type LeadDetalhe } from "./lead-details";
 
 export const ClienteShow = () => {
-    const showResult = useShow() as any;
-    const { data, isLoading } = showResult.query || showResult;
-    const record = data?.data;
+    const { query } = useShow<LeadDetalhe & { id: string | number }>();
+    const isLoading = query.isLoading;
+    const record = query.data?.data;
     const { canDeleteRecords, canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } =
         useCrmAccess();
     const [isModalOpen, setIsModalOpen] = useState(false);
