@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
     formatCpfCnpj,
     formatCurrencyBRL,
+    formatPercentBR,
     formatDateBR,
     isClosedStatus,
     normalizeText,
@@ -104,5 +105,17 @@ describe("isClosedStatus", () => {
     it("não confunde com outros status", () => {
         expect(isClosedStatus("perdido")).toBe(false);
         expect(isClosedStatus(null)).toBe(false);
+    });
+});
+
+describe("formatPercentBR", () => {
+    it("usa vírgula decimal e uma casa", () => {
+        expect(formatPercentBR(33.333)).toBe("33,3");
+        expect(formatPercentBR(100)).toBe("100,0");
+    });
+
+    it("NaN e Infinity viram 0,0", () => {
+        expect(formatPercentBR(Number.NaN)).toBe("0,0");
+        expect(formatPercentBR(Number.POSITIVE_INFINITY)).toBe("0,0");
     });
 });

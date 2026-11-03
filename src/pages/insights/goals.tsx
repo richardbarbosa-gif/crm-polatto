@@ -2,6 +2,7 @@ import { FlagOutlined, PlusOutlined, TrophyOutlined, FireOutlined, FallOutlined,
 import {
     DatePicker,
     Form,
+    Input,
     InputNumber,
     Modal,
     Progress,
@@ -20,11 +21,19 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import { propsMoeda } from "../../lib/moedaInput";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 import { useTenant } from "../../contexts/tenant";
 
 type GoalViewMode = "valor" | "quantidade";
+
+type MetaDoFormulario = {
+    employee_id: string;
+    employee_name?: string;
+    target_value?: number | string | null;
+    target_wins?: number | string | null;
+};
 
 type EmployeePerformanceRow = {
     employee_id: string;
@@ -123,12 +132,12 @@ export const InsightsGoalsPage = () => {
 
             setPerformanceRows(rows);
             setSchemaMissing(false);
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (isSupabaseMissingRelation(error)) {
                 setSchemaMissing(true);
                 setPerformanceRows([]);
             } else {
-                setErrorMessage(error?.message || "Falha ao carregar o motor de metas.");
+                setErrorMessage((error as { message?: string })?.message || "Falha ao carregar as metas.");
             }
         } finally {
             setIsLoadingData(false);
@@ -170,26 +179,44 @@ export const InsightsGoalsPage = () => {
             const values = await form.validateFields();
             const monthStart = monthRef.startOf("month").format("YYYY-MM-DD");
 
-            const payload = values.goals.map((g: any) => ({
-                tenant_id: tenantId || undefined,
-                funcionario_id: g.employee_id,
-                mes_referencia: monthStart,
-                valor_meta: g.target_value,
-                target_wins: g.target_wins
-            }));
+            // Atualiza a meta do mês de cada vendedor ou cria se não existir.
+            // O upsert anterior usava onConflict (tenant_id, funcionario_id,
+            // mes_referencia), mas não existe índice único nessas colunas nas
+            // migrations: o Postgres respondia "there is no unique or exclusion
+            // constraint matching the ON CONFLICT specification" e "Salvar
+            // metas" falhava SEMPRE num banco criado pelas migrations.
+            const metas = (values.goals ?? []) as MetaDoFormulario[];
+            for (const meta of metas) {
+                const dados = {
+                    valor_meta: Number(meta.target_value) || 0,
+                    target_wins: Number(meta.target_wins) || 0,
+                };
+                const { data: atualizadas, error: erroUpdate } = await supabaseClient
+                    .from("metas")
+                    .update(dados)
+                    .eq("funcionario_id", meta.employee_id)
+                    .eq("mes_referencia", monthStart)
+                    .select("id");
+                if (erroUpdate) throw erroUpdate;
 
-            const { error } = await supabaseClient
-                .from("metas")
-                .upsert(payload, { onConflict: "tenant_id,funcionario_id,mes_referencia" });
-            
-            if (error) throw error;
+                const semMetaAinda = !atualizadas || atualizadas.length === 0;
+                if (semMetaAinda && (dados.valor_meta > 0 || dados.target_wins > 0)) {
+                    const { error: erroInsert } = await supabaseClient.from("metas").insert({
+                        ...dados,
+                        tenant_id: tenantId || undefined,
+                        funcionario_id: meta.employee_id,
+                        mes_referencia: monthStart,
+                    });
+                    if (erroInsert) throw erroInsert;
+                }
+            }
 
             message.success(`Metas de ${monthRef.format("MMMM")} salvas com sucesso.`);
             setIsModalOpen(false);
             await loadData();
-        } catch (error: any) {
-            if (error?.errorFields) return;
-            message.error(error?.message || "Não foi possível salvar as metas.");
+        } catch (error: unknown) {
+            if (typeof error === "object" && error && "errorFields" in error) return;
+            message.error((error as { message?: string })?.message || "Não foi possível salvar as metas.");
         } finally {
             setIsSaving(false);
         }
@@ -363,7 +390,7 @@ export const InsightsGoalsPage = () => {
                                 {fields.map((field, index) => (
                                     <div key={field.key}>
                                         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
-                                            <Form.Item {...field} name={[field.name, 'employee_id']} hidden><InputNumber /></Form.Item>
+                                            <Form.Item {...field} name={[field.name, 'employee_id']} hidden><Input /></Form.Item>
                                             
                                             <Form.Item label={index === 0 ? "Consultor" : ""} {...field} name={[field.name, 'employee_name']} style={{ flex: 2, marginBottom: 12 }}>
                                                 <Typography.Text strong>{form.getFieldValue(['goals', field.name, 'employee_name'])}</Typography.Text>
@@ -371,7 +398,7 @@ export const InsightsGoalsPage = () => {
                                             
                                             <Form.Item label={index === 0 ? "Quota de Receita (R$)" : ""} {...field} name={[field.name, 'target_value']} style={{ flex: 1.5, marginBottom: 12 }}>
                                                 {/* Correção AQUI: min={0 as number} */}
-                                                <InputNumber style={{ width: '100%' }} min={0 as number} formatter={(v) => `R$ ${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, '.')} parser={(v) => v ? Number(v.replace(/[^0-9.-]+/g, "")) : (0 as any)} />
+                                                <InputNumber {...propsMoeda} />
                                             </Form.Item>
                                             
                                             <Form.Item label={index === 0 ? "Volume (Qtd)" : ""} {...field} name={[field.name, 'target_wins']} style={{ flex: 1, marginBottom: 12 }}>

@@ -17,7 +17,7 @@ import {
     isDateInLastDays,
     toSafeDayjs,
     type TaskSituation,
-    type InsightClienteRecord,
+
     type InsightTaskRecord,
 } from "../../lib/insights";
 import {
@@ -26,6 +26,7 @@ import {
     TASK_EXECUTION_STATUS_LABELS,
     type TaskExecutionStatus,
 } from "../../lib/taskExecutionStatus";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 
 const PERIOD_OPTIONS = [
@@ -37,7 +38,7 @@ const PERIOD_OPTIONS = [
 const TYPE_OPTIONS = [
     { value: "todos", label: "Todos os tipos" },
     { value: "visita", label: "Visitas" },
-    { value: "ligacao", label: "Ligacoes" },
+    { value: "ligacao", label: "Ligações" },
     { value: "whatsapp", label: "WhatsApp" },
     { value: "email", label: "Email" },
 ];
@@ -72,7 +73,7 @@ const getSituationTag = (
     if (situation === "atrasada") return <Tag color="red">Atrasada</Tag>;
     if (situation === "tratada") return <Tag color="green">Tratada</Tag>;
     if (situation === "hoje") return <Tag color="blue">Hoje</Tag>;
-    if (situation === "proxima") return <Tag color="gold">Proxima</Tag>;
+    if (situation === "proxima") return <Tag color="gold">Próxima</Tag>;
     return <Tag>Pendente</Tag>;
 };
 
@@ -87,29 +88,17 @@ export const InsightsActivitiesPage = () => {
         });
     }, []);
 
-    const tarefasResult = useList<InsightTaskRecord>({
+    const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
-    }) as any;
-    const clientesResult = useList<InsightClienteRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-    }) as any;
+    });
+    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
+    const isLoading = Boolean(tarefasQuery?.isLoading);
 
-    const tarefasQuery = tarefasResult.query || tarefasResult;
-    const clientesQuery = clientesResult.query || clientesResult;
-    const tarefas = (tarefasQuery?.data?.data || []) as InsightTaskRecord[];
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-    const isLoading = Boolean(tarefasQuery?.isLoading || clientesQuery?.isLoading);
-
-    const clienteById = useMemo(() => {
-        const map = new Map<string, string>();
-        clientes.forEach((cliente) => {
-            map.set(String(cliente.id), cliente.nome?.trim() || `Cliente #${cliente.id}`);
-        });
-        return map;
-    }, [clientes]);
+    // Só os nomes dos clientes citados nas tarefas (antes: a base inteira de leads).
+    const idsDosClientes = useMemo(() => tarefas.map((task) => task.cliente_id), [tarefas]);
+    const clienteById = useNomesDeClientes(idsDosClientes);
 
     const filteredTasks = useMemo(() => {
         return tarefas.filter((task) => {
@@ -133,7 +122,7 @@ export const InsightsActivitiesPage = () => {
                 getTaskSituation(
                     task.data_vencimento,
                     now,
-                    resolveTaskExecutionStatus(task as Record<string, any>),
+                    resolveTaskExecutionStatus(task),
                 ) === "atrasada",
         ).length;
         const today = filteredTasks.filter(
@@ -141,7 +130,7 @@ export const InsightsActivitiesPage = () => {
                 getTaskSituation(
                     task.data_vencimento,
                     now,
-                    resolveTaskExecutionStatus(task as Record<string, any>),
+                    resolveTaskExecutionStatus(task),
                 ) === "hoje",
         ).length;
         const visits = filteredTasks.filter((task) => task.tipo === "visita").length;
@@ -252,7 +241,7 @@ export const InsightsActivitiesPage = () => {
                 {filteredTasks.length === 0 ? (
                     <EmptyState
                         title="Nenhuma atividade encontrada"
-                        description="Ajuste filtros ou lance novas tarefas para alimentar o relatorio."
+                        description="Ajuste os filtros ou registre novas tarefas para alimentar o relatório."
                     />
                 ) : (
                     <Table
@@ -272,7 +261,7 @@ export const InsightsActivitiesPage = () => {
                                 title: "Atividade",
                                 dataIndex: "titulo",
                                 render: (value?: string | null) => (
-                                    <Typography.Text strong>{value || "Sem titulo"}</Typography.Text>
+                                    <Typography.Text strong>{value || "Sem título"}</Typography.Text>
                                 ),
                             },
                             {
@@ -304,7 +293,7 @@ export const InsightsActivitiesPage = () => {
                                 width: 110,
                                 render: (_, record: InsightTaskRecord) => {
                                     const executionStatus = resolveTaskExecutionStatus(
-                                        record as Record<string, any>,
+                                        record,
                                     );
                                     return getSituationTag(
                                         getTaskSituation(

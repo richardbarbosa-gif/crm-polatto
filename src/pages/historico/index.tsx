@@ -8,10 +8,10 @@ import {
     formatCurrencyBRL,
     formatDateBR,
     normalizeText,
-    parseCurrencyLikeValue,
 } from "../../lib/formatters";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
-import type { ClienteRecord } from "../../types/db";
+import { textoIndicaGanho, textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
+import type { ClienteRecord, PipelineStageRecord } from "../../types/db";
 
 const { Title, Text } = Typography;
 
@@ -87,13 +87,20 @@ export const HistoricoPage = () => {
         queryOptions: { enabled: !isLoadingAccess, retry: false },
     });
 
+    const { query: stagesQuery } = useList<PipelineStageRecord & { ganho?: boolean | null; perdido?: boolean | null; pipeline_id?: string | null }>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+
     const registros = useMemo(
         () => ((listQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean),
         [listQuery?.data?.data],
     );
     const total = listQuery?.data?.total ?? 0;
 
-    const listError = (listQuery?.error ?? null) as any;
+    const listError = listQuery?.error ?? null;
     const tabelaAusente = isSupabaseMissingRelation(listError);
     const listErrorMessage = listError && !tabelaAusente ? getSupabaseErrorMessage(listError) : "";
 
@@ -102,19 +109,37 @@ export const HistoricoPage = () => {
         const ganhos = rows.filter((r) => !isPerdido(r));
         const perdidos = rows.filter(isPerdido);
         const valorGanho = ganhos.reduce(
-            (acc, r) => acc + (parseCurrencyLikeValue(r.valor ?? r.conta_energia_media) || 0),
+            (acc, r) => acc + valorDoLead(r),
             0,
         );
         return { totalGanhos: ganhos.length, totalPerdidos: perdidos.length, valorGanho };
     }, [kpiQuery?.data?.data]);
 
+    /**
+     * Primeira etapa em aberto do funil do negócio. Reabrir gravava
+     * stage_id = null e status "Novo Lead": o negócio caía na coluna
+     * "Outros" (ou sumia, se o funil não a exibisse) em vez de voltar ao
+     * começo do funil.
+     */
+    const etapaDeReabertura = (registro: ClienteRecord) => {
+        const etapas = (stagesQuery?.data?.data ?? []).filter(
+            (etapa) => !etapa.ganho && !etapa.perdido && !textoIndicaGanho(etapa.nome) && !textoIndicaPerda(etapa.nome),
+        );
+        const doFunil = etapas.filter(
+            (etapa) => registro.pipeline_id && String(etapa.pipeline_id ?? "") === String(registro.pipeline_id),
+        );
+        const candidatas = doFunil.length ? doFunil : etapas;
+        return [...candidatas].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0))[0];
+    };
+
     const reabrirNegocio = (registro: ClienteRecord) => {
+        const destino = etapaDeReabertura(registro);
         Modal.confirm({
             title: "Reabrir negócio",
             content: (
                 <Text>
                     O negócio <Text strong>{registro.nome || "Sem nome"}</Text> voltará ao funil
-                    como "Novo Lead". Deseja continuar?
+                    na etapa "{destino?.nome || "Novo Lead"}". Deseja continuar?
                 </Text>
             ),
             okText: "Reabrir",
@@ -126,8 +151,11 @@ export const HistoricoPage = () => {
                         id: registro.id,
                         values: {
                             tenant_id: tenantId || undefined,
-                            status: "Novo Lead",
-                            stage_id: null,
+                            status: destino?.nome || "Novo Lead",
+                            stage_id: destino?.id ?? null,
+                            ...(destino?.pipeline_id ? { pipeline_id: destino.pipeline_id } : {}),
+                            data_fechamento: null,
+                            motivo_perda: null,
                         },
                         successNotification: false,
                         errorNotification: false,

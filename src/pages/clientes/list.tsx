@@ -10,7 +10,7 @@ import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { normalizeText } from "../../lib/formatters";
+import { formatPercentBR, normalizeText } from "../../lib/formatters";
 import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
 import { buildLeadCountByStageId, buildStagesVisiveis, type KpiRow } from "../../lib/kanbanStages";
 import {
@@ -18,9 +18,16 @@ import {
     isSupabaseMissingRelation,
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
-import { addLeadActivity } from "../../lib/leadTimeline";
+import { registrarMudancaDeEtapa } from "../../lib/leadTimeline";
 import { type LeadTemperatureTag } from "../../lib/leadTemperature";
-import { LeadDetails } from "./lead-details";
+import {
+    resumirFunil,
+    textoIndicaGanho,
+    textoIndicaPerda,
+    totaisPorEtapa,
+} from "../../lib/pipelineMetrics";
+import { LeadDetails, type LeadDetalhe } from "./lead-details";
+import type { MotivoPerdaRecord, PipelineRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 
 import {
@@ -28,6 +35,7 @@ import {
     KanbanBoard,
     ListView,
     type Stage,
+    type KanbanLead,
     type LeadNextTask,
     type LeadPointerSession,
     DEFAULT_STAGE_BLUEPRINT,
@@ -38,6 +46,22 @@ import {
 } from "../../components/kanban";
 
 const { Text } = Typography;
+
+/** Linha de pipeline_stages como vem do banco (com aliases de bases antigas). */
+type EtapaBruta = {
+    id: string | number;
+    nome?: string | null;
+    name?: string | null;
+    cor?: string | null;
+    color?: string | null;
+    ordem?: number | null;
+    order?: number | null;
+    sort_order?: number | null;
+    pipeline_id?: string | null;
+    probabilidade?: number | null;
+    ganho?: boolean | null;
+    perdido?: boolean | null;
+};
 
 /* ------------------------------------------------------------------ */
 /*  ClienteList – componente principal                                 */
@@ -59,13 +83,12 @@ export const ClienteList = () => {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(undefined);
     const [temperaturaFiltro, setTemperaturaFiltro] = useState<"todas" | LeadTemperatureTag>("todas");
-    const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
-    const [draggedLead, setDraggedLead] = useState<any>(null);
+    const [draggedLead, setDraggedLead] = useState<KanbanLead | null>(null);
     const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isLeadDrawerOpen, setIsLeadDrawerOpen] = useState(false);
     const [selectedLeadId, setSelectedLeadId] = useState<string | number | null>(null);
-    const [selectedLead, setSelectedLead] = useState<Record<string, any> | null>(null);
+    const [selectedLead, setSelectedLead] = useState<LeadDetalhe | null>(null);
     const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
     const [taskContextData, setTaskContextData] = useState<TaskContextData | null>(null);
     const [isStageManagerOpen, setIsStageManagerOpen] = useState(false);
@@ -93,7 +116,7 @@ export const ClienteList = () => {
     }, [searchText]);
 
     // ---- Pipelines (múltiplos funis por tenant) ----
-    const { query: pipelinesQuery } = useList({
+    const { query: pipelinesQuery } = useList<PipelineRecord>({
         resource: "pipelines",
         pagination: { mode: "off" },
         filters: [{ field: "ativo", operator: "eq", value: true }],
@@ -103,7 +126,7 @@ export const ClienteList = () => {
 
     const pipelines = useMemo(() => {
         if (isSupabaseMissingRelation(pipelinesQuery?.error)) return [];
-        return ((pipelinesQuery?.data?.data as any[]) || []).filter((p) => p?.id && p?.nome);
+        return (pipelinesQuery?.data?.data ?? []).filter((p) => p?.id && p?.nome);
     }, [pipelinesQuery?.data?.data, pipelinesQuery?.error]);
 
     const pipelineStorageKey = `crm_pipeline_${tenantId || "default"}`;
@@ -134,7 +157,7 @@ export const ClienteList = () => {
 
 
     // ---- Motivos de perda (configuráveis por tenant) ----
-    const { query: motivosPerdaQuery } = useList({
+    const { query: motivosPerdaQuery } = useList<MotivoPerdaRecord>({
         resource: "motivos_perda",
         pagination: { mode: "off" },
         filters: [{ field: "ativo", operator: "eq", value: true }],
@@ -144,7 +167,7 @@ export const ClienteList = () => {
 
     const motivosPerda = useMemo(() => {
         if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
-        return ((motivosPerdaQuery?.data?.data as any[]) || []).filter((m) => m?.nome);
+        return (motivosPerdaQuery?.data?.data ?? []).filter((m) => m?.nome);
     }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
 
     // ---- Próxima atividade por lead (visível no card, estilo Pipedrive) ----
@@ -192,7 +215,7 @@ export const ClienteList = () => {
     }, []);
 
     const [pendingLossDrop, setPendingLossDrop] = useState<{
-        lead: any;
+        lead: KanbanLead;
         novoStageId: string;
     } | null>(null);
     const [motivoPerdaSelecionado, setMotivoPerdaSelecionado] = useState<string | undefined>(undefined);
@@ -200,7 +223,7 @@ export const ClienteList = () => {
     const [isSavingLossDrop, setIsSavingLossDrop] = useState(false);
 
     // ---- Stages query ----
-    const { query: stagesQuery } = useList({
+    const { query: stagesQuery } = useList<EtapaBruta>({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
         sorters: [{ field: "ordem", order: "asc" }],
@@ -208,7 +231,7 @@ export const ClienteList = () => {
     });
 
     const persistedStagesRaw = useMemo(() => {
-        return ((stagesQuery?.data?.data as any[]) || []).filter((s) => s !== null);
+        return (stagesQuery?.data?.data ?? []).filter((s) => s !== null);
     }, [stagesQuery?.data?.data]);
 
     const stages = useMemo(() => {
@@ -216,8 +239,8 @@ export const ClienteList = () => {
             .map((s) => ({
                 id: s.id,
                 nome: s.nome ?? s.name ?? "",
-                cor: s.cor ?? s.color,
-                ordem: s.ordem ?? s.order ?? s.sort_order,
+                cor: s.cor ?? s.color ?? undefined,
+                ordem: s.ordem ?? s.order ?? s.sort_order ?? undefined,
                 persisted: s.id !== undefined && s.id !== null,
                 pipeline_id: s.pipeline_id ?? null,
                 probabilidade: s.probabilidade ?? null,
@@ -251,7 +274,14 @@ export const ClienteList = () => {
         [stages],
     );
 
-    const resolveLeadStageId = (cliente: any): string => {
+    // Etapas gravadas do funil ativo: um negócio pertence ao funil se tiver
+    // pipeline_id = funil OU estiver numa destas etapas (ver filtroDeFunil).
+    const etapasDoFunil = useMemo(
+        () => stages.filter((s) => s.persisted && s.id != null).map((s) => String(s.id)),
+        [stages],
+    );
+
+    const resolveLeadStageId = (cliente: KanbanLead): string => {
         const rawStageId = cliente?.stage_id ?? cliente?.stageId;
         if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
             return String(rawStageId);
@@ -261,7 +291,7 @@ export const ClienteList = () => {
         return stageIdByName.get(normalizedStatus) || "";
     };
 
-    const resolveLeadStageName = (cliente: any): string => {
+    const resolveLeadStageName = (cliente: KanbanLead): string => {
         const stageId = resolveLeadStageId(cliente);
         if (stageId && stageById.has(stageId)) {
             return stageById.get(stageId)?.nome || cliente?.status || "Sem etapa";
@@ -273,7 +303,9 @@ export const ClienteList = () => {
     };
 
     const manageableStages = useMemo(
-        () => stages.filter((s) => s.nome !== "Outros"),
+        // A coluna sintética "Outros" (id "outros") só existe em stagesVisiveis;
+        // uma etapa real chamada "Outros" precisa continuar gerenciável.
+        () => stages.filter((s) => s.id !== "outros"),
         [stages],
     );
     const canDeleteAnyStage = manageableStages.length > 1;
@@ -288,10 +320,11 @@ export const ClienteList = () => {
                 responsavel: responsavelFiltro,
                 temperatura: temperaturaFiltro,
                 pipelineId: pipelineAtivo,
+                etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
             }),
-        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
     );
 
     const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
@@ -300,16 +333,18 @@ export const ClienteList = () => {
         setListPage(1);
     }, [serverFilters]);
 
-    // ---- KPI filters (subset aplicável à View materializada) ----
+    // ---- KPI filters (todos os filtros do board, exceto a busca por texto) ----
     const kpiFilters = useMemo<CrudFilter[]>(
         () =>
             buildKpiFilters({
+                responsavel: responsavelFiltro,
                 temperatura: temperaturaFiltro,
                 pipelineId: pipelineAtivo,
+                etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
             }),
-        [temperaturaFiltro, pipelineAtivo, canViewAllLeads, ownerCandidates],
+        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
     );
 
     // ---- KPI query (View agregada – dados já somados no banco) ----
@@ -320,24 +355,32 @@ export const ClienteList = () => {
         liveMode: "auto",
     });
 
-    const kpiRows: KpiRow[] = kpiQuery?.data?.data ?? [];
-    const kpiError = (kpiQuery?.error ?? null) as any;
+    const kpiRows = useMemo<KpiRow[]>(() => kpiQuery?.data?.data ?? [], [kpiQuery?.data?.data]);
+    const kpiError = kpiQuery?.error ?? null;
     const hasKpiPolicyRecursion = isSupabasePolicyRecursion(kpiError);
     const kpiErrorMessage = getSupabaseErrorMessage(kpiError);
 
     // ---- KPIs ----
+    // Ganho/perdido pelos flags da etapa (resumirFunil), não pelo texto do
+    // status: etapa "Contrato assinado" marcada como ganho não entrava na
+    // conversão porque o nome não continha "fechado".
     const kpis = useMemo(() => {
-        const totalLeads = kpiRows.reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
-        const totalValor = kpiRows.reduce((acc: number, r: any) => acc + Number(r.valor_total || 0), 0);
-        const fechados = kpiRows
-            .filter((r: any) => {
-                const s = normalizeText(r.status);
-                return s.includes("fechado") || s.includes("ganho");
-            })
-            .reduce((acc: number, r: any) => acc + Number(r.total_leads || 0), 0);
-        const taxaConversao = totalLeads > 0 ? ((fechados / totalLeads) * 100).toFixed(1) : "0";
-        return { totalLeads, totalValor, taxaConversao };
-    }, [kpiRows]);
+        const resumo = resumirFunil(kpiRows, persistedStagesRaw);
+        return {
+            totalLeads: resumo.totalLeads,
+            totalValor: resumo.valorTotal,
+            taxaConversao: formatPercentBR(resumo.conversao),
+        };
+    }, [kpiRows, persistedStagesRaw]);
+
+    // Total e valor de cada coluna vêm da view agregada. Somar os cards
+    // carregados (20 por vez, rolagem infinita) dava um total errado assim
+    // que a coluna passava de 20 negócios. A busca por texto não chega à
+    // view; com busca ativa a coluna soma o que carregou.
+    const valoresPorEtapa = useMemo(
+        () => (debouncedSearch.trim() ? undefined : totaisPorEtapa(kpiRows)),
+        [debouncedSearch, kpiRows],
+    );
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
     // Agregado por stage_id (a view expõe a coluna). A agregação por NOME
@@ -346,10 +389,15 @@ export const ClienteList = () => {
     // apagar a etapa sem mover os leads, deixando-os órfãos.
     const leadCountByStageId = useMemo(() => buildLeadCountByStageId(kpiRows), [kpiRows]);
 
+    // Contagem da etapa a excluir direto no banco, sem os filtros do board:
+    // a contagem dos KPIs respeita responsável/temperatura/funil e podia dar
+    // zero com negócios na etapa — a etapa era apagada sem mover ninguém.
+    const [leadsNaEtapaPendente, setLeadsNaEtapaPendente] = useState<number | null>(null);
     const leadsInPendingDeleteStage = useMemo(() => {
         if (!stagePendingDelete) return 0;
+        if (leadsNaEtapaPendente !== null) return leadsNaEtapaPendente;
         return leadCountByStageId[String(stagePendingDelete.id ?? "")] || 0;
-    }, [leadCountByStageId, stagePendingDelete]);
+    }, [leadCountByStageId, leadsNaEtapaPendente, stagePendingDelete]);
 
     const deleteStageDestinationOptions = useMemo(() => {
         if (!stagePendingDelete) return [];
@@ -374,7 +422,8 @@ export const ClienteList = () => {
             let query = supabaseClient
                 .from("funcionarios")
                 .select("nome")
-                .eq("ativo", true) // Pega apenas os vendedores ativos
+                .eq("ativo", true) // apenas vendedores ativos
+                .is("deleted_at", null)
                 .not("nome", "is", null);
 
             // Se for um vendedor comum (Sem Modo Deus), ele só vê a si mesmo no filtro
@@ -385,7 +434,7 @@ export const ClienteList = () => {
             const { data } = await query.limit(1000);
             
             const unique = [
-                ...new Set((data || []).map((d: any) => d.nome as string).filter(Boolean)),
+                ...new Set(((data ?? []) as Array<{ nome?: string | null }>).map((d) => d.nome ?? "").filter(Boolean)),
             ].sort((a, b) => a.localeCompare(b));
             
             setResponsaveisDisponiveis(unique);
@@ -393,7 +442,7 @@ export const ClienteList = () => {
         fetchResponsaveis();
     }, [canViewAllLeads, ownerCandidates, isLoadingAccess]);
     // ---- List view query (paginação server-side) ----
-    const { query: listQuery } = useList({
+    const { query: listQuery } = useList<KanbanLead>({
         resource: "clientes",
         pagination: { currentPage: listPage, pageSize: 12 },
         filters: serverFilters,
@@ -403,7 +452,7 @@ export const ClienteList = () => {
 
     const listData = listQuery?.data?.data ?? [];
     const listTotal = listQuery?.data?.total ?? 0;
-    const listError = (listQuery?.error ?? null) as any;
+    const listError = listQuery?.error ?? null;
     const listErrorMessage = getSupabaseErrorMessage(listError);
 
     // ---- Selected lead (fetch direto para o drawer) ----
@@ -412,15 +461,26 @@ export const ClienteList = () => {
             setSelectedLead(null);
             return;
         }
-        const fetchLead = async () => {
-            const { data } = await supabaseClient
-                .from("clientes")
-                .select("*")
-                .eq("id", selectedLeadId)
-                .single();
-            setSelectedLead(data ?? null);
+        // Cliques rápidos em cards diferentes: a resposta antiga não pode
+        // sobrescrever o lead aberto agora.
+        let ativo = true;
+        setSelectedLead(null);
+        void supabaseClient
+            .from("clientes")
+            .select("*")
+            .eq("id", selectedLeadId)
+            .maybeSingle()
+            .then(({ data, error }) => {
+                if (!ativo) return;
+                if (error) {
+                    message.error("Não foi possível abrir o lead.");
+                    return;
+                }
+                setSelectedLead((data as Record<string, unknown> | null) ?? null);
+            });
+        return () => {
+            ativo = false;
         };
-        fetchLead();
     }, [selectedLeadId]);
 
     // ---- Realtime ----
@@ -456,8 +516,8 @@ export const ClienteList = () => {
     // ---- Stage management ----
     const persistDefaultStagesIfNeeded = async () => {
         const refreshed = await stagesQuery?.refetch?.();
-        const existingRows = ((refreshed?.data?.data as any[]) || persistedStagesRaw).filter(
-            (s: any) => s !== null && s !== undefined,
+        const existingRows = (refreshed?.data?.data ?? persistedStagesRaw).filter(
+            (s) => s !== null && s !== undefined,
         );
         if (existingRows.length > 0) return true;
 
@@ -537,8 +597,8 @@ export const ClienteList = () => {
                     boardRef.current.scrollTo({ left: boardRef.current.scrollWidth + 1500, behavior: "smooth" });
                 }
             }, 600);
-        } catch (error: any) {
-            message.error("Erro: " + (error?.message || "Não foi possível criar a coluna."));
+        } catch (error: unknown) {
+            message.error((error as { message?: string })?.message || "Não foi possível criar a coluna.");
         } finally {
             setIsCreatingStage(false);
         }
@@ -554,15 +614,27 @@ export const ClienteList = () => {
             return;
         }
         setStagePendingDelete(stage);
+        setLeadsNaEtapaPendente(null);
         const defaultDestinationRaw = manageableStages.find((item) => item.nome !== stage.nome)?.id;
         const defaultDestination =
             defaultDestinationRaw == null ? undefined : String(defaultDestinationRaw);
         setDeleteDestinationStage(defaultDestination);
+
+        if (stage.id != null) {
+            void supabaseClient
+                .from("clientes")
+                .select("id", { count: "exact", head: true })
+                .eq("stage_id", String(stage.id))
+                .then(({ count, error }) => {
+                    if (!error && typeof count === "number") setLeadsNaEtapaPendente(count);
+                });
+        }
     };
 
     const cancelDeleteStage = () => {
         setStagePendingDelete(null);
         setDeleteDestinationStage(undefined);
+        setLeadsNaEtapaPendente(null);
     };
 
     const confirmDeleteStage = async () => {
@@ -587,7 +659,10 @@ export const ClienteList = () => {
 
         setIsDeletingStage(true);
         try {
-            if (leadsInPendingDeleteStage > 0 && deleteDestinationStage) {
+            // Move sempre que houver destino: não depende de a contagem estar
+            // certa (mover zero negócios é inofensivo; apagar a etapa com
+            // negócios dentro os deixaria sem etapa).
+            if (deleteDestinationStage && deleteDestinationStage !== String(stagePendingDelete.id)) {
                 const destinationStage = stageById.get(deleteDestinationStage);
                 const { error: moveError } = await supabaseClient
                     .from("clientes")
@@ -595,6 +670,9 @@ export const ClienteList = () => {
                         tenant_id: tenantId || undefined,
                         stage_id: deleteDestinationStage,
                         status: destinationStage?.nome || undefined,
+                        ...(destinationStage?.pipeline_id
+                            ? { pipeline_id: destinationStage.pipeline_id }
+                            : {}),
                     })
                     .eq("stage_id", String(stagePendingDelete.id));
                 if (moveError) throw moveError;
@@ -676,7 +754,7 @@ export const ClienteList = () => {
         session.draggableElement.draggable = true;
     };
 
-    const handleLeadPointerUp = (event: React.PointerEvent<HTMLDivElement>, lead: any) => {
+    const handleLeadPointerUp = (event: React.PointerEvent<HTMLDivElement>, lead: KanbanLead) => {
         const session = leadPointerSessionRef.current;
         if (!session || session.leadId !== String(lead.id)) return;
         const deltaX = event.clientX - session.startX;
@@ -689,7 +767,7 @@ export const ClienteList = () => {
         if (shouldOpenLead) openLeadDrawer(lead);
     };
 
-    const handleDragStart = (event: React.DragEvent<HTMLDivElement>, lead: any) => {
+    const handleDragStart = (event: React.DragEvent<HTMLDivElement>, lead: KanbanLead) => {
         const id = String(lead.id);
         const activeSession = leadPointerSessionRef.current;
         if (activeSession && activeSession.leadId === id) {
@@ -699,7 +777,6 @@ export const ClienteList = () => {
                 activeSession.timerId = null;
             }
         }
-        setDraggedItemId(id);
         setDraggedLead(lead);
         setIsDragging(true);
         setActiveDropColumn(null);
@@ -715,7 +792,6 @@ export const ClienteList = () => {
         event.currentTarget.style.opacity = "1";
         event.currentTarget.style.cursor = "grab";
         clearLeadPointerSession();
-        setDraggedItemId(null);
         setDraggedLead(null);
         setIsDragging(false);
         setActiveDropColumn(null);
@@ -762,7 +838,7 @@ export const ClienteList = () => {
     };
 
     const moverLeadParaStage = async (
-        leadArrastado: any,
+        leadArrastado: KanbanLead,
         novoStageId: string,
         motivoPerda?: string,
     ) => {
@@ -770,7 +846,11 @@ export const ClienteList = () => {
         const nextStage = stageById.get(novoStageId);
         const nextStageName = nextStage?.nome || "Sem etapa";
         const fromStageName = resolveLeadStageName(leadArrastado);
-        const isFechado = nextStageName.toLowerCase().includes("fechado");
+        // Flags da etapa primeiro; o nome é só o fallback (etapa "Contrato
+        // assinado" marcada como ganho também fecha o negócio).
+        const isGanho = Boolean(nextStage?.ganho) || textoIndicaGanho(nextStageName);
+        const isPerda = Boolean(nextStage?.perdido) || textoIndicaPerda(nextStageName);
+        const isTerminal = isGanho || isPerda;
 
         try {
             await updateLead({
@@ -780,13 +860,14 @@ export const ClienteList = () => {
                     tenant_id: tenantId || undefined,
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
-                    data_fechamento: isFechado ? new Date().toISOString() : null,
+                    data_fechamento: isTerminal ? new Date().toISOString() : null,
                     // Carimba o funil da etapa destino: sem isto o lead ficaria
                     // sem pipeline_id e sumiria do filtro por funil.
                     ...(nextStage?.pipeline_id || pipelineAtivo
                         ? { pipeline_id: nextStage?.pipeline_id || pipelineAtivo }
                         : {}),
-                    ...(motivoPerda ? { motivo_perda: motivoPerda } : {}),
+                    // Reaberto (saiu de "perdido"): o motivo antigo deixa de valer.
+                    motivo_perda: isPerda ? motivoPerda ?? leadArrastado.motivo_perda ?? null : null,
                 },
                 successNotification: () => ({
                     message: `Movido para ${nextStageName}`,
@@ -800,37 +881,19 @@ export const ClienteList = () => {
                 }),
             });
 
-            const { error: historyError } = await supabaseClient
-                .from("cliente_status_history")
-                .insert({
-                    tenant_id: tenantId || undefined,
-                    cliente_id: leadArrastado.id,
-                    de_status: fromStageName,
-                    para_status: nextStageName,
-                    movido_em: new Date().toISOString(),
-                    movido_por: ownerDisplayName || null,
-                });
-
-            if (historyError && !isSupabaseMissingRelation(historyError)) {
-                message.warning("Status atualizado, mas não foi possível registrar no histórico.");
-            }
-
-            if (leadArrastado.id != null) {
-                await addLeadActivity({
-                    leadId: String(leadArrastado.id),
-                    tenantId,
-                    activityType: "status",
-                    title: "Mudança de etapa",
-                    description: motivoPerda
-                        ? `${fromStageName} -> ${nextStageName} (motivo: ${motivoPerda})`
-                        : `${fromStageName} -> ${nextStageName}`,
-                    fromStatus: fromStageName,
-                    toStatus: nextStageName,
-                    author: ownerDisplayName,
-                });
+            const historicoGravado = await registrarMudancaDeEtapa({
+                leadId: leadArrastado.id,
+                tenantId,
+                de: fromStageName,
+                para: nextStageName,
+                motivoPerda,
+                autor: ownerDisplayName,
+            });
+            if (!historicoGravado) {
+                message.warning("Etapa atualizada, mas não foi possível registrar no histórico.");
             }
         } catch {
-            // Error notification is handled by refine.
+            // A notificação de erro da mudança de etapa é exibida pelo Refine.
         }
     };
 
@@ -856,16 +919,14 @@ export const ClienteList = () => {
      * arraste (desktop) quanto pela ação "Mover" do card (toque/celular).
      * Etapa de perda exige motivo antes de concluir.
      */
-    const solicitarMoverLead = async (lead: any, novoStageId: string) => {
+    const solicitarMoverLead = async (lead: KanbanLead, novoStageId: string) => {
         if (!lead) return;
 
         const currentStageId = resolveLeadStageId(lead);
         if (currentStageId === novoStageId) return;
 
         const nextStage = stageById.get(novoStageId);
-        const isPerdido =
-            Boolean(nextStage?.perdido) ||
-            normalizeText(nextStage?.nome).includes("perdido");
+        const isPerdido = Boolean(nextStage?.perdido) || textoIndicaPerda(nextStage?.nome);
 
         if (isPerdido) {
             setMotivoPerdaSelecionado(undefined);
@@ -905,7 +966,7 @@ export const ClienteList = () => {
     };
 
     // ---- Drawer / modal helpers ----
-    const openLeadDrawer = (lead: any) => {
+    const openLeadDrawer = (lead: KanbanLead) => {
         setSelectedLeadId(lead.id);
         setIsLeadDrawerOpen(true);
     };
@@ -1025,8 +1086,7 @@ export const ClienteList = () => {
                         kpiError={kpiError}
                         hasKpiPolicyRecursion={hasKpiPolicyRecursion}
                         kpiErrorMessage={kpiErrorMessage}
-                        totalLeads={kpis.totalLeads}
-                        isKpiLoading={kpiQuery?.isLoading}
+                        valoresPorEtapa={valoresPorEtapa}
                         tasksByLead={tasksByLead}
                         stageMoveOptions={stageMoveOptions}
                         onMoveLeadToStage={solicitarMoverLead}
@@ -1225,7 +1285,7 @@ export const ClienteList = () => {
                         placeholder="Selecione o motivo"
                         style={{ width: "100%", marginBottom: 10 }}
                         options={[
-                            ...motivosPerda.map((m: any) => ({
+                            ...motivosPerda.map((m) => ({
                                 value: String(m.nome),
                                 label: String(m.nome),
                             })),

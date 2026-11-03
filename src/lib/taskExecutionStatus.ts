@@ -81,10 +81,19 @@ export const updateTaskExecutionStatus = async (
 };
 
 export const resolveTaskExecutionStatus = (
-    record: Record<string, any> | undefined | null,
+    registro: object | undefined | null,
 ): TaskExecutionStatus => {
-    if (!record) {
+    if (!registro) {
         return "pendente";
+    }
+    const record = registro as Record<string, unknown>;
+
+    // "Concluir" na agenda grava concluido = true (não mexe em
+    // execucao_status). Sem esta regra a tarefa concluída continuava
+    // aparecendo como "Atrasada" na agenda e contando como atrasada nos
+    // Insights.
+    if (record.concluido === true) {
+        return "resolvido";
     }
 
     const direct =
@@ -97,7 +106,7 @@ export const resolveTaskExecutionStatus = (
 
     const dueDate = record.data_vencimento ?? record.due_date ?? record.data ?? record.date;
     if (resolved !== "pendente" && dueDate) {
-        const due = new Date(dueDate);
+        const due = new Date(String(dueDate));
         if (!Number.isNaN(due.getTime()) && due.getTime() > Date.now()) {
             return "pendente";
         }

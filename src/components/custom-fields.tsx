@@ -94,33 +94,6 @@ export const CustomFieldsForm = ({ campos, titulo = "Informações adicionais" }
     );
 };
 
-/**
- * Converte os valores gravados em dados_extras para o formato que o
- * formulário espera (datas precisam voltar como Dayjs).
- */
-export const dadosExtrasParaFormulario = (
-    dadosExtras: Record<string, unknown> | null | undefined,
-    campos: CustomFieldRecord[],
-    // O retorno usa NonNullable porque o setFieldsValue do antd (RecursivePartial)
-    // não aceita `unknown` em valor aninhado — e nunca devolvemos null aqui.
-): Record<string, NonNullable<unknown>> => {
-    const origem = dadosExtras || {};
-    const saida: Record<string, NonNullable<unknown>> = {};
-
-    campos.forEach((campo) => {
-        const valor = origem[campo.chave];
-        if (valor === undefined || valor === null) return;
-        if (campo.tipo === "data") {
-            const data = dayjs(String(valor));
-            if (data.isValid()) saida[campo.chave] = data;
-            return;
-        }
-        saida[campo.chave] = valor;
-    });
-
-    return saida;
-};
-
 type CustomFieldsViewProps = {
     campos: CustomFieldRecord[];
     dadosExtras?: Record<string, unknown> | null;

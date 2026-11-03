@@ -14,7 +14,8 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-07-19_07_monitoramento_erros.sql` | Tabela `client_errors` + RPC `registrar_erro_cliente` usada pelo frontend |
 | `2026-07-19_08_saas_readiness.sql` | `provisionar_tenant()` (onboarding self-service), planos e limites por tenant, `vw_dashboard_kpis` |
 | `2026-07-19_09_rls_tabelas_legadas.sql` | **RLS nas tabelas legadas** (tarefas, atividades, documentos, funcionários, metas, clientes): backfill do `tenant_id` + ativação guardada |
-| `2026-11-02_10_hardening_seguranca.sql` | **Endurecimento de segurança** (auditoria 2026-11): view `clientes` não aceita tenant do payload, `fn_set_tenant_id` fail-closed, funções administrativas fora do alcance de `anon`/`authenticated`, retenção e anonimização LGPD só para admin, `tenant_features` só superadmin, monitoramento sem token na URL, RLS garantida em `utilizadores_empresas`/`empresas`, restos dos scripts avulsos trancados, bucket `lead-files` privado, `security_invoker` em toda view. **Rodar sempre por último.** |
+| `2026-11-02_10_hardening_seguranca.sql` | **Endurecimento de segurança** (auditoria 2026-11): view `clientes` não aceita tenant do payload, `fn_set_tenant_id` fail-closed, funções administrativas fora do alcance de `anon`/`authenticated`, retenção e anonimização LGPD só para admin, `tenant_features` só superadmin, monitoramento sem token na URL, RLS garantida em `utilizadores_empresas`/`empresas`, restos dos scripts avulsos trancados, bucket `lead-files` privado, `security_invoker` em toda view. **Rodar sempre depois da 01** (inclusive quando a 01 é reexecutada na virada). |
+| `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
 
 ## Testes automatizados
 
@@ -46,6 +47,7 @@ descrição do teste. O CI roda tudo isso a cada push (job `database`).
 3. `select * from public.migrar_clientes_para_negocios(false);` — migra de verdade.
 4. `alter table public.clientes rename to clientes_legado;`
 5. Rodar o arquivo 01 novamente — agora ele cria a view de compatibilidade `clientes` (o frontend atual continua funcionando sem mudança). Em seguida, rodar a 10 de novo (endurece a view recém-criada).
+   Depois: `select * from public.religar_referencias_legadas();` (migration 11) — troca o id antigo pelo UUID do negócio em tarefas, timeline e documentos. Sem isso a agenda, a timeline e os anexos dos leads migrados somem da tela.
 6. `select public.provisionar_defaults_tenant('<tenant_id>');` para cada tenant.
 7. `select * from public.backfill_tenant_dados_legados('<tenant_id_polatto>');` — carimba tenant nos dados legados.
 8. `select * from public.backfill_tenant_legado();` seguido de

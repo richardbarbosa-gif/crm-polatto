@@ -13,14 +13,14 @@ import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
 import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
 import {
+    COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
-    getInsightValue,
+    dataDeDecisao,
     getMonthKey,
     isDateInLastDays,
-    isLostStatus,
-    isWonStatus,
     type InsightClienteRecord,
 } from "../../lib/insights";
+import { classificarDesfecho, indexarEtapas, percentual, valorDoLead, type EtapaFunil } from "../../lib/pipelineMetrics";
 import { InsightsHeader, IntroCard } from "./shared";
 
 const PERIOD_OPTIONS = [
@@ -33,31 +33,42 @@ const PERIOD_OPTIONS = [
 export const InsightsGainsLossesPage = () => {
     const [periodDays, setPeriodDays] = useState<number>(180);
 
-    const clientesResult = useList<InsightClienteRecord>({
+    const { query: clientesQuery } = useList<InsightClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
-    }) as any;
-    const clientesQuery = clientesResult.query || clientesResult;
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
+        meta: { select: COLUNAS_INSIGHT_CLIENTE },
+    });
+    const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        queryOptions: { retry: false },
+    });
+    const clientes = useMemo(() => clientesQuery?.data?.data ?? [], [clientesQuery?.data?.data]);
+    const etapasPorId = useMemo(() => indexarEtapas(stagesQuery?.data?.data), [stagesQuery?.data?.data]);
     const isLoading = Boolean(clientesQuery?.isLoading);
 
-    const report = useMemo(() => {
-        const base = clientes.filter((cliente) => isDateInLastDays(cliente.created_at, periodDays));
-        const ganhos = base.filter((cliente) => isWonStatus(cliente.status));
-        const perdas = base.filter((cliente) => isLostStatus(cliente.status));
+    // Ganho/perda pelos flags da etapa e pela DATA DA DECISÃO (fechamento).
+    // Antes valia o nome da etapa e a data de criação do lead: um negócio
+    // criado há 8 meses e ganho ontem não entrava no período de 180 dias.
+    const decididos = useMemo(
+        () =>
+            clientes
+                .map((cliente) => ({ cliente, desfecho: classificarDesfecho(cliente, etapasPorId) }))
+                .filter((item) => item.desfecho !== "aberto"),
+        [clientes, etapasPorId],
+    );
 
-        const ganhoValor = ganhos.reduce(
-            (acc, cliente) => acc + getInsightValue(cliente.conta_energia_media),
-            0,
-        );
-        const perdaValor = perdas.reduce(
-            (acc, cliente) => acc + getInsightValue(cliente.conta_energia_media),
-            0,
-        );
+    const report = useMemo(() => {
+        const base = decididos.filter((item) => isDateInLastDays(dataDeDecisao(item.cliente), periodDays));
+        const ganhos = base.filter((item) => item.desfecho === "ganho").map((item) => item.cliente);
+        const perdas = base.filter((item) => item.desfecho === "perdido").map((item) => item.cliente);
+
+        const ganhoValor = ganhos.reduce((acc, cliente) => acc + valorDoLead(cliente), 0);
+        const perdaValor = perdas.reduce((acc, cliente) => acc + valorDoLead(cliente), 0);
 
         const totalDecisoes = ganhos.length + perdas.length;
-        const taxaGanhos = totalDecisoes > 0 ? (ganhos.length / totalDecisoes) * 100 : 0;
-        const taxaPerdas = totalDecisoes > 0 ? (perdas.length / totalDecisoes) * 100 : 0;
+        const taxaGanhos = percentual(ganhos.length, totalDecisoes);
+        const taxaPerdas = percentual(perdas.length, totalDecisoes);
 
         return {
             base,
@@ -69,16 +80,18 @@ export const InsightsGainsLossesPage = () => {
             taxaPerdas,
             totalDecisoes,
         };
-    }, [clientes, periodDays]);
+    }, [decididos, periodDays]);
 
     const ownerSummary = useMemo(() => {
-        const base = clientes.filter((cliente) => isDateInLastDays(cliente.created_at, periodDays));
-        return buildOwnerPerformance(base).map((owner) => {
+        const base = decididos
+            .filter((item) => isDateInLastDays(dataDeDecisao(item.cliente), periodDays))
+            .map((item) => item.cliente);
+        return buildOwnerPerformance(base, etapasPorId).map((owner) => {
             const decided = owner.ganhos + owner.perdas;
-            const winRate = decided > 0 ? (owner.ganhos / decided) * 100 : 0;
+            const winRate = percentual(owner.ganhos, decided);
             return { ...owner, decided, winRate };
         });
-    }, [clientes, periodDays]);
+    }, [decididos, etapasPorId, periodDays]);
 
     const trend = useMemo(() => {
         const current = dayjs();
@@ -86,13 +99,13 @@ export const InsightsGainsLossesPage = () => {
             current.subtract(5 - index, "month").format("YYYY-MM"),
         );
         return months.map((monthKey) => {
-            const monthItems = clientes.filter(
-                (cliente) => getMonthKey(cliente.created_at) === monthKey,
+            const monthItems = decididos.filter(
+                (item) => getMonthKey(dataDeDecisao(item.cliente)) === monthKey,
             );
-            const wins = monthItems.filter((cliente) => isWonStatus(cliente.status)).length;
-            const losses = monthItems.filter((cliente) => isLostStatus(cliente.status)).length;
+            const wins = monthItems.filter((item) => item.desfecho === "ganho").length;
+            const losses = monthItems.filter((item) => item.desfecho === "perdido").length;
             const total = wins + losses;
-            const winRate = total > 0 ? (wins / total) * 100 : 0;
+            const winRate = percentual(wins, total);
             return {
                 key: monthKey,
                 month: dayjs(`${monthKey}-01`).format("MMM/YYYY"),
@@ -101,7 +114,7 @@ export const InsightsGainsLossesPage = () => {
                 winRate,
             };
         });
-    }, [clientes]);
+    }, [decididos]);
 
     const topLossReasons = useMemo(() => {
         const map = new Map<string, number>();
@@ -125,7 +138,7 @@ export const InsightsGainsLossesPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Ganhos e perdas"
-                subtitle="Leia a saude de fechamento por volume, valor e ritmo de conversao."
+                subtitle="Leia a saúde de fechamento por volume, valor e ritmo de conversão."
                 extra={
                     <Space wrap>
                         <Select
@@ -249,7 +262,7 @@ export const InsightsGainsLossesPage = () => {
                     <Card title="Motivos de perda">
                         {topLossReasons.length === 0 ? (
                             <EmptyState
-                                title="Sem perdas no periodo"
+                                title="Sem perdas no período"
                                 description="Otimo sinal. Continue registrando os motivos para manter inteligencia de funil."
                             />
                         ) : (

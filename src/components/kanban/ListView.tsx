@@ -3,9 +3,10 @@ import { Modal, Select, Space, Table, Typography, message } from "antd";
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { useDelete, useUpdate } from "@refinedev/core";
 import { Badge, Button, EmptyState, TemperatureBadge } from "../ui";
-import { getStatusTone } from "./types";
+import { getStatusTone, type KanbanLead } from "./types";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
+import { valorDoLead } from "../../lib/pipelineMetrics";
 import { supabaseClient } from "../../utility";
 
 const { Text } = Typography;
@@ -13,18 +14,19 @@ const { Text } = Typography;
 export interface ListViewStageOption {
     id?: string | number;
     nome: string;
+    pipeline_id?: string | null;
 }
 
 export interface ListViewProps {
-    listData: any[];
+    listData: KanbanLead[];
     listTotal: number;
     listPage: number;
     isLoading: boolean;
-    listError: any;
+    listError: unknown;
     listErrorMessage: string | null;
     onPageChange: (page: number) => void;
-    resolveLeadStageName: (record: any) => string;
-    onView: (lead: any) => void;
+    resolveLeadStageName: (record: KanbanLead) => string;
+    onView: (lead: KanbanLead) => void;
     onEdit: (leadId: string | number) => void;
     canDeleteRecords?: boolean;
     stages?: ListViewStageOption[];
@@ -73,7 +75,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     return;
                 }
                 setFallbackStages(
-                    data.filter((s: any) => s && s.nome) as ListViewStageOption[],
+                    (data as ListViewStageOption[]).filter((s) => s && s.nome),
                 );
             } catch {
                 return;
@@ -132,6 +134,8 @@ export const ListView: React.FC<ListViewProps> = ({
                     values: {
                         stage_id: option.stage.id ?? null,
                         status: option.stage.nome,
+                        // Mesmo critério do arraste: o negócio passa ao funil da etapa.
+                        ...(option.stage.pipeline_id ? { pipeline_id: option.stage.pipeline_id } : {}),
                     },
                     successNotification: false,
                     errorNotification: false,
@@ -163,7 +167,7 @@ export const ListView: React.FC<ListViewProps> = ({
 
         Modal.confirm({
             title: `Excluir ${ids.length} lead(s) selecionado(s)?`,
-            content: "Esta ação é permanente e não pode ser desfeita.",
+            content: "Os negócios saem do funil e dos relatórios. O histórico é preservado no banco e um administrador pode restaurá-los.",
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
@@ -289,7 +293,7 @@ export const ListView: React.FC<ListViewProps> = ({
                             {
                                 title: "Etapa",
                                 key: "stage_id",
-                                render: (_, record: any) => {
+                                render: (_, record: KanbanLead) => {
                                     const stageName = resolveLeadStageName(record);
                                     return <Badge tone={getStatusTone(stageName)}>{stageName}</Badge>;
                                 },
@@ -297,7 +301,7 @@ export const ListView: React.FC<ListViewProps> = ({
                             {
                                 title: "Temperatura",
                                 key: "temperature",
-                                render: (_, record: any) => (
+                                render: (_, record: KanbanLead) => (
                                     <TemperatureBadge value={resolveLeadTemperature(record)} />
                                 ),
                             },
@@ -308,13 +312,14 @@ export const ListView: React.FC<ListViewProps> = ({
                             },
                             {
                                 title: "Valor",
-                                dataIndex: "conta_energia_media",
-                                render: (v) => formatCurrencyBRL(v, "R$ 0,00"),
+                                key: "valor",
+                                render: (_, record: KanbanLead) =>
+                                    formatCurrencyBRL(valorDoLead(record), "R$ 0,00"),
                             },
                             { title: "Telefone", dataIndex: "telefone" },
                             {
                                 title: "",
-                                render: (_, record: any) => (
+                                render: (_, record: KanbanLead) => (
                                     <Space>
                                         <Button
                                             size="small"

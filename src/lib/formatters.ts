@@ -45,6 +45,13 @@ export const formatCurrencyBRL = (value: unknown, fallback = "--"): string => {
     });
 };
 
+/** Percentual no padrão brasileiro com uma casa: 33,3. NaN/Infinity viram 0,0. */
+export const formatPercentBR = (valor: number): string =>
+    (Number.isFinite(valor) ? valor : 0).toLocaleString("pt-BR", {
+        minimumFractionDigits: 1,
+        maximumFractionDigits: 1,
+    });
+
 export const formatDateBR = (
     value?: string | Date | null,
     fallback = "-",

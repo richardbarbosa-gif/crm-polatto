@@ -1,9 +1,32 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Modal, Input, List, Typography, Tag, Space, Skeleton } from "antd";
 import { BankOutlined, ContactsOutlined, RightOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
-import { useList, useGo } from "@refinedev/core";
+import { useList, useGo, type CrudFilter } from "@refinedev/core";
+import { useCrmAccess } from "../hooks/useCrmAccess";
+import { sanitizarBusca } from "../lib/leadFilters";
 
 const { Text } = Typography;
+
+type LeadEncontrado = {
+    id: string | number;
+    nome?: string | null;
+    telefone?: string | null;
+    status?: string | null;
+    responsavel?: string | null;
+};
+type OrganizacaoEncontrada = {
+    id: string;
+    nome_fantasia?: string | null;
+    razao_social?: string | null;
+    cnpj?: string | null;
+    setor?: string | null;
+};
+type PessoaEncontrada = {
+    id: string;
+    nome?: string | null;
+    email?: string | null;
+    telefone?: string | null;
+};
 
 type SearchResult = {
     id: string | number;
@@ -52,27 +75,39 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
         }
     }, [open]);
 
-    const buscaAtiva = debouncedSearch.length > 1;
+    // Aspas e barra invertida quebravam o filtro .or() do PostgREST.
+    const termo = sanitizarBusca(debouncedSearch);
+    const buscaAtiva = termo.length > 1;
+    const { canViewAllLeads, ownerCandidates } = useCrmAccess();
+
+    // Mesma visão do Kanban: vendedor sem acesso total só encontra os próprios leads.
+    const filtrosDeLeads = useMemo<CrudFilter[]>(() => {
+        if (!buscaAtiva) return [];
+        const filtros: CrudFilter[] = [
+            {
+                operator: "or",
+                value: [
+                    { field: "nome", operator: "contains", value: termo },
+                    { field: "telefone", operator: "contains", value: termo },
+                ],
+            },
+        ];
+        if (!canViewAllLeads && ownerCandidates.length > 0) {
+            filtros.push({ field: "responsavel", operator: "in", value: ownerCandidates });
+        }
+        return filtros;
+    }, [buscaAtiva, canViewAllLeads, ownerCandidates, termo]);
 
     // Busca em paralelo nos três recursos (multi-tenancy garantido pela RLS)
-    const leadsResult = useList({
+    const { query: leadsQuery } = useList<LeadEncontrado>({
         resource: "clientes",
         pagination: { pageSize: 5 },
-        filters: buscaAtiva
-            ? [
-                  {
-                      operator: "or",
-                      value: [
-                          { field: "nome", operator: "contains", value: debouncedSearch },
-                          { field: "telefone", operator: "contains", value: debouncedSearch },
-                      ],
-                  },
-              ]
-            : [],
+        filters: filtrosDeLeads,
+        meta: { select: "id,nome,telefone,status,responsavel" },
         queryOptions: { enabled: buscaAtiva },
-    }) as any;
+    });
 
-    const organizacoesResult = useList({
+    const { query: organizacoesQuery } = useList<OrganizacaoEncontrada>({
         resource: "organizacoes",
         pagination: { pageSize: 4 },
         filters: buscaAtiva
@@ -80,16 +115,17 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
                   {
                       operator: "or",
                       value: [
-                          { field: "nome_fantasia", operator: "contains", value: debouncedSearch },
-                          { field: "razao_social", operator: "contains", value: debouncedSearch },
+                          { field: "nome_fantasia", operator: "contains", value: termo },
+                          { field: "razao_social", operator: "contains", value: termo },
                       ],
                   },
+                  { field: "deleted_at", operator: "null", value: true },
               ]
             : [],
         queryOptions: { enabled: buscaAtiva, retry: false },
-    }) as any;
+    });
 
-    const pessoasResult = useList({
+    const { query: pessoasQuery } = useList<PessoaEncontrada>({
         resource: "pessoas",
         pagination: { pageSize: 4 },
         filters: buscaAtiva
@@ -97,40 +133,39 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
                   {
                       operator: "or",
                       value: [
-                          { field: "nome", operator: "contains", value: debouncedSearch },
-                          { field: "email", operator: "contains", value: debouncedSearch },
-                          { field: "telefone", operator: "contains", value: debouncedSearch },
+                          { field: "nome", operator: "contains", value: termo },
+                          { field: "email", operator: "contains", value: termo },
+                          { field: "telefone", operator: "contains", value: termo },
                       ],
                   },
+                  { field: "deleted_at", operator: "null", value: true },
               ]
             : [],
         queryOptions: { enabled: buscaAtiva, retry: false },
-    }) as any;
+    });
 
-    const leadsQuery = leadsResult.query || leadsResult;
-    const organizacoesQuery = organizacoesResult.query || organizacoesResult;
-    const pessoasQuery = pessoasResult.query || pessoasResult;
-
-    const isLoading = Boolean(leadsQuery?.isLoading);
+    const isLoading = Boolean(
+        leadsQuery?.isLoading || organizacoesQuery?.isLoading || pessoasQuery?.isLoading,
+    );
 
     const results: SearchResult[] = [
-        ...((leadsQuery?.data?.data || []) as any[]).map((item) => ({
+        ...(leadsQuery?.data?.data ?? []).map((item) => ({
             id: item.id,
             tipo: "lead" as const,
             titulo: item.nome || "Sem nome",
             subtitulo: item.telefone || "Sem telefone",
-            status: item.status,
-            responsavel: item.responsavel,
+            status: item.status ?? undefined,
+            responsavel: item.responsavel ?? undefined,
             destino: `/clientes/show/${item.id}`,
         })),
-        ...((organizacoesQuery?.data?.data || []) as any[]).map((item) => ({
+        ...(organizacoesQuery?.data?.data ?? []).map((item) => ({
             id: item.id,
             tipo: "organizacao" as const,
             titulo: item.nome_fantasia || item.razao_social || "Sem nome",
             subtitulo: item.cnpj || item.setor || undefined,
             destino: "/organizacoes",
         })),
-        ...((pessoasQuery?.data?.data || []) as any[]).map((item) => ({
+        ...(pessoasQuery?.data?.data ?? []).map((item) => ({
             id: item.id,
             tipo: "pessoa" as const,
             titulo: item.nome || "Sem nome",
@@ -161,6 +196,7 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
                 <SearchOutlined style={{ fontSize: 22, color: '#94a3b8', marginRight: 12 }} />
                 <Input
                     autoFocus
+                    aria-label="Buscar no CRM"
                     placeholder="Buscar negócios, organizações e contatos..."
                     variant="borderless"
                     value={searchTerm}
@@ -174,9 +210,9 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
 
             {/* Corpo de Resultados */}
             <div style={{ padding: '8px 0', minHeight: 120, backgroundColor: '#f8fafc' }}>
-                {!debouncedSearch ? (
+                {!buscaAtiva ? (
                     <div style={{ textAlign: 'center', padding: '30px 20px', color: '#94a3b8' }}>
-                        <Text type="secondary">Digite algo para buscar em negócios, organizações e contatos...</Text>
+                        <Text type="secondary">Digite ao menos 2 letras para buscar em negócios, organizações e contatos.</Text>
                     </div>
                 ) : isLoading ? (
                     <div style={{ padding: '20px' }}><Skeleton active paragraph={{ rows: 2 }} title={false} /></div>

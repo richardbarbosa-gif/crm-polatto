@@ -7,7 +7,7 @@ import {
     PlusOutlined,
     SafetyOutlined,
 } from "@ant-design/icons";
-import { useCreate, useDelete, useList, useUpdate } from "@refinedev/core";
+import { useCreate, useList, useUpdate } from "@refinedev/core";
 import {
     Alert,
     Dropdown,
@@ -22,15 +22,18 @@ import {
     Typography,
     message,
 } from "antd";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
+import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
+import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import type { OrganizacaoRecord, PessoaRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
-import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { CustomFieldsForm } from "../../components/custom-fields";
+import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 const { Title, Text } = Typography;
@@ -92,7 +95,8 @@ export const PessoasPage = () => {
 
     const { mutateAsync: createPessoa } = useCreate();
     const { mutateAsync: updatePessoa } = useUpdate();
-    const { mutateAsync: deletePessoa } = useDelete();
+    const [isSaving, setIsSaving] = useState(false);
+    const salvandoRef = useRef(false);
 
     const pessoas = useMemo(
         () => ((query?.data?.data as PessoaRecord[]) || []).filter(Boolean),
@@ -156,22 +160,66 @@ export const PessoasPage = () => {
             .then(undefined, () => undefined);
     };
 
+    /** Avisa (sem bloquear) quando já existe contato com o mesmo CPF, e-mail ou telefone. */
+    const confirmarSeDuplicado = async (values: PessoaFormValues): Promise<boolean> => {
+        const filtro = montarFiltroDuplicata(
+            { telefone: values.telefone, documento: values.cpf, email: values.email },
+            { documento: "cpf" },
+        );
+        if (!filtro) return true;
+        let consulta = supabaseClient
+            .from("pessoas")
+            .select("id,nome")
+            .is("deleted_at", null)
+            .or(filtro)
+            .limit(3);
+        if (editando) consulta = consulta.neq("id", editando.id);
+        const { data, error } = await consulta;
+        if (error || !data?.length) return true;
+        return new Promise<boolean>((resolve) => {
+            Modal.confirm({
+                title: "Possível contato duplicado",
+                content: `Já existe: ${(data as Array<{ nome?: string | null }>).map((p) => p.nome || "Sem nome").join(", ")}. Salvar mesmo assim?`,
+                okText: "Salvar mesmo assim",
+                cancelText: "Cancelar",
+                onOk: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+    };
+
     const salvar = async () => {
+        if (salvandoRef.current) return;
         const values = await form.validateFields();
-        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
-        const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
-        const payload = {
-            ...limpo,
-            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
-            organizacao_id: values.organizacao_id || null,
-            tenant_id: tenantId || undefined,
-        };
+        salvandoRef.current = true;
+        setIsSaving(true);
         try {
+            if (!(await confirmarSeDuplicado(values))) return;
+
+            const dadosExtras = extrairDadosExtras(
+                values as Record<string, unknown>,
+                camposCustomizados,
+                editando ? "editar" : "criar",
+            );
+            const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
+            void _ignorado;
+            // Edição preserva valores de campos customizados que não estão no
+            // formulário (ex.: campo desativado depois de preenchido).
+            const dadosExtrasFinais = editando
+                ? { ...((editando.dados_extras as Record<string, unknown> | null) ?? {}), ...dadosExtras }
+                : dadosExtras;
+            const payload = {
+                ...limpo,
+                ...(Object.keys(dadosExtrasFinais).length ? { dados_extras: dadosExtrasFinais } : {}),
+                organizacao_id: values.organizacao_id || null,
+                tenant_id: tenantId || undefined,
+            };
+
             if (editando) {
-                await updatePessoa({ resource: "pessoas", id: editando.id, values: payload });
+                await updatePessoa({ resource: "pessoas", id: editando.id, values: payload, successNotification: false });
                 message.success("Contato atualizado.");
             } else {
-                await createPessoa({ resource: "pessoas", values: payload });
+                await createPessoa({ resource: "pessoas", values: payload, successNotification: false });
                 message.success("Contato criado.");
             }
             setIsModalOpen(false);
@@ -182,6 +230,9 @@ export const PessoasPage = () => {
                     ? String((error as { message?: unknown }).message)
                     : "Erro desconhecido";
             message.error(`Não foi possível salvar: ${detalhe}`);
+        } finally {
+            salvandoRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -226,9 +277,19 @@ export const PessoasPage = () => {
         });
     };
 
+    // Exclusão LÓGICA (deleted_at). O delete físico apagava a pessoa e, pelas
+    // FKs, desvinculava os negócios dela: o lead perdia nome, telefone e
+    // e-mail no Kanban. A lista já filtra deleted_at, então o soft delete era
+    // o comportamento esperado; a restauração existe no banco
+    // (restaurar_registro).
     const excluir = async (pessoa: PessoaRecord) => {
         try {
-            await deletePessoa({ resource: "pessoas", id: pessoa.id });
+            await updatePessoa({
+                resource: "pessoas",
+                id: pessoa.id,
+                values: { deleted_at: new Date().toISOString() },
+                successNotification: false,
+            });
             message.success("Contato removido.");
             await query?.refetch?.();
         } catch {
@@ -396,6 +457,7 @@ export const PessoasPage = () => {
                 onCancel={() => setIsModalOpen(false)}
                 okText="Salvar"
                 cancelText="Cancelar"
+                confirmLoading={isSaving}
                 destroyOnHidden
             >
                 <Form form={form} layout="vertical">
@@ -418,12 +480,25 @@ export const PessoasPage = () => {
                             <Form.Item name="ddi" noStyle initialValue="+55">
                                 <Select options={DDI_OPTIONS} style={{ width: 90 }} />
                             </Form.Item>
-                            <Form.Item name="telefone" noStyle>
-                                <Input placeholder="(00) 00000-0000" />
+                            <Form.Item
+                                name="telefone"
+                                noStyle
+                                rules={[
+                                    {
+                                        validator: async (_, valor?: string) => {
+                                            const ddi = (form.getFieldValue("ddi") as string | undefined) || "+55";
+                                            if (valor && !validarTelefone(valor, ddi)) {
+                                                throw new Error("Telefone incompleto. Inclua o DDD.");
+                                            }
+                                        },
+                                    },
+                                ]}
+                            >
+                                <Input placeholder="(00) 00000-0000" inputMode="tel" aria-label="Telefone" />
                             </Form.Item>
                         </Space.Compact>
                     </Form.Item>
-                    <Form.Item label="CPF" name="cpf">
+                    <Form.Item label="CPF" name="cpf" rules={[regraCpfCnpj("cpf")]}>
                         <Input
                             placeholder="000.000.000-00"
                             onChange={(e) => form.setFieldValue("cpf", formatCpfCnpj(e.target.value))}

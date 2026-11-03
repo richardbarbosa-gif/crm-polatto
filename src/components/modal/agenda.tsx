@@ -1,8 +1,12 @@
 import { useCreate, useInvalidate, useList, useUpdate } from "@refinedev/core";
 import { DatePicker, Form, Input, Modal, Select, message } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { useTenantSegmento } from "../../hooks/useTenantSegmento";
+import { sanitizarBusca } from "../../lib/leadFilters";
 import type { TipoAtividadeRecord } from "../../types/db";
+import { supabaseClient } from "../../utility";
 
 type ModalMode = "create" | "edit";
 
@@ -23,6 +27,8 @@ export interface TarefaRecord {
     /** Agendamento concluído — controla o sino e a próxima atividade do card */
     concluido?: boolean | null;
     responsavel?: string | null;
+    execucao_status?: string | null;
+    created_at?: string | null;
 }
 
 export interface TaskContextData {
@@ -58,9 +64,9 @@ interface LegacyModalAgendaProps {
 
 const TIPO_OPTIONS = [
     { value: "visita", label: "Visita" },
-    { value: "ligacao", label: "Ligacao" },
+    { value: "ligacao", label: "Ligação" },
     { value: "whatsapp", label: "WhatsApp" },
-    { value: "email", label: "Email" },
+    { value: "email", label: "E-mail" },
 ];
 
 const normalizeTipoValue = (nome: string) =>
@@ -68,7 +74,7 @@ const normalizeTipoValue = (nome: string) =>
         .trim()
         .toLowerCase()
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "");
+        .replace(/[̀-ͯ]/g, "");
 
 const normalizeId = (value: string | number | null | undefined) => {
     if (typeof value === "string" && /^\d+$/.test(value)) return Number(value);
@@ -80,13 +86,16 @@ const getTaskDateValue = (taskDate?: string | null, initialDate?: Dayjs | null) 
         const parsed = dayjs(taskDate);
         if (parsed.isValid()) return parsed;
     }
-    if (initialDate?.isValid()) return initialDate;
+    if (initialDate?.isValid()) {
+        // Dia clicado no calendário: usa o próximo horário cheio daquele dia
+        // (ou de hoje), em vez da meia-noite que já passou.
+        const agora = dayjs();
+        const base = initialDate.isSame(agora, "day")
+            ? agora.add(1, "hour").startOf("hour")
+            : initialDate.hour(9).minute(0).second(0).millisecond(0);
+        return base;
+    }
     return dayjs().add(1, "hour").startOf("hour");
-};
-
-const normalizeTipo = (tipo: string | null | undefined, valores: Set<string>, fallback: string) => {
-    if (tipo && valores.has(tipo)) return tipo;
-    return fallback;
 };
 
 const getContextLabel = (contextData?: TaskContextData | null) => {
@@ -105,69 +114,13 @@ export const TaskFormModal = ({
 }: TaskFormModalProps) => {
     const [form] = Form.useForm<TaskFormValues>();
     const [isSaving, setIsSaving] = useState(false);
+    const salvandoRef = useRef(false);
+    const { ownerDisplayName } = useCrmAccess();
+    const { isEnergiaSolar } = useTenantSegmento();
 
     const invalidate = useInvalidate();
     const { mutateAsync: createTarefa } = useCreate();
     const { mutateAsync: updateTarefa } = useUpdate();
-
-    const clientesResult = useList<ClienteRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-        sorters: [{ field: "nome", order: "asc" }],
-    }) as any;
-
-    const clientesQuery = clientesResult.query || clientesResult;
-    const clientes: ClienteRecord[] = clientesQuery?.data?.data || [];
-    const isLoadingClientes = Boolean(clientesQuery?.isLoading);
-
-    const { query: tiposAtividadeQuery } = useList<TipoAtividadeRecord>({
-        resource: "tipos_atividade",
-        pagination: { mode: "off" },
-        filters: [{ field: "ativo", operator: "eq", value: true }],
-        sorters: [{ field: "ordem", order: "asc" }],
-        queryOptions: { retry: false },
-    });
-
-    const tipoOptions = useMemo(() => {
-        const tipos = ((tiposAtividadeQuery?.data?.data as TipoAtividadeRecord[]) || []).filter(
-            (tipo) => tipo?.nome?.trim()
-        );
-        if (!tipos.length) return TIPO_OPTIONS;
-        return tipos.map((tipo) => ({
-            value: normalizeTipoValue(tipo.nome),
-            label: tipo.nome,
-        }));
-    }, [tiposAtividadeQuery?.data?.data]);
-
-    const tipoValues = useMemo(() => new Set(tipoOptions.map((item) => item.value)), [tipoOptions]);
-
-    const clientesById = useMemo(() => {
-        const map = new Map<string, ClienteRecord>();
-        clientes.forEach((cliente) => map.set(String(cliente.id), cliente));
-        return map;
-    }, [clientes]);
-
-    const clienteOptions = useMemo(() => {
-        const map = new Map<string, { value: string | number; label: string }>();
-        clientes.forEach((cliente) => {
-            map.set(String(cliente.id), {
-                value: cliente.id,
-                label: cliente.nome || `Cliente #${cliente.id}`,
-            });
-        });
-
-        if (contextData?.clienteId) {
-            const contextKey = String(contextData.clienteId);
-            if (!map.has(contextKey)) {
-                map.set(contextKey, {
-                    value: contextData.clienteId,
-                    label: getContextLabel(contextData) || `Cliente #${contextData.clienteId}`,
-                });
-            }
-        }
-
-        return Array.from(map.values());
-    }, [clientes, contextData]);
 
     const contextClienteId = normalizeId(contextData?.clienteId);
     const taskClienteId = normalizeId(task?.cliente_id);
@@ -178,34 +131,104 @@ export const TaskFormModal = ({
               ? taskClienteId
               : undefined;
     const isClienteLocked = lockedClienteId !== undefined && lockedClienteId !== null;
-    const clienteFromList = isClienteLocked ? clientesById.get(String(lockedClienteId)) : undefined;
+
+    // Busca de clientes no servidor, 20 por vez. Antes o modal carregava a
+    // base INTEIRA (select * sem limite) ao montar — inclusive no Kanban,
+    // onde fica sempre montado — e o Supabase cortava em 1000: quem tinha
+    // mais leads não conseguia agendar para os que passavam desse corte.
+    const [buscaCliente, setBuscaCliente] = useState("");
+    const [buscaDebounced, setBuscaDebounced] = useState("");
+    useEffect(() => {
+        const timer = setTimeout(() => setBuscaDebounced(buscaCliente), 300);
+        return () => clearTimeout(timer);
+    }, [buscaCliente]);
+    const termoBusca = sanitizarBusca(buscaDebounced);
+
+    const { query: clientesQuery } = useList<ClienteRecord>({
+        resource: "clientes",
+        pagination: { currentPage: 1, pageSize: 20 },
+        sorters: [{ field: "nome", order: "asc" }],
+        filters: termoBusca ? [{ field: "nome", operator: "contains", value: termoBusca }] : [],
+        meta: { select: "id,nome,endereco_instalacao" },
+        queryOptions: { enabled: open && !isClienteLocked },
+    });
+    const clientes = useMemo(() => clientesQuery?.data?.data ?? [], [clientesQuery?.data?.data]);
+
+    const { query: tiposAtividadeQuery } = useList<TipoAtividadeRecord>({
+        resource: "tipos_atividade",
+        pagination: { mode: "off" },
+        filters: [{ field: "ativo", operator: "eq", value: true }],
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false, enabled: open },
+    });
+
+    const tipoOptions = useMemo(() => {
+        const tipos = (tiposAtividadeQuery?.data?.data ?? []).filter((tipo) => tipo?.nome?.trim());
+        if (!tipos.length) return TIPO_OPTIONS;
+        return tipos.map((tipo) => ({ value: normalizeTipoValue(tipo.nome), label: tipo.nome }));
+    }, [tiposAtividadeQuery?.data?.data]);
+
+    const clienteOptions = useMemo(
+        () => clientes.map((cliente) => ({ value: cliente.id, label: cliente.nome || `Cliente #${cliente.id}` })),
+        [clientes],
+    );
+
     const clienteContextLabel =
-        clienteFromList?.nome?.trim() ||
         getContextLabel(contextData) ||
         task?.cliente_nome?.trim() ||
         (isClienteLocked ? `Cliente #${lockedClienteId}` : "Cliente vinculado");
     const modalTitle = mode === "edit" ? "Editar agendamento" : "Novo agendamento";
 
+    // Preenche o formulário só no momento em que o modal ABRE. Antes o efeito
+    // rodava de novo sempre que a lista de tipos chegava ou o objeto de
+    // contexto mudava de identidade (a tela de detalhes cria um a cada
+    // render): o que o usuário já tinha digitado era apagado.
+    const estavaAberto = useRef(false);
+    useEffect(() => {
+        if (open && !estavaAberto.current) {
+            const initialClienteId = normalizeId(lockedClienteId ?? task?.cliente_id ?? contextData?.clienteId);
+            form.setFieldsValue({
+                cliente_id: initialClienteId ?? undefined,
+                titulo: task?.titulo || "",
+                tipo: task?.tipo || undefined,
+                data_vencimento: getTaskDateValue(task?.data_vencimento, initialDate),
+                descricao: task?.descricao || "",
+            });
+            setBuscaCliente("");
+        }
+        estavaAberto.current = open;
+    }, [open, form, lockedClienteId, task, contextData?.clienteId, initialDate]);
+
+    // Tipo padrão quando a lista de tipos chega e o campo ainda está vazio
+    // (ou com um tipo que não existe mais).
     useEffect(() => {
         if (!open) return;
-
-        const initialClienteId = normalizeId(lockedClienteId ?? task?.cliente_id ?? contextData?.clienteId);
-
-        form.setFieldsValue({
-            cliente_id: initialClienteId ?? undefined,
-            titulo: task?.titulo || "",
-            tipo: normalizeTipo(task?.tipo, tipoValues, tipoOptions[0]?.value ?? "visita"),
-            data_vencimento: getTaskDateValue(task?.data_vencimento, initialDate),
-            descricao: task?.descricao || "",
-        });
-    }, [contextData?.clienteId, form, initialDate, lockedClienteId, open, task, tipoOptions, tipoValues]);
+        const atual = form.getFieldValue("tipo") as string | undefined;
+        if (!atual || !tipoOptions.some((opcao) => opcao.value === atual)) {
+            if (!(mode === "edit" && atual)) form.setFieldValue("tipo", tipoOptions[0]?.value ?? "visita");
+        }
+    }, [form, mode, open, tipoOptions]);
 
     const handleCancel = () => {
         form.resetFields();
         onClose();
     };
 
+    const buscarEndereco = async (clienteId: string | number): Promise<string> => {
+        const daLista = clientes.find((c) => String(c.id) === String(clienteId))?.endereco_instalacao?.trim();
+        if (daLista) return daLista;
+        if (contextData?.clienteEndereco?.trim()) return contextData.clienteEndereco.trim();
+        const { data } = await supabaseClient
+            .from("clientes")
+            .select("endereco_instalacao")
+            .eq("id", clienteId)
+            .maybeSingle();
+        return String((data as { endereco_instalacao?: string | null } | null)?.endereco_instalacao ?? "").trim();
+    };
+
     const handleSave = async () => {
+        if (salvandoRef.current) return;
+        salvandoRef.current = true;
         try {
             setIsSaving(true);
 
@@ -217,20 +240,23 @@ export const TaskFormModal = ({
                 return;
             }
 
-            if (values.data_vencimento.isBefore(dayjs(), "minute")) {
-                message.warning("Nao e permitido agendar tarefas no passado.");
+            // Editar a descrição de uma tarefa vencida não pode ser bloqueado:
+            // a regra de "não agendar no passado" vale para data nova.
+            const dataAlterada =
+                mode !== "edit" ||
+                !task?.data_vencimento ||
+                !dayjs(task.data_vencimento).isSame(values.data_vencimento, "minute");
+            if (dataAlterada && values.data_vencimento.isBefore(dayjs(), "minute")) {
+                message.warning("Não é permitido agendar tarefas no passado.");
                 return;
             }
 
-            const selectedCliente = clientesById.get(String(selectedClienteId));
-            const endereco =
-                selectedCliente?.endereco_instalacao?.trim() ||
-                contextData?.clienteEndereco?.trim() ||
-                "";
-
-            if (values.tipo === "visita" && !endereco) {
-                message.warning("Visita tecnica exige cliente com endereco cadastrado.");
-                return;
+            if (isEnergiaSolar && values.tipo === "visita") {
+                const endereco = await buscarEndereco(selectedClienteId);
+                if (!endereco) {
+                    message.warning("Visita técnica exige cliente com endereço cadastrado.");
+                    return;
+                }
             }
 
             const payload = {
@@ -252,36 +278,31 @@ export const TaskFormModal = ({
             } else {
                 await createTarefa({
                     resource: "tarefas",
-                    values: payload,
+                    // Dono da atividade: sem ele os relatórios por consultor
+                    // não conseguiam atribuir a atividade a ninguém.
+                    values: { ...payload, responsavel: ownerDisplayName || null },
                     successNotification: false,
                     errorNotification: false,
                 });
             }
 
-            await invalidate({
-                resource: "tarefas",
-                invalidates: ["list", "many", "detail"],
-            });
+            await invalidate({ resource: "tarefas", invalidates: ["list", "many", "detail"] });
 
-            message.success(mode === "edit" ? "Agendamento atualizado com sucesso." : "Agendamento salvo com sucesso.");
+            message.success(mode === "edit" ? "Agendamento atualizado." : "Agendamento salvo.");
 
             form.resetFields();
             onSuccess?.();
             onClose();
-        } catch (error: any) {
-            if (error?.errorFields) return;
-
-            const backendMessage =
-                error?.message ||
-                error?.response?.data?.message ||
-                error?.errors?.[0]?.message;
-
+        } catch (error: unknown) {
+            if (typeof error === "object" && error && "errorFields" in error) return;
+            const backendMessage = error instanceof Error ? error.message : (error as { message?: string })?.message;
             message.error(
                 backendMessage
-                    ? `Nao foi possivel salvar: ${backendMessage}`
-                    : "Nao foi possivel salvar o agendamento."
+                    ? `Não foi possível salvar: ${backendMessage}`
+                    : "Não foi possível salvar o agendamento.",
             );
         } finally {
+            salvandoRef.current = false;
             setIsSaving(false);
         }
     };
@@ -292,11 +313,11 @@ export const TaskFormModal = ({
             open={open}
             onOk={handleSave}
             onCancel={handleCancel}
-            okText={mode === "edit" ? "Salvar alteracoes" : "Salvar agendamento"}
+            okText={mode === "edit" ? "Salvar alterações" : "Salvar agendamento"}
             cancelText="Cancelar"
             confirmLoading={isSaving}
             okButtonProps={{ className: "crm-focusable" }}
-            destroyOnClose
+            destroyOnHidden
         >
             <Form form={form} layout="vertical" preserve={false} className="crm-form-row-tight">
                 {isClienteLocked ? (
@@ -319,21 +340,22 @@ export const TaskFormModal = ({
                     >
                         <Select
                             showSearch
-                            optionFilterProp="label"
+                            filterOption={false}
+                            onSearch={setBuscaCliente}
                             options={clienteOptions}
-                            placeholder="Selecione o cliente"
-                            loading={isLoadingClientes}
-                            notFoundContent="Nenhum cliente encontrado"
+                            placeholder="Digite para buscar o cliente"
+                            loading={Boolean(clientesQuery?.isFetching)}
+                            notFoundContent={clientesQuery?.isFetching ? "Buscando..." : "Nenhum cliente encontrado"}
                         />
                     </Form.Item>
                 )}
 
                 <Form.Item
-                    label="Titulo da atividade"
+                    label="Título da atividade"
                     name="titulo"
-                    rules={[{ required: true, message: "Informe o titulo da tarefa." }]}
+                    rules={[{ required: true, whitespace: true, message: "Informe o título da tarefa." }]}
                 >
-                    <Input placeholder="Ex: Visita tecnica, ligacao de alinhamento..." />
+                    <Input placeholder="Ex.: visita técnica, ligação de alinhamento..." />
                 </Form.Item>
 
                 <div className="crm-toolbar-group">
@@ -356,8 +378,8 @@ export const TaskFormModal = ({
                     </Form.Item>
                 </div>
 
-                <Form.Item label="Observacoes" name="descricao">
-                    <Input.TextArea rows={3} placeholder="Ex: cliente pediu para ligar antes da visita." />
+                <Form.Item label="Observações" name="descricao">
+                    <Input.TextArea rows={3} placeholder="Ex.: cliente pediu para ligar antes da visita." />
                 </Form.Item>
             </Form>
         </Modal>
@@ -365,9 +387,5 @@ export const TaskFormModal = ({
 };
 
 export const ModalAgenda = ({ open, onClose, clienteId, clienteNome }: LegacyModalAgendaProps) => (
-    <TaskFormModal
-        open={open}
-        onClose={onClose}
-        contextData={{ clienteId, clienteNome }}
-    />
+    <TaskFormModal open={open} onClose={onClose} contextData={{ clienteId, clienteNome }} />
 );

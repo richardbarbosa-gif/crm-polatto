@@ -1,18 +1,33 @@
 import dayjs, { type Dayjs } from "dayjs";
 import { normalizeText, parseCurrencyLikeValue } from "./formatters";
+import { classificarDesfecho, valorDoLead, type EtapaFunil } from "./pipelineMetrics";
 import type { TaskExecutionStatus } from "./taskExecutionStatus";
 
 export interface InsightClienteRecord {
     id: string | number;
     nome?: string | null;
     status?: string | null;
+    stage_id?: string | number | null;
     responsavel?: string | null;
     responsavel_id?: string | null;
+    valor?: string | number | null;
     conta_energia_media?: string | number | null;
     created_at?: string | null;
     updated_at?: string | null;
+    data_fechamento?: string | null;
     motivo_perda?: string | null;
 }
+
+/** Colunas que os relatórios usam (evita select * da base inteira). */
+export const COLUNAS_INSIGHT_CLIENTE =
+    "id,nome,status,stage_id,responsavel,responsavel_id,valor,conta_energia_media,created_at,data_fechamento,motivo_perda";
+
+/**
+ * Data em que o negócio foi decidido (ganho/perdido). Sem data de
+ * fechamento gravada, cai para a criação.
+ */
+export const dataDeDecisao = (cliente: InsightClienteRecord): string | null | undefined =>
+    cliente.data_fechamento || cliente.created_at;
 
 export interface InsightTaskRecord {
     id: string | number;
@@ -42,12 +57,14 @@ export type OwnerPerformance = {
     ganhos: number;
     perdas: number;
     ativos: number;
+    /** Valor de todos os negócios do responsável (carteira). */
     valor: number;
+    /** Valor só dos negócios ganhos (receita). */
+    valorGanho: number;
 };
 
 export type TaskSituation = "atrasada" | "tratada" | "hoje" | "proxima" | "futura";
 
-const OPEN_STATUS_TERMS = ["novo", "negoci", "visita", "proposta", "qualific"];
 
 export const isWonStatus = (status?: string | null): boolean => {
     const value = normalizeText(status);
@@ -58,12 +75,13 @@ export const isLostStatus = (status?: string | null): boolean => {
     return normalizeText(status).includes("perdido");
 };
 
-export const isOpenStatus = (status?: string | null): boolean => {
-    const value = normalizeText(status);
-    if (!value) return true;
-    if (isWonStatus(value) || isLostStatus(value)) return false;
-    return OPEN_STATUS_TERMS.some((term) => value.includes(term));
-};
+/**
+ * Em aberto = nem ganho nem perdido. Antes exigia que o nome da etapa
+ * contivesse "novo", "negoci", "visita"...: etapas personalizadas como
+ * "Contato inicial" ficavam fora do pipeline aberto do painel.
+ */
+export const isOpenStatus = (status?: string | null): boolean =>
+    !isWonStatus(status) && !isLostStatus(status);
 
 export const getInsightValue = (value: unknown): number => {
     return parseCurrencyLikeValue(value) ?? 0;
@@ -106,13 +124,21 @@ export const toOwnerLabel = (value?: string | null): string => {
     return normalized ? (value?.trim() || "Sem responsavel") : "Sem responsavel";
 };
 
-export const buildOwnerPerformance = (clientes: InsightClienteRecord[]): OwnerPerformance[] => {
+/**
+ * Desempenho por responsável. O desfecho usa os flags ganho/perdido da
+ * etapa quando `etapasPorId` é informado (sem ele, o texto do status) e o
+ * valor é o do negócio (valorDoLead), não a conta de luz.
+ */
+export const buildOwnerPerformance = (
+    clientes: InsightClienteRecord[],
+    etapasPorId: Map<string, EtapaFunil> = new Map(),
+): OwnerPerformance[] => {
     const map = new Map<string, OwnerPerformance>();
 
     clientes.forEach((cliente) => {
-        // Mágica: Usa o ID se existir. Se não, faz fallback para o texto antigo.
+        // Usa o id do responsável quando existe; senão, o nome (dado antigo).
         const key = cliente.responsavel_id ? String(cliente.responsavel_id) : toOwnerKey(cliente.responsavel);
-        
+
         const current = map.get(key) || {
             owner_id: cliente.responsavel_id ? String(cliente.responsavel_id) : null,
             owner: toOwnerLabel(cliente.responsavel),
@@ -121,14 +147,18 @@ export const buildOwnerPerformance = (clientes: InsightClienteRecord[]): OwnerPe
             perdas: 0,
             ativos: 0,
             valor: 0,
+            valorGanho: 0,
         };
 
+        const valor = valorDoLead(cliente);
         current.total += 1;
-        current.valor += getInsightValue(cliente.conta_energia_media);
+        current.valor += valor;
 
-        if (isWonStatus(cliente.status)) {
+        const desfecho = classificarDesfecho(cliente, etapasPorId);
+        if (desfecho === "ganho") {
             current.ganhos += 1;
-        } else if (isLostStatus(cliente.status)) {
+            current.valorGanho += valor;
+        } else if (desfecho === "perdido") {
             current.perdas += 1;
         } else {
             current.ativos += 1;

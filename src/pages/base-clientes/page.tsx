@@ -20,10 +20,11 @@ import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
 import {
     formatCurrencyBRL,
     formatDateBR,
-    isClosedStatus,
     normalizeText,
-    parseCurrencyLikeValue,
 } from "../../lib/formatters";
+import { dataDeDecisao } from "../../lib/insights";
+import { buscarTodasAsLinhas } from "../../lib/dataProviderPaginado";
+import { textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
 import { supabaseClient } from "../../utility";
 
 type ClienteBaseRecord = {
@@ -38,9 +39,13 @@ type ClienteBaseRecord = {
     responsavel?: string | null;
     status?: string | null;
     created_at?: string | null;
+    data_fechamento?: string | null;
+    valor?: number | string | null;
+    stage_id?: string | number | null;
 };
 
 const PERIOD_OPTIONS = [
+    { label: "Todo o período", value: 0 },
     { label: "7 dias", value: 7 },
     { label: "30 dias", value: 30 },
     { label: "90 dias", value: 90 },
@@ -57,30 +62,42 @@ export const BaseClientesPage = () => {
     const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(
         undefined,
     );
-    const [periodoDias, setPeriodoDias] = useState<number>(30);
+    const [periodoDias, setPeriodoDias] = useState<number>(0);
 
     const fetchClientesFechados = useCallback(async () => {
         setIsLoading(true);
         setErrorMessage(null);
 
         try {
-            const { data, error } = await supabaseClient
-                .from("clientes")
-                .select(
-                    "id,nome,telefone,email,endereco_instalacao,numero,cep,conta_energia_media,responsavel,status,created_at",
-                )
-                .or("status.ilike.%fechado%,status.ilike.%ganho%")
-                .order("created_at", { ascending: false });
+            // Etapas marcadas como ganho (podem não ter "fechado" no nome).
+            const { data: etapas } = await supabaseClient.from("pipeline_stages").select("id,ganho").eq("ganho", true);
+            const idsGanho = ((etapas ?? []) as Array<{ id: string | number }>).map((e) => String(e.id));
+            const filtroGanho = [
+                "status.ilike.%fechado%",
+                "status.ilike.%ganho%",
+                ...(idsGanho.length ? [`stage_id.in.(${idsGanho.join(",")})`] : []),
+            ].join(",");
 
-            if (error) {
-                throw error;
-            }
+            // Todas as páginas: sem range o Supabase devolvia só as 1000 primeiras.
+            const registros = await buscarTodasAsLinhas<ClienteBaseRecord>((inicio, fim) =>
+                supabaseClient
+                    .from("clientes")
+                    .select(
+                        "id,nome,telefone,email,endereco_instalacao,numero,cep,valor,conta_energia_media,responsavel,status,stage_id,created_at,data_fechamento",
+                    )
+                    .or(filtroGanho)
+                    .order("created_at", { ascending: false })
+                    .order("id", { ascending: true })
+                    .range(inicio, fim),
+            );
 
-            const registros = (data ?? []) as ClienteBaseRecord[];
-            setClientesFechados(registros.filter((record) => isClosedStatus(record.status)));
-        } catch (error: any) {
+            // Antes o filtro final exigia status EXATAMENTE "fechado": clientes
+            // em etapas como "Ganho" ou "Venda fechada" vinham do banco e eram
+            // descartados aqui — nunca apareciam na base de clientes.
+            setClientesFechados(registros.filter((record) => !textoIndicaPerda(record.status)));
+        } catch (error: unknown) {
             setClientesFechados([]);
-            setErrorMessage(error?.message || "Falha ao carregar a base de clientes.");
+            setErrorMessage((error as { message?: string })?.message || "Falha ao carregar a base de clientes.");
         } finally {
             setIsLoading(false);
         }
@@ -114,8 +131,9 @@ export const BaseClientesPage = () => {
                 return false;
             }
 
-            if (periodoDias > 0 && cliente.created_at) {
-                const createdAt = new Date(cliente.created_at).getTime();
+            // Período pela data em que o negócio foi ganho (antes: criação do lead).
+            if (periodoDias > 0 && dataDeDecisao(cliente)) {
+                const createdAt = new Date(String(dataDeDecisao(cliente))).getTime();
                 if (!Number.isNaN(createdAt)) {
                     const diffDays = (now - createdAt) / oneDayMs;
                     if (diffDays > periodoDias) {
@@ -143,7 +161,7 @@ export const BaseClientesPage = () => {
 
     const hasValorField = useMemo(() => {
         return clientesFiltrados.some((item) =>
-            Object.prototype.hasOwnProperty.call(item, "conta_energia_media"),
+            Object.prototype.hasOwnProperty.call(item, "conta_energia_media") || Object.prototype.hasOwnProperty.call(item, "valor"),
         );
     }, [clientesFiltrados]);
 
@@ -153,7 +171,7 @@ export const BaseClientesPage = () => {
         }
 
         return clientesFiltrados.reduce((acc, curr) => {
-            return acc + (parseCurrencyLikeValue(curr.conta_energia_media) ?? 0);
+            return acc + valorDoLead(curr);
         }, 0);
     }, [clientesFiltrados, hasValorField]);
 
@@ -173,7 +191,7 @@ export const BaseClientesPage = () => {
         }
 
         if (!navigator?.clipboard) {
-            message.error("Area de transferencia indisponivel neste navegador.");
+            message.error("Área de transferência indisponível neste navegador.");
             return;
         }
 
@@ -181,7 +199,7 @@ export const BaseClientesPage = () => {
             await navigator.clipboard.writeText(contato);
             message.success("Contato copiado.");
         } catch {
-            message.error("Nao foi possivel copiar o contato.");
+            message.error("Não foi possível copiar o contato.");
         }
     };
 
@@ -234,20 +252,19 @@ export const BaseClientesPage = () => {
             ),
         },
         {
-            title: "Cidade / Endereco",
+            title: "Cidade / Endereço",
             dataIndex: "endereco_instalacao",
             key: "endereco_instalacao",
             render: (value) => value || "-",
         },
         {
             title: "Valor",
-            dataIndex: "conta_energia_media",
-            key: "conta_energia_media",
-            render: (value) =>
-                hasValorField ? formatCurrencyBRL(value, "--") : "--",
+            key: "valor",
+            render: (_: unknown, record: ClienteBaseRecord) =>
+                formatCurrencyBRL(valorDoLead(record), "--"),
         },
         {
-            title: "Responsavel",
+            title: "Responsável",
             dataIndex: "responsavel",
             key: "responsavel",
             render: (value) => value || "-",
@@ -259,7 +276,7 @@ export const BaseClientesPage = () => {
             render: (value) => formatDateBR(value, "-"),
         },
         {
-            title: "Acoes",
+            title: "Ações",
             key: "acoes",
             render: (_, record) => (
                 <Space wrap className="crm-base-table-actions">
@@ -334,10 +351,10 @@ export const BaseClientesPage = () => {
                     subtitle="Soma dos clientes listados"
                 />
                 <StatCard
-                    title="Ticket medio"
+                    title="Ticket médio"
                     value={ticketMedio === null ? "--" : formatCurrencyBRL(ticketMedio, "--")}
                     accentColor="#ed8936"
-                    subtitle="Receita media por cliente"
+                    subtitle="Receita média por cliente"
                 />
             </div>
 
@@ -352,7 +369,7 @@ export const BaseClientesPage = () => {
                     />
                     <div className="crm-toolbar-group">
                         <Select
-                            placeholder="Responsavel"
+                            placeholder="Responsável"
                             allowClear
                             style={{ width: 200 }}
                             value={responsavelFiltro}
@@ -377,7 +394,7 @@ export const BaseClientesPage = () => {
                 <Alert
                     type="error"
                     showIcon
-                    message="Nao foi possivel carregar a base de clientes."
+                    message="Não foi possível carregar a base de clientes."
                     description={errorMessage}
                     action={
                         <Button

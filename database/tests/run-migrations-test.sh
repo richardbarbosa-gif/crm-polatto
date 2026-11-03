@@ -59,3 +59,6 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/03_teste_correcoes_pr.sql"
 
 echo "==> Suíte 4: endurecimento de segurança (migration 10) — ataque falha, uso legítimo segue"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/04_teste_hardening.sql"
+
+echo "==> Suíte 5: migration 11 (religar referências legadas após a virada)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/05_teste_ajustes_funcionais.sql"

@@ -209,6 +209,13 @@ const fetchActivities = async (leadId: string | number): Promise<LeadTimelineEnt
 };
 
 const fetchStatusHistory = async (leadId: string | number): Promise<LeadTimelineEntry[]> => {
+    // cliente_status_history.cliente_id é bigint (id da tabela antiga). Com
+    // o id UUID do modelo novo a consulta falhava ("invalid input syntax for
+    // type bigint") e, por estar num Promise.all, derrubava a timeline
+    // inteira do lead. No modelo novo as mudanças de etapa já chegam pela
+    // atividades_lead (trigger registrar_mudanca_stage).
+    if (!/^\d+$/.test(String(leadId))) return [];
+
     const { data, error } = await supabaseClient
         .from("cliente_status_history")
         .select("*")
@@ -228,7 +235,9 @@ const fetchStatusHistory = async (leadId: string | number): Promise<LeadTimeline
 export const fetchLeadTimeline = async (leadId: string | number): Promise<LeadTimelineEntry[]> => {
     const [activities, statusHistory] = await Promise.all([
         fetchActivities(leadId),
-        fetchStatusHistory(leadId),
+        // O histórico de etapas é complementar: se falhar, a timeline de
+        // atividades continua aparecendo.
+        fetchStatusHistory(leadId).catch(() => [] as LeadTimelineEntry[]),
     ]);
 
     return sortEntriesByDateDesc([...activities, ...statusHistory]);
@@ -315,6 +324,92 @@ export const addLeadActivity = async (input: ActivityInsertInput): Promise<boole
     }
 
     return false;
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Depois da virada (clientes vira view sobre negocios) o id do lead é UUID;
+ * antes, era o bigint da tabela antiga.
+ */
+export const ehIdDoModeloNovo = (id: unknown): boolean =>
+    typeof id === "string" && UUID_RE.test(id);
+
+type MudancaDeEtapaInput = {
+    leadId: string | number | null | undefined;
+    tenantId?: string | null;
+    de: string;
+    para: string;
+    motivoPerda?: string;
+    autor?: string;
+};
+
+/**
+ * Registra a mudança de etapa no histórico e na timeline do lead.
+ *
+ * No modelo novo (id UUID) o trigger registrar_mudanca_stage do banco
+ * (migration 04) JÁ grava cliente_status_history e atividades_lead a cada
+ * troca de etapa. Gravar também aqui duplicava cada movimentação na
+ * timeline, e o insert em cliente_status_history (cliente_id bigint)
+ * falhava com o UUID — o usuário via "não foi possível registrar no
+ * histórico" a cada card arrastado. Aqui só complementa o que o trigger
+ * não sabe: o motivo da perda.
+ *
+ * Devolve false quando o histórico não pôde ser gravado.
+ */
+export const registrarMudancaDeEtapa = async ({
+    leadId,
+    tenantId,
+    de,
+    para,
+    motivoPerda,
+    autor,
+}: MudancaDeEtapaInput): Promise<boolean> => {
+    if (leadId === null || leadId === undefined || leadId === "") return true;
+
+    if (ehIdDoModeloNovo(leadId)) {
+        if (!motivoPerda) return true;
+        try {
+            await addLeadActivity({
+                leadId,
+                tenantId,
+                activityType: "perda",
+                title: "Motivo da perda",
+                description: motivoPerda,
+                author: autor,
+            });
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    let ok = true;
+    const { error: historyError } = await supabaseClient.from("cliente_status_history").insert({
+        tenant_id: tenantId || undefined,
+        cliente_id: leadId,
+        de_status: de,
+        para_status: para,
+        movido_em: new Date().toISOString(),
+        movido_por: autor || null,
+    });
+    if (historyError && !isSupabaseMissingRelation(historyError)) ok = false;
+
+    try {
+        await addLeadActivity({
+            leadId,
+            tenantId,
+            activityType: "status",
+            title: "Mudança de etapa",
+            description: motivoPerda ? `${de} -> ${para} (motivo: ${motivoPerda})` : `${de} -> ${para}`,
+            fromStatus: de,
+            toStatus: para,
+            author: autor,
+        });
+    } catch {
+        ok = false;
+    }
+    return ok;
 };
 
 const sanitizeFileName = (fileName: string): string => {

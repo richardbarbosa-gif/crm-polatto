@@ -88,7 +88,7 @@ type MissingSchemaAlertProps = {
 };
 
 export const MissingSchemaAlert = ({
-    title = "Tabela de Insights nao encontrada no Supabase",
+    title = "Tabela de relatórios não encontrada no banco",
     description,
 }: MissingSchemaAlertProps) => {
     return (

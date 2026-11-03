@@ -30,6 +30,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { TaskFormModal, type TaskContextData, type TarefaRecord } from "../../components/modal/agenda";
 import { getTaskSituation, type TaskSituation, isTaskOverdue } from "../../lib/insights";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import {
     resolveTaskExecutionStatus,
     updateTaskExecutionStatus,
@@ -41,9 +42,9 @@ import { supabaseClient } from "../../utility";
 
 const TIPO_LABELS: Record<string, string> = {
     visita: "Visita",
-    ligacao: "Ligacao",
+    ligacao: "Ligação",
     whatsapp: "WhatsApp",
-    email: "Email",
+    email: "E-mail",
 };
 
 const getTipoLabel = (tipo?: string | null) => {
@@ -53,7 +54,7 @@ const getTipoLabel = (tipo?: string | null) => {
 };
 
 const getClienteFallbackLabel = (clienteId?: string | number | null) => {
-    if (!clienteId) return "Cliente nao informado";
+    if (!clienteId) return "Cliente não informado";
     return `Cliente #${clienteId}`;
 };
 
@@ -68,7 +69,7 @@ const getSituationBadgeStatus = (situation: TaskSituation) => {
 const getSituationLabel = (situation: TaskSituation) => {
     if (situation === "atrasada") return "Atrasada";
     if (situation === "hoje") return "Hoje";
-    if (situation === "proxima") return "Proxima";
+    if (situation === "proxima") return "Próxima";
     if (situation === "tratada") return "Tratada";
     return "Agendada";
 };
@@ -78,11 +79,6 @@ const TASK_EXECUTION_STATUS_COLORS: Record<TaskExecutionStatus, string> = {
     resolvido: "success",
     ligar_novamente: "purple",
     voltar_outro_dia: "gold",
-};
-
-type ClienteAgendaRecord = {
-    id: string | number;
-    nome?: string | null;
 };
 
 export const AgendaPage = () => {
@@ -127,7 +123,7 @@ export const AgendaPage = () => {
                 invalidate({ resource: "tarefas", invalidates: ["list"] });
             },
         });
-    }; // <-- Inicializando o invalidate do Refine
+    };
 
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
@@ -150,7 +146,7 @@ export const AgendaPage = () => {
         [visibleDate]
     );
 
-    const listResult = useList<TarefaRecord>({
+    const { query } = useList<TarefaRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
@@ -167,11 +163,11 @@ export const AgendaPage = () => {
                 value: rangeEnd.toISOString(),
             },
         ],
-    }) as any;
+    });
 
-    const query = listResult.query || listResult;
+
     const { data, isLoading, isError, error, refetch } = query;
-    const tarefas: TarefaRecord[] = data?.data || [];
+    const tarefas = useMemo<TarefaRecord[]>(() => data?.data ?? [], [data?.data]);
 
     useEffect(() => {
         const channel = supabaseClient
@@ -182,7 +178,7 @@ export const AgendaPage = () => {
                 (payload) => {
                     const titulo = (payload.new as Record<string, unknown>)?.titulo;
                     message.info(
-                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem titulo"}`,
+                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem título"}`,
                     );
                     refetch?.();
                 },
@@ -194,31 +190,20 @@ export const AgendaPage = () => {
         };
     }, [refetch]);
 
-    const clientesResult = useList<ClienteAgendaRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-        sorters: [{ field: "nome", order: "asc" }],
-    }) as any;
-
-    const clientesQuery = clientesResult.query || clientesResult;
-    const clientes: ClienteAgendaRecord[] = clientesQuery?.data?.data || [];
-
-    const clientesById = useMemo(() => {
-        const map = new Map<string, ClienteAgendaRecord>();
-        clientes.forEach((cliente) => map.set(String(cliente.id), cliente));
-        return map;
-    }, [clientes]);
+    // Só os nomes dos clientes que aparecem na agenda (antes: a base inteira).
+    const idsDosClientes = useMemo(() => tarefas.map((tarefa) => tarefa.cliente_id), [tarefas]);
+    const nomesDosClientes = useNomesDeClientes(idsDosClientes);
 
     const getClienteLabel = (
         clienteId?: string | number | null,
         fallbackName?: string | null,
     ) => {
         if (!clienteId) {
-            return "Cliente nao informado";
+            return "Cliente não informado";
         }
 
         const nome =
-            clientesById.get(String(clienteId))?.nome?.trim() ||
+            nomesDosClientes.get(String(clienteId)) ||
             fallbackName?.trim() ||
             "";
 
@@ -230,7 +215,7 @@ export const AgendaPage = () => {
     };
 
     const getExecutionStatus = (tarefa?: TarefaRecord | null): TaskExecutionStatus => {
-        return resolveTaskExecutionStatus(tarefa as Record<string, any>);
+        return resolveTaskExecutionStatus(tarefa);
     };
 
     const getTaskStatusTag = (tarefa: TarefaRecord) => {
@@ -355,7 +340,7 @@ export const AgendaPage = () => {
                                                 abrirDrawerTarefa(tarefa);
                                             }}
                                         >
-                                            <span>{tarefa.titulo || "Sem titulo"}</span>
+                                            <span>{tarefa.titulo || "Sem título"}</span>
                                             <Typography.Text
                                                 type="secondary"
                                                 style={{ fontSize: 11 }}
@@ -408,7 +393,7 @@ export const AgendaPage = () => {
                 <Alert
                     type="error"
                     showIcon
-                    message="Nao foi possivel carregar sua agenda."
+                    message="Não foi possível carregar sua agenda."
                     description={error?.message || "Tente novamente em alguns instantes."}
                     action={
                         <Button
@@ -432,7 +417,7 @@ export const AgendaPage = () => {
                         Agenda
                     </Typography.Title>
                     <Typography.Text className="crm-page-header-subtitle">
-                        Organize visitas, contatos e pendencias com visao diaria e mensal.
+                        Organize visitas, contatos e pendências com visão diária e mensal.
                     </Typography.Text>
                 </div>
                 <Button
@@ -540,7 +525,7 @@ export const AgendaPage = () => {
                                             }}
                                         >
                                             <Typography.Text strong>
-                                                {tarefa.titulo || "Sem titulo"}
+                                                {tarefa.titulo || "Sem título"}
                                             </Typography.Text>
                                             <Typography.Text type="secondary">
                                                 {tarefa.data_vencimento
@@ -565,7 +550,7 @@ export const AgendaPage = () => {
                                         </div>
 
                                         <Typography.Paragraph style={{ margin: 0 }}>
-                                            {tarefa.descricao?.trim() || "Sem observacoes."}
+                                            {tarefa.descricao?.trim() || "Sem observações."}
                                         </Typography.Paragraph>
                                     </div>
                                 </List.Item>
@@ -576,7 +561,7 @@ export const AgendaPage = () => {
             </Modal>
 
             <Drawer
-                title="Visualizacao rapida"
+                title="Visualização rápida"
                 open={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
                 width={420}
@@ -609,7 +594,7 @@ export const AgendaPage = () => {
                             return (
                                 <>
                                     <Typography.Title level={5} style={{ margin: 0 }}>
-                                        {tarefaEmFoco.titulo || "Sem titulo"}
+                                        {tarefaEmFoco.titulo || "Sem título"}
                                     </Typography.Title>
 
                                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -673,7 +658,7 @@ export const AgendaPage = () => {
                                         <Alert
                                             type="info"
                                             showIcon
-                                            message="Tratativa habilita apenas apos o vencimento da atividade."
+                                            message="A tratativa fica disponível após o vencimento da atividade."
                                         />
                                     )}
                                 </>
@@ -686,9 +671,9 @@ export const AgendaPage = () => {
                                 : "-"}
                         </Typography.Text>
 
-                        <Typography.Text type="secondary">Observacoes</Typography.Text>
+                        <Typography.Text type="secondary">Observações</Typography.Text>
                         <Typography.Paragraph style={{ marginBottom: 0 }}>
-                            {tarefaEmFoco.descricao?.trim() || "Sem observacoes."}
+                            {tarefaEmFoco.descricao?.trim() || "Sem observações."}
                         </Typography.Paragraph>
                     </div>
                 )}

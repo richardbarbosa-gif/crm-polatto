@@ -1,5 +1,5 @@
 import { BankOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { useCreate, useDelete, useList, useUpdate } from "@refinedev/core";
+import { useCreate, useList, useUpdate } from "@refinedev/core";
 import {
     Alert,
     Form,
@@ -14,14 +14,18 @@ import {
     Typography,
     message,
 } from "antd";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
+import { regraCpfCnpj } from "../../lib/documentos";
+import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import { supabaseClient } from "../../utility";
 import type { OrganizacaoRecord } from "../../types/db";
-import { CustomFieldsForm, dadosExtrasParaFormulario } from "../../components/custom-fields";
+import { CustomFieldsForm } from "../../components/custom-fields";
+import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 
 const { Title, Text } = Typography;
@@ -65,7 +69,8 @@ export const OrganizacoesPage = () => {
 
     const { mutateAsync: createOrganizacao } = useCreate();
     const { mutateAsync: updateOrganizacao } = useUpdate();
-    const { mutateAsync: deleteOrganizacao } = useDelete();
+    const [isSaving, setIsSaving] = useState(false);
+    const salvandoRef = useRef(false);
 
     const organizacoes = useMemo(
         () => ((query?.data?.data as OrganizacaoRecord[]) || []).filter(Boolean),
@@ -108,21 +113,63 @@ export const OrganizacoesPage = () => {
         setIsModalOpen(true);
     };
 
+    /** Avisa (sem bloquear) quando o CNPJ já está cadastrado. */
+    const confirmarSeDuplicada = async (values: OrganizacaoFormValues): Promise<boolean> => {
+        const filtro = montarFiltroDuplicata({ documento: values.cnpj }, { documento: "cnpj" });
+        if (!filtro) return true;
+        let consulta = supabaseClient
+            .from("organizacoes")
+            .select("id,nome_fantasia,razao_social")
+            .is("deleted_at", null)
+            .or(filtro)
+            .limit(3);
+        if (editando) consulta = consulta.neq("id", editando.id);
+        const { data, error } = await consulta;
+        if (error || !data?.length) return true;
+        const nomes = (data as Array<{ nome_fantasia?: string | null; razao_social?: string | null }>)
+            .map((o) => o.nome_fantasia || o.razao_social || "Sem nome")
+            .join(", ");
+        return new Promise<boolean>((resolve) => {
+            Modal.confirm({
+                title: "CNPJ já cadastrado",
+                content: `Este CNPJ já pertence a: ${nomes}. Salvar mesmo assim?`,
+                okText: "Salvar mesmo assim",
+                cancelText: "Cancelar",
+                onOk: () => resolve(true),
+                onCancel: () => resolve(false),
+            });
+        });
+    };
+
     const salvar = async () => {
+        if (salvandoRef.current) return;
         const values = await form.validateFields();
-        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
-        const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
-        const payload = {
-            ...limpo,
-            ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
-            tenant_id: tenantId || undefined,
-        };
+        salvandoRef.current = true;
+        setIsSaving(true);
         try {
+            if (!(await confirmarSeDuplicada(values))) return;
+
+            const dadosExtras = extrairDadosExtras(
+                values as Record<string, unknown>,
+                camposCustomizados,
+                editando ? "editar" : "criar",
+            );
+            const { dados_extras: _ignorado, ...limpo } = values as Record<string, unknown>;
+            void _ignorado;
+            const dadosExtrasFinais = editando
+                ? { ...((editando.dados_extras as Record<string, unknown> | null) ?? {}), ...dadosExtras }
+                : dadosExtras;
+            const payload = {
+                ...limpo,
+                ...(Object.keys(dadosExtrasFinais).length ? { dados_extras: dadosExtrasFinais } : {}),
+                tenant_id: tenantId || undefined,
+            };
+
             if (editando) {
-                await updateOrganizacao({ resource: "organizacoes", id: editando.id, values: payload });
+                await updateOrganizacao({ resource: "organizacoes", id: editando.id, values: payload, successNotification: false });
                 message.success("Organização atualizada.");
             } else {
-                await createOrganizacao({ resource: "organizacoes", values: payload });
+                await createOrganizacao({ resource: "organizacoes", values: payload, successNotification: false });
                 message.success("Organização criada.");
             }
             setIsModalOpen(false);
@@ -133,12 +180,23 @@ export const OrganizacoesPage = () => {
                     ? String((error as { message?: unknown }).message)
                     : "Erro desconhecido";
             message.error(`Não foi possível salvar: ${detalhe}`);
+        } finally {
+            salvandoRef.current = false;
+            setIsSaving(false);
         }
     };
 
+    // Exclusão LÓGICA (deleted_at), como a lista já espera. O delete físico
+    // desvinculava a empresa de todos os negócios e contatos dela (FK
+    // on delete set null) sem possibilidade de desfazer.
     const excluir = async (org: OrganizacaoRecord) => {
         try {
-            await deleteOrganizacao({ resource: "organizacoes", id: org.id });
+            await updateOrganizacao({
+                resource: "organizacoes",
+                id: org.id,
+                values: { deleted_at: new Date().toISOString() },
+                successNotification: false,
+            });
             message.success("Organização removida.");
             await query?.refetch?.();
         } catch {
@@ -275,6 +333,7 @@ export const OrganizacoesPage = () => {
                 onCancel={() => setIsModalOpen(false)}
                 okText="Salvar"
                 cancelText="Cancelar"
+                confirmLoading={isSaving}
                 destroyOnHidden
             >
                 <Form form={form} layout="vertical">
@@ -288,7 +347,7 @@ export const OrganizacoesPage = () => {
                     <Form.Item label="Nome fantasia" name="nome_fantasia">
                         <Input placeholder="Ex.: Polatto Solar" />
                     </Form.Item>
-                    <Form.Item label="CNPJ" name="cnpj">
+                    <Form.Item label="CNPJ" name="cnpj" rules={[regraCpfCnpj("cnpj")]}>
                         <Input
                             placeholder="00.000.000/0000-00"
                             onChange={(e) => form.setFieldValue("cnpj", formatCpfCnpj(e.target.value))}

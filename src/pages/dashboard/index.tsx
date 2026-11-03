@@ -1,184 +1,144 @@
 import {
-    ArrowDownOutlined,
-    ArrowUpOutlined,
-    CalendarOutlined,
     CheckCircleOutlined,
-    ClockCircleOutlined,
-    CloseCircleOutlined,
     DollarCircleOutlined,
     FireOutlined,
     RiseOutlined,
-    ThunderboltOutlined,
-    UsergroupAddOutlined,
 } from "@ant-design/icons";
-import { useList } from "@refinedev/core";
-import { Col, Progress, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
+import { useList, type CrudFilter } from "@refinedev/core";
+import { Alert, Col, Progress, Row, Skeleton, Space, Table, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
-import { Button, Card, StatCard } from "../../components/ui";
-import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
+import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { formatCurrencyBRL, formatDateBR, normalizeText, parseCurrencyLikeValue } from "../../lib/formatters";
+import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue } from "../../lib/formatters";
+import {
+    classificarDesfecho,
+    indexarEtapas,
+    percentual,
+    resumirFunil,
+    valorDoLead,
+    type EtapaFunil,
+    type LinhaKpi,
+} from "../../lib/pipelineMetrics";
 
 const { Title, Text } = Typography;
 
-interface ICliente {
-    id: number;
-    nome: string;
-    status: string;
-    conta_energia_media: number | string;
-    valor?: number | string;
-    responsavel?: string;
-    created_at?: string;
-    temperatura?: string;
-    stage_id?: string | number | null;
-}
-
-interface IPipelineStage {
+type LeadRecente = {
     id: string | number;
     nome?: string | null;
-    probabilidade?: number | string | null;
-}
+    status?: string | null;
+    stage_id?: string | number | null;
+    responsavel?: string | null;
+    created_at?: string | null;
+    valor?: number | string | null;
+    conta_energia_media?: number | string | null;
+};
 
-const funnelSteps = [
-    { key: "novo", label: "Novos leads", color: "#3b82f6", icon: <UsergroupAddOutlined /> },
-    { key: "visita", label: "Visita agendada", color: "#f59e0b", icon: <CalendarOutlined /> },
-    { key: "negociacao", label: "Em negociação", color: "#8b5cf6", icon: <ThunderboltOutlined /> },
-    { key: "fechado", label: "Fechados", color: "#10b981", icon: <CheckCircleOutlined /> },
-    { key: "perdido", label: "Perdidos", color: "#ef4444", icon: <CloseCircleOutlined /> },
-] as const;
+type MetaDoMes = { funcionario_id?: string | null; valor_meta?: number | string | null; target_wins?: number | null };
+type RealizadoDoMes = { funcionario_id?: string | null; vendas_qtd?: number | string | null; vendas_valor?: number | string | null };
 
-const temperatureColors: Record<string, { bg: string; text: string; label: string }> = {
+const CORES_DESFECHO = { ganho: "#10b981", perdido: "#ef4444", aberto: "#3b82f6" } as const;
+
+const temperatureColors: Record<"quente" | "morno" | "frio", { bg: string; text: string; label: string }> = {
     quente: { bg: "rgba(239, 68, 68, 0.08)", text: "#dc2626", label: "Quente" },
     morno: { bg: "rgba(245, 158, 11, 0.08)", text: "#d97706", label: "Morno" },
     frio: { bg: "rgba(100, 116, 139, 0.08)", text: "#64748b", label: "Frio" },
 };
 
+/**
+ * Dashboard calculado sobre a view agregada vw_kanban_kpis.
+ *
+ * Antes a tela baixava TODOS os leads (select * sem limite) e contava no
+ * navegador: acima de 1000 leads o Supabase cortava a resposta e todos os
+ * números ficavam errados sem aviso; o funil só reconhecia cinco etapas de
+ * nome fixo ("novo", "visita"...); o "pipeline" somava negócios já
+ * ganhos; e a "Meta do mês" era um 10 fixo comparado com as vendas de
+ * todos os tempos.
+ */
 export const DashboardPage = () => {
     const navigate = useNavigate();
-    const { canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } = useCrmAccess();
+    const { canViewAllLeads, ownerCandidates, employee, isLoadingAccess } = useCrmAccess();
 
     // Mantém o dashboard vivo depois que "clientes" vira view (ver hook)
-    useRealtimeNegocios(["clientes"]);
+    useRealtimeNegocios(["clientes", "vw_kanban_kpis"]);
 
-    const listResult = useList<ICliente>({
-        resource: "clientes",
+    // Mesma visão do Kanban: vendedor sem acesso total vê os próprios negócios.
+    const filtrosDeVisao = useMemo<CrudFilter[]>(
+        () =>
+            !canViewAllLeads && ownerCandidates.length > 0
+                ? [{ field: "responsavel", operator: "in", value: ownerCandidates }]
+                : [],
+        [canViewAllLeads, ownerCandidates],
+    );
+
+    const { query: kpiQuery } = useList<LinhaKpi>({
+        resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
-        liveMode: "auto",
-    }) as any;
+        filters: filtrosDeVisao,
+        queryOptions: { enabled: !isLoadingAccess },
+    });
 
-    const { data, isLoading } = listResult.query || listResult;
-    const clientes = (data?.data || []) as ICliente[];
-
-    const { query: stagesQuery } = useList<IPipelineStage>({
+    const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({
         resource: "pipeline_stages",
         pagination: { mode: "off" },
+        sorters: [{ field: "ordem", order: "asc" }],
         queryOptions: { retry: false },
     });
 
-    const stages = useMemo(
-        () => ((stagesQuery?.data?.data as IPipelineStage[]) || []).filter(Boolean),
-        [stagesQuery?.data?.data],
-    );
+    const { query: recentesQuery } = useList<LeadRecente>({
+        resource: "clientes",
+        pagination: { currentPage: 1, pageSize: 5 },
+        sorters: [{ field: "created_at", order: "desc" }],
+        filters: filtrosDeVisao,
+        meta: { select: "id,nome,status,stage_id,responsavel,created_at,valor,conta_energia_media" },
+        queryOptions: { enabled: !isLoadingAccess },
+    });
 
-    const clientesVisiveis = useMemo(() => {
-        if (canViewAllLeads) return clientes;
-        return clientes.filter((c) => matchesLeadOwner(c.responsavel, ownerCandidatesNormalized));
-    }, [canViewAllLeads, clientes, ownerCandidatesNormalized]);
+    const inicioDoMes = dayjs().startOf("month").format("YYYY-MM-DD");
+    const filtrosDoMes = useMemo<CrudFilter[]>(() => {
+        const filtros: CrudFilter[] = [{ field: "mes_referencia", operator: "eq", value: inicioDoMes }];
+        // Vendedor acompanha a própria meta; gestor, a do time.
+        if (!canViewAllLeads && employee?.id) {
+            filtros.push({ field: "funcionario_id", operator: "eq", value: employee.id });
+        }
+        return filtros;
+    }, [canViewAllLeads, employee?.id, inicioDoMes]);
 
-    const metrics = useMemo(() => {
-        const total = clientesVisiveis.length;
-        const fechados = clientesVisiveis.filter((c) => normalizeText(c.status).includes("fechado"));
-        const perdidos = clientesVisiveis.filter((c) => normalizeText(c.status).includes("perdido"));
-        const ativos = clientesVisiveis.filter((c) => !normalizeText(c.status).includes("perdido"));
-        
-        const receitaPipeline = ativos.reduce((acc, c) => acc + (parseCurrencyLikeValue(c.valor || c.conta_energia_media) || 0), 0);
-        const receitaFechada = fechados.reduce((acc, c) => acc + (parseCurrencyLikeValue(c.valor || c.conta_energia_media) || 0), 0);
-        const ticketMedio = fechados.length > 0 ? receitaFechada / fechados.length : 0;
-        const conversao = total > 0 ? ((fechados.length / total) * 100).toFixed(1) : "0.0";
+    const { query: metasQuery } = useList<MetaDoMes>({
+        resource: "metas",
+        pagination: { mode: "off" },
+        filters: filtrosDoMes,
+        queryOptions: { retry: false, enabled: !isLoadingAccess },
+    });
+    const { query: realizadoQuery } = useList<RealizadoDoMes>({
+        resource: "vw_performance_vendedores",
+        pagination: { mode: "off" },
+        filters: filtrosDoMes,
+        queryOptions: { retry: false, enabled: !isLoadingAccess },
+    });
 
-        const porStatus = {
-            novo: clientesVisiveis.filter((c) => normalizeText(c.status).includes("novo")).length,
-            visita: clientesVisiveis.filter((c) => normalizeText(c.status).includes("visita")).length,
-            negociacao: clientesVisiveis.filter((c) => normalizeText(c.status).includes("negocia")).length,
-            fechado: fechados.length,
-            perdido: perdidos.length,
-        };
+    const etapas = stagesQuery?.data?.data;
+    const resumo = useMemo(() => resumirFunil(kpiQuery?.data?.data, etapas), [kpiQuery?.data?.data, etapas]);
+    const etapasPorId = useMemo(() => indexarEtapas(etapas), [etapas]);
 
-        // Temperatura
-        const quentes = clientesVisiveis.filter((c) => c.temperatura === "quente").length;
-        const mornos = clientesVisiveis.filter((c) => c.temperatura === "morno").length;
-        const frios = clientesVisiveis.filter((c) => c.temperatura === "frio").length;
+    const metaDoMes = useMemo(() => {
+        const metas = metasQuery?.data?.data ?? [];
+        const realizado = realizadoQuery?.data?.data ?? [];
+        const alvoQtd = metas.reduce((acc, m) => acc + (Number(m.target_wins) || 0), 0);
+        const alvoValor = metas.reduce((acc, m) => acc + (parseCurrencyLikeValue(m.valor_meta) ?? 0), 0);
+        const feitoQtd = realizado.reduce((acc, r) => acc + (Number(r.vendas_qtd) || 0), 0);
+        const feitoValor = realizado.reduce((acc, r) => acc + (parseCurrencyLikeValue(r.vendas_valor) ?? 0), 0);
+        return { alvoQtd, alvoValor, feitoQtd, feitoValor, definida: alvoQtd > 0 || alvoValor > 0 };
+    }, [metasQuery?.data?.data, realizadoQuery?.data?.data]);
 
-        // Últimos leads
-        const recentLeads = [...clientesVisiveis]
-            .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
-            .slice(0, 5);
+    const ticketMedio = resumo.ganhos > 0 ? resumo.valorGanho / resumo.ganhos : 0;
+    const maxFunil = Math.max(...resumo.porEtapa.map((e) => e.total), 1);
+    const topResponsaveis = resumo.porResponsavel.slice(0, 5);
+    const recentes = recentesQuery?.data?.data ?? [];
 
-        // Por responsável (top 5)
-        const byOwner = new Map<string, { total: number; fechados: number; valor: number }>();
-        clientesVisiveis.forEach((c) => {
-            const owner = c.responsavel || "Sem responsável";
-            const current = byOwner.get(owner) || { total: 0, fechados: 0, valor: 0 };
-            current.total += 1;
-            current.valor += parseCurrencyLikeValue(c.valor || c.conta_energia_media) || 0;
-            if (normalizeText(c.status).includes("fechado")) current.fechados += 1;
-            byOwner.set(owner, current);
-        });
-        const topOwners = Array.from(byOwner.entries())
-            .map(([name, data]) => ({ name, ...data, winRate: data.total > 0 ? (data.fechados / data.total) * 100 : 0 }))
-            .sort((a, b) => b.valor - a.valor)
-            .slice(0, 5);
-
-        return {
-            total, ativos: ativos.length, receitaPipeline, receitaFechada, ticketMedio,
-            conversao, porStatus, quentes, mornos, frios, recentLeads, topOwners,
-            fechadosCount: fechados.length, perdidosCount: perdidos.length,
-        };
-    }, [clientesVisiveis]);
-
-    const forecast = useMemo(() => {
-        const probPorStageId = new Map<string, number>();
-        const probPorNome = new Map<string, number>();
-        let temProbabilidade = false;
-
-        stages.forEach((stage) => {
-            const prob = parseCurrencyLikeValue(stage.probabilidade) ?? 0;
-            if (prob > 0) temProbabilidade = true;
-            if (stage.id !== undefined && stage.id !== null) {
-                probPorStageId.set(String(stage.id), prob);
-            }
-            const nomeNormalizado = normalizeText(stage.nome);
-            if (nomeNormalizado) probPorNome.set(nomeNormalizado, prob);
-        });
-
-        if (!temProbabilidade) return { disponivel: false, valorPonderado: 0 };
-
-        const valorPonderado = clientesVisiveis.reduce((acc, c) => {
-            const statusNorm = normalizeText(c.status);
-            if (
-                statusNorm.includes("fechado") ||
-                statusNorm.includes("ganho") ||
-                statusNorm.includes("perdido")
-            ) {
-                return acc;
-            }
-            const valor = parseCurrencyLikeValue(c.valor || c.conta_energia_media) || 0;
-            if (valor <= 0) return acc;
-            const probabilidade =
-                (c.stage_id != null ? probPorStageId.get(String(c.stage_id)) : undefined) ??
-                probPorNome.get(statusNorm) ??
-                0;
-            return acc + (valor * probabilidade) / 100;
-        }, 0);
-
-        return { disponivel: true, valorPonderado };
-    }, [clientesVisiveis, stages]);
-
-    const maxFunnel = Math.max(...Object.values(metrics.porStatus), 1);
-
-    if (isLoading) {
+    if (isLoadingAccess || kpiQuery?.isLoading) {
         return (
             <div className="crm-page-shell">
                 <Skeleton active paragraph={{ rows: 1 }} />
@@ -195,103 +155,94 @@ export const DashboardPage = () => {
         );
     }
 
+    // Progresso da meta: pela quantidade quando definida; senão pelo valor.
+    const usarQuantidade = metaDoMes.alvoQtd > 0;
+    const progressoMeta = usarQuantidade
+        ? percentual(metaDoMes.feitoQtd, metaDoMes.alvoQtd)
+        : percentual(metaDoMes.feitoValor, metaDoMes.alvoValor);
+
     return (
         <div className="crm-page-shell">
-            {/* Header */}
             <div className="crm-page-header">
                 <div>
                     <Title level={3} className="crm-page-header-title">Dashboard</Title>
                     <Text className="crm-page-header-subtitle">
-                        Visão executiva do funil — {dayjs().format("DD [de] MMMM, YYYY")}
+                        Visão executiva do funil — {dayjs().format("DD [de] MMMM [de] YYYY")}
                     </Text>
                 </div>
-                <Space>
+                <Space wrap>
                     <Button onClick={() => navigate("/clientes")}>Ver oportunidades</Button>
                     <Button type="primary" onClick={() => navigate("/metas")}>Metas do mês</Button>
                 </Space>
             </div>
 
-            {/* KPI Cards - Row 1 */}
+            {kpiQuery?.isError ? (
+                <Alert
+                    type="error"
+                    showIcon
+                    style={{ marginBottom: 14 }}
+                    message="Não foi possível carregar os indicadores"
+                    description={kpiQuery.error?.message || "Tente recarregar a página."}
+                />
+            ) : null}
+
             <Row gutter={[14, 14]}>
-                {/* Hero Card - Pipeline */}
                 <Col xs={24} sm={12} lg={6}>
                     <div className="crm-dashboard-hero" style={{ borderRadius: 14, padding: "20px 22px 18px", position: "relative", overflow: "hidden" }}>
                         <div style={{ position: "absolute", top: -30, right: -20, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(96,165,250,0.15) 0%, transparent 70%)" }} />
-                        <Text style={{ color: "rgba(148,163,184,0.7)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550, display: "block", marginBottom: 8 }}>
-                            Pipeline total
+                        <Text style={{ color: "rgba(148,163,184,0.85)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550, display: "block", marginBottom: 8 }}>
+                            Pipeline em aberto
                         </Text>
                         <div style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
-                            {formatCurrencyBRL(metrics.receitaPipeline, "R$ 0")}
+                            {formatCurrencyBRL(resumo.valorAberto, "R$ 0")}
                         </div>
-                        <Text style={{ color: "rgba(148,163,184,0.5)", fontSize: 12, marginTop: 6, display: "block" }}>
-                            {metrics.ativos} oportunidades ativas
+                        <Text style={{ color: "rgba(148,163,184,0.75)", fontSize: 12, marginTop: 6, display: "block" }}>
+                            {resumo.abertos} {resumo.abertos === 1 ? "oportunidade ativa" : "oportunidades ativas"}
                         </Text>
                     </div>
                 </Col>
 
-                {/* Vendas Fechadas */}
                 <Col xs={24} sm={12} lg={6}>
-                    <Card style={{ borderRadius: 14, height: "100%" }} bodyStyle={{ padding: "20px 22px 18px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550 }}>Receita fechada</Text>
-                                <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", color: "#059669", marginTop: 4 }}>
-                                    {formatCurrencyBRL(metrics.receitaFechada, "R$ 0")}
-                                </div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>{metrics.fechadosCount} vendas realizadas</Text>
-                            </div>
-                            <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(16,185,129,0.08)", display: "grid", placeItems: "center" }}>
-                                <CheckCircleOutlined style={{ fontSize: 18, color: "#10b981" }} />
-                            </div>
-                        </div>
-                    </Card>
+                    <StatCard
+                        title="Receita ganha (acumulada)"
+                        value={formatCurrencyBRL(resumo.valorGanho, "R$ 0")}
+                        prefix={<CheckCircleOutlined style={{ color: "#10b981" }} />}
+                        valueStyle={{ color: "#059669" }}
+                        accentColor="#10b981"
+                        subtitle={`${resumo.ganhos} ${resumo.ganhos === 1 ? "venda realizada" : "vendas realizadas"}`}
+                        style={{ height: "100%" }}
+                    />
                 </Col>
 
-                {/* Conversão */}
                 <Col xs={24} sm={12} lg={6}>
-                    <Card style={{ borderRadius: 14, height: "100%" }} bodyStyle={{ padding: "20px 22px 18px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550 }}>Conversão</Text>
-                                <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", color: Number(metrics.conversao) > 15 ? "#059669" : "#dc2626", marginTop: 4 }}>
-                                    {metrics.conversao}%
-                                </div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    {Number(metrics.conversao) > 15 ? "Acima da média" : "Precisa melhorar"}
-                                </Text>
-                            </div>
-                            <div style={{ width: 40, height: 40, borderRadius: 10, background: Number(metrics.conversao) > 15 ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)", display: "grid", placeItems: "center" }}>
-                                <RiseOutlined style={{ fontSize: 18, color: Number(metrics.conversao) > 15 ? "#10b981" : "#ef4444" }} />
-                            </div>
-                        </div>
-                    </Card>
+                    <StatCard
+                        title="Conversão"
+                        value={formatPercentBR(resumo.conversao)}
+                        suffix="%"
+                        prefix={<RiseOutlined style={{ color: "#3b82f6" }} />}
+                        accentColor="#3b82f6"
+                        subtitle={`Taxa de ganho nos decididos: ${formatPercentBR(resumo.taxaDeGanho)}%`}
+                        style={{ height: "100%" }}
+                    />
                 </Col>
 
-                {/* Ticket Médio */}
                 <Col xs={24} sm={12} lg={6}>
-                    <Card style={{ borderRadius: 14, height: "100%" }} bodyStyle={{ padding: "20px 22px 18px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                            <div>
-                                <Text type="secondary" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550 }}>Ticket médio</Text>
-                                <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", marginTop: 4 }}>
-                                    {formatCurrencyBRL(metrics.ticketMedio, "R$ 0")}
-                                </div>
-                                <Text type="secondary" style={{ fontSize: 12 }}>Por venda fechada</Text>
-                            </div>
-                            <div style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(59,130,246,0.08)", display: "grid", placeItems: "center" }}>
-                                <DollarCircleOutlined style={{ fontSize: 18, color: "#3b82f6" }} />
-                            </div>
-                        </div>
-                    </Card>
+                    <StatCard
+                        title="Ticket médio"
+                        value={formatCurrencyBRL(ticketMedio, "R$ 0")}
+                        prefix={<DollarCircleOutlined style={{ color: "#3b82f6" }} />}
+                        accentColor="#3b82f6"
+                        subtitle="Por venda ganha"
+                        style={{ height: "100%" }}
+                    />
                 </Col>
 
-                {/* Previsão ponderada */}
-                {forecast.disponivel ? (
+                {resumo.temProbabilidade ? (
                     <Col xs={24} sm={12} lg={6}>
                         <StatCard
                             title="Previsão ponderada"
-                            value={formatCurrencyBRL(forecast.valorPonderado, "R$ 0")}
-                            subtitle="valor × probabilidade da etapa"
+                            value={formatCurrencyBRL(resumo.valorPonderado, "R$ 0")}
+                            subtitle="Valor em aberto × probabilidade da etapa"
                             accentColor="#8b5cf6"
                             style={{ height: "100%" }}
                         />
@@ -299,9 +250,7 @@ export const DashboardPage = () => {
                 ) : null}
             </Row>
 
-            {/* Funnel + Temperature Row */}
             <Row gutter={[14, 14]}>
-                {/* Funil Visual */}
                 <Col xs={24} lg={16}>
                     <Card
                         title={<Text strong style={{ fontSize: 15 }}>Funil de vendas</Text>}
@@ -313,45 +262,56 @@ export const DashboardPage = () => {
                             </Button>
                         }
                     >
-                        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                            {funnelSteps.map((step) => {
-                                const count = metrics.porStatus[step.key];
-                                const pct = (count / maxFunnel) * 100;
-                                return (
-                                    <div key={step.key}>
-                                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                                            <Space size={8}>
-                                                <span style={{ color: step.color, fontSize: 14 }}>{step.icon}</span>
-                                                <Text style={{ fontSize: 13.5, fontWeight: 500, color: "var(--crm-ink-700)" }}>{step.label}</Text>
-                                            </Space>
-                                            <Space size={12}>
-                                                <Text style={{ fontSize: 20, fontWeight: 700, color: step.color, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.02em" }}>
-                                                    {count}
-                                                </Text>
-                                            </Space>
-                                        </div>
-                                        <div style={{ background: "var(--crm-surface-2)", borderRadius: 6, height: 8, overflow: "hidden" }}>
+                        {resumo.porEtapa.length === 0 ? (
+                            <EmptyState
+                                title="Nenhuma oportunidade ainda"
+                                description="Cadastre o primeiro lead para acompanhar o funil."
+                            />
+                        ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                {resumo.porEtapa.map((etapa) => {
+                                    const cor = etapa.cor || CORES_DESFECHO[etapa.desfecho];
+                                    const pct = (etapa.total / maxFunil) * 100;
+                                    return (
+                                        <div key={etapa.chave}>
+                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8 }}>
+                                                <Text style={{ fontSize: 13.5, fontWeight: 500, color: "var(--crm-ink-700)" }}>{etapa.nome}</Text>
+                                                <Space size={12}>
+                                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                                        {formatCurrencyBRL(etapa.valor, "R$ 0")}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 20, fontWeight: 700, color: cor, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.02em" }}>
+                                                        {etapa.total}
+                                                    </Text>
+                                                </Space>
+                                            </div>
                                             <div
-                                                style={{
-                                                    width: `${Math.max(pct, 2)}%`,
-                                                    height: "100%",
-                                                    background: `linear-gradient(90deg, ${step.color}, ${step.color}cc)`,
-                                                    borderRadius: 6,
-                                                    transition: "width 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
-                                                }}
-                                            />
+                                                style={{ background: "var(--crm-surface-2)", borderRadius: 6, height: 8, overflow: "hidden" }}
+                                                role="progressbar"
+                                                aria-label={`${etapa.nome}: ${etapa.total}`}
+                                                aria-valuenow={etapa.total}
+                                                aria-valuemax={maxFunil}
+                                            >
+                                                <div
+                                                    style={{
+                                                        width: `${Math.max(pct, 2)}%`,
+                                                        height: "100%",
+                                                        background: `linear-gradient(90deg, ${cor}, ${cor}cc)`,
+                                                        borderRadius: 6,
+                                                        transition: "width 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
+                                                    }}
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </Card>
                 </Col>
 
-                {/* Temperatura + Meta */}
                 <Col xs={24} lg={8}>
                     <Space direction="vertical" size={14} style={{ width: "100%" }}>
-                        {/* Temperatura dos leads */}
                         <Card
                             title={<Text strong style={{ fontSize: 15 }}>Temperatura dos leads</Text>}
                             style={{ borderRadius: 14 }}
@@ -359,7 +319,6 @@ export const DashboardPage = () => {
                         >
                             <div style={{ display: "flex", gap: 10 }}>
                                 {(["quente", "morno", "frio"] as const).map((temp) => {
-                                    const count = metrics[temp === "quente" ? "quentes" : temp === "morno" ? "mornos" : "frios"];
                                     const config = temperatureColors[temp];
                                     return (
                                         <div
@@ -374,7 +333,7 @@ export const DashboardPage = () => {
                                             }}
                                         >
                                             <div style={{ fontSize: 22, fontWeight: 700, color: config.text, fontFamily: "'Sora','Inter',sans-serif" }}>
-                                                {count}
+                                                {resumo.porTemperatura[temp]}
                                             </div>
                                             <Text style={{ fontSize: 11, color: config.text, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                                 {config.label}
@@ -385,7 +344,6 @@ export const DashboardPage = () => {
                             </div>
                         </Card>
 
-                        {/* Meta do mês */}
                         <Card
                             title={<Text strong style={{ fontSize: 15 }}>Meta do mês</Text>}
                             style={{ borderRadius: 14 }}
@@ -396,41 +354,56 @@ export const DashboardPage = () => {
                                 </Button>
                             }
                         >
-                            <div style={{ textAlign: "center", padding: "8px 0" }}>
-                                <Progress
-                                    type="dashboard"
-                                    percent={Math.min((metrics.fechadosCount / 10) * 100, 100)}
-                                    format={() => (
-                                        <div>
-                                            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "var(--crm-ink-950)" }}>
-                                                {metrics.fechadosCount}/10
+                            {!metaDoMes.definida ? (
+                                <div style={{ textAlign: "center", padding: "8px 0" }}>
+                                    <Text type="secondary">
+                                        Nenhuma meta definida para {dayjs().format("MMMM")}.
+                                    </Text>
+                                    <div style={{ marginTop: 8 }}>
+                                        <Text>
+                                            {metaDoMes.feitoQtd} {metaDoMes.feitoQtd === 1 ? "venda" : "vendas"} no mês ·{" "}
+                                            {formatCurrencyBRL(metaDoMes.feitoValor, "R$ 0")}
+                                        </Text>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ textAlign: "center", padding: "8px 0" }}>
+                                    <Progress
+                                        type="dashboard"
+                                        percent={Math.min(Number(progressoMeta.toFixed(0)), 100)}
+                                        format={() => (
+                                            <div>
+                                                <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "var(--crm-ink-950)" }}>
+                                                    {usarQuantidade
+                                                        ? `${metaDoMes.feitoQtd}/${metaDoMes.alvoQtd}`
+                                                        : `${progressoMeta.toFixed(0)}%`}
+                                                </div>
+                                                <div style={{ fontSize: 11, color: "var(--crm-ink-400)", marginTop: 2 }}>
+                                                    {usarQuantidade ? "vendas" : "do valor"}
+                                                </div>
                                             </div>
-                                            <div style={{ fontSize: 11, color: "var(--crm-ink-400)", marginTop: 2 }}>vendas</div>
-                                        </div>
-                                    )}
-                                    strokeColor={{
-                                        "0%": "#3b82f6",
-                                        "100%": "#10b981",
-                                    }}
-                                    strokeWidth={8}
-                                    size={140}
-                                />
-                                <Text type="secondary" style={{ display: "block", fontSize: 13, marginTop: 8 }}>
-                                    {metrics.fechadosCount >= 10 ? (
-                                        <Tag color="success" style={{ borderRadius: 6 }}><FireOutlined /> Meta batida!</Tag>
-                                    ) : (
-                                        <>Faltam <b>{Math.max(10 - metrics.fechadosCount, 0)}</b> vendas para a meta</>
-                                    )}
-                                </Text>
-                            </div>
+                                        )}
+                                        strokeColor={{ "0%": "#3b82f6", "100%": "#10b981" }}
+                                        strokeWidth={8}
+                                        size={140}
+                                    />
+                                    <Text type="secondary" style={{ display: "block", fontSize: 13, marginTop: 8 }}>
+                                        {progressoMeta >= 100 ? (
+                                            <Tag color="success" style={{ borderRadius: 6 }}><FireOutlined /> Meta batida!</Tag>
+                                        ) : usarQuantidade ? (
+                                            <>Faltam <b>{Math.max(metaDoMes.alvoQtd - metaDoMes.feitoQtd, 0)}</b> vendas para a meta</>
+                                        ) : (
+                                            <>Faltam <b>{formatCurrencyBRL(Math.max(metaDoMes.alvoValor - metaDoMes.feitoValor, 0), "R$ 0")}</b></>
+                                        )}
+                                    </Text>
+                                </div>
+                            )}
                         </Card>
                     </Space>
                 </Col>
             </Row>
 
-            {/* Bottom Row: Top Vendedores + Últimos Leads */}
             <Row gutter={[14, 14]}>
-                {/* Top Vendedores */}
                 <Col xs={24} lg={14}>
                     <Card
                         title={<Text strong style={{ fontSize: 15 }}>Ranking de vendedores</Text>}
@@ -444,12 +417,14 @@ export const DashboardPage = () => {
                     >
                         <Table
                             size="small"
-                            rowKey={(r) => r.name}
+                            rowKey={(r) => r.nome}
                             pagination={false}
-                            dataSource={metrics.topOwners}
+                            dataSource={topResponsaveis}
+                            scroll={{ x: 480 }}
+                            locale={{ emptyText: "Sem negócios atribuídos ainda." }}
                             columns={[
                                 {
-                                    title: "",
+                                    title: "#",
                                     width: 40,
                                     render: (_, __, index) => (
                                         <div style={{
@@ -465,16 +440,16 @@ export const DashboardPage = () => {
                                 },
                                 {
                                     title: "Consultor",
-                                    dataIndex: "name",
+                                    dataIndex: "nome",
                                     render: (v: string) => <Text strong style={{ fontSize: 13.5 }}>{v}</Text>,
                                 },
-                                { title: "Leads", dataIndex: "total", width: 65, render: (v: number) => <Text>{v}</Text> },
-                                { title: "Ganhos", dataIndex: "fechados", width: 70, render: (v: number) => <Text style={{ color: "#059669", fontWeight: 600 }}>{v}</Text> },
+                                { title: "Leads", dataIndex: "total", width: 65 },
+                                { title: "Ganhos", dataIndex: "ganhos", width: 70, render: (v: number) => <Text style={{ color: "#059669", fontWeight: 600 }}>{v}</Text> },
                                 {
                                     title: "Conversão",
                                     width: 140,
-                                    render: (_, r: any) => (
-                                        <Progress percent={Number(r.winRate.toFixed(0))} size="small" strokeColor="#10b981" />
+                                    render: (_, r) => (
+                                        <Progress percent={Number(percentual(r.ganhos, r.total).toFixed(0))} size="small" strokeColor="#10b981" />
                                     ),
                                 },
                                 {
@@ -488,7 +463,6 @@ export const DashboardPage = () => {
                     </Card>
                 </Col>
 
-                {/* Últimos Leads */}
                 <Col xs={24} lg={10}>
                     <Card
                         title={<Text strong style={{ fontSize: 15 }}>Últimos leads</Text>}
@@ -500,52 +474,49 @@ export const DashboardPage = () => {
                             </Button>
                         }
                     >
-                        {metrics.recentLeads.length === 0 ? (
+                        {recentes.length === 0 ? (
                             <div style={{ padding: 24, textAlign: "center" }}>
                                 <Text type="secondary">Nenhum lead cadastrado ainda.</Text>
                             </div>
                         ) : (
                             <div>
-                                {metrics.recentLeads.map((lead, index) => {
-                                    const statusNorm = normalizeText(lead.status);
-                                    const statusColor = statusNorm.includes("fechado") ? "#10b981"
-                                        : statusNorm.includes("perdido") ? "#ef4444"
-                                        : statusNorm.includes("visita") ? "#f59e0b"
-                                        : statusNorm.includes("negocia") ? "#8b5cf6"
-                                        : "#3b82f6";
-
+                                {recentes.map((lead, index) => {
+                                    const desfecho = classificarDesfecho(lead, etapasPorId);
                                     return (
-                                        <div
-                                            key={lead.id}
+                                        <button
+                                            type="button"
+                                            key={String(lead.id)}
+                                            className="crm-dashboard-recent-lead"
                                             style={{
                                                 display: "flex",
+                                                width: "100%",
                                                 alignItems: "center",
                                                 justifyContent: "space-between",
                                                 padding: "10px 22px",
-                                                borderBottom: index < metrics.recentLeads.length - 1 ? "1px solid var(--crm-border-subtle)" : "none",
+                                                border: "none",
+                                                background: "transparent",
+                                                textAlign: "left",
+                                                borderBottom: index < recentes.length - 1 ? "1px solid var(--crm-border-subtle)" : "none",
                                                 cursor: "pointer",
-                                                transition: "background 0.15s",
                                             }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = "var(--crm-surface-2)"}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                                             onClick={() => navigate(`/clientes/show/${lead.id}`)}
                                         >
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                                                <div style={{
-                                                    width: 8, height: 8, borderRadius: "50%",
-                                                    background: statusColor, flexShrink: 0,
-                                                }} />
-                                                <div>
-                                                    <Text strong style={{ fontSize: 13.5, display: "block" }}>{lead.nome}</Text>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                                                <span
+                                                    aria-hidden
+                                                    style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_DESFECHO[desfecho], flexShrink: 0 }}
+                                                />
+                                                <div style={{ minWidth: 0 }}>
+                                                    <Text strong style={{ fontSize: 13.5, display: "block" }} ellipsis>{lead.nome || "Sem nome"}</Text>
                                                     <Text type="secondary" style={{ fontSize: 11.5 }}>
-                                                        {lead.responsavel || "Sem resp."} · {formatDateBR(lead.created_at, "-")}
+                                                        {lead.responsavel || "Sem responsável"} · {formatDateBR(lead.created_at, "-")}
                                                     </Text>
                                                 </div>
                                             </div>
-                                            <Text style={{ fontSize: 13, fontWeight: 600, color: "var(--crm-ink-700)" }}>
-                                                {formatCurrencyBRL(lead.valor || lead.conta_energia_media, "-")}
+                                            <Text style={{ fontSize: 13, fontWeight: 600, color: "var(--crm-ink-700)", whiteSpace: "nowrap" }}>
+                                                {formatCurrencyBRL(valorDoLead(lead), "-")}
                                             </Text>
-                                        </div>
+                                        </button>
                                     );
                                 })}
                             </div>
