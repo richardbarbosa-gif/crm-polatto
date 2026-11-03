@@ -20,7 +20,7 @@ const { Title, Text } = Typography;
  * - Vendedor vê a lixeira da empresa, mas só restaura o que é dele.
  */
 
-type TabelaLixeira = "negocios" | "pessoas" | "organizacoes" | "tarefas";
+type TabelaLixeira = "negocios" | "pessoas" | "organizacoes" | "tarefas" | "orcamentos";
 
 type ItemLixeira = {
     id: string | number;
@@ -85,6 +85,17 @@ const ABAS: Aba[] = [
             ]
                 .filter(Boolean)
                 .join(" · "),
+        }),
+    },
+    {
+        // Orçamento: excluir/restaurar é de quem criou ou do gerente (migration 13);
+        // por isso o select não traz o responsável, só o autor.
+        tabela: "orcamentos",
+        rotulo: "Orçamentos",
+        select: "id,numero,titulo,total,created_by,deleted_at,deleted_by",
+        descrever: (item) => ({
+            titulo: [texto(item.numero), texto(item.titulo)].filter(Boolean).join(" · ") || "Orçamento",
+            detalhe: item.total != null ? formatCurrencyBRL(item.total) : "",
         }),
     },
 ];

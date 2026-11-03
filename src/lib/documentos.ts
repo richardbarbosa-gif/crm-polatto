@@ -27,15 +27,28 @@ export const validarCpf = (valor?: string | null): boolean => {
     return primeiro === Number(cpf[9]) && segundo === Number(cpf[10]);
 };
 
-export const validarCnpj = (valor?: string | null): boolean => {
-    const cnpj = somenteDigitos(valor);
-    if (cnpj.length !== 14 || todosIguais(cnpj)) return false;
+/**
+ * CNPJ em caracteres válidos (dígitos e, desde jul/2026, letras A–Z nas 12
+ * primeiras posições — o CNPJ alfanumérico da Receita Federal).
+ */
+export const normalizarCnpj = (valor?: string | null): string =>
+    (valor ?? "").toUpperCase().replace(/[^0-9A-Z]/g, "");
 
+/**
+ * CNPJ numérico ou alfanumérico pelos dígitos verificadores. Cada caractere
+ * vale (código ASCII − 48): "0".."9" = 0..9, "A" = 17 … "Z" = 42. Mesma conta
+ * de identidade_cnpj_valido() no banco (migration 13).
+ */
+export const validarCnpj = (valor?: string | null): boolean => {
+    const cnpj = normalizarCnpj(valor);
+    if (!/^[0-9A-Z]{12}\d{2}$/.test(cnpj) || /^(.)\1{13}$/.test(cnpj)) return false;
+
+    const valorDoCaractere = (c: string) => c.charCodeAt(0) - 48;
     const digitoVerificador = (base: string): number => {
         const pesos = base.length === 12
             ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
             : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
-        const soma = base.split("").reduce((acc, digito, i) => acc + Number(digito) * pesos[i], 0);
+        const soma = base.split("").reduce((acc, c, i) => acc + valorDoCaractere(c) * pesos[i], 0);
         const resto = soma % 11;
         return resto < 2 ? 0 : 11 - resto;
     };
@@ -47,9 +60,9 @@ export const validarCnpj = (valor?: string | null): boolean => {
 
 /** Aceita CPF (11 dígitos) ou CNPJ (14 dígitos) válidos. */
 export const validarCpfOuCnpj = (valor?: string | null): boolean => {
-    const digitos = somenteDigitos(valor);
-    if (digitos.length === 11) return validarCpf(digitos);
-    if (digitos.length === 14) return validarCnpj(digitos);
+    const caracteres = normalizarCnpj(valor);
+    if (caracteres.length === 11 && /^\d+$/.test(caracteres)) return validarCpf(caracteres);
+    if (caracteres.length === 14) return validarCnpj(caracteres);
     return false;
 };
 
@@ -59,7 +72,7 @@ export const validarCpfOuCnpj = (valor?: string | null): boolean => {
  */
 export const regraCpfCnpj = (tipo: "cpf" | "cnpj" | "ambos" = "ambos") => ({
     validator: async (_: unknown, valor?: string | null) => {
-        if (!somenteDigitos(valor)) return;
+        if (!normalizarCnpj(valor)) return;
         const valido =
             tipo === "cpf" ? validarCpf(valor) : tipo === "cnpj" ? validarCnpj(valor) : validarCpfOuCnpj(valor);
         if (!valido) {
@@ -114,7 +127,7 @@ export const variantesTelefone = (valor?: string | null): string[] => {
 
 /** CPF/CNPJ como pode estar gravado: só dígitos ou formatado. */
 export const variantesDocumento = (valor?: string | null): string[] => {
-    const digitos = somenteDigitos(valor);
+    const digitos = normalizarCnpj(valor);
     if (!digitos) return [];
     const variantes = new Set<string>([digitos]);
     if (digitos.length === 11) {
@@ -138,20 +151,22 @@ export const validarEmail = (valor?: string | null): boolean => EMAIL_RE.test((v
 export type TipoPessoa = "pf" | "pj";
 
 export const tipoPessoaDoDocumento = (valor?: string | null): TipoPessoa =>
-    somenteDigitos(valor).length > 11 ? "pj" : "pf";
+    normalizarCnpj(valor).length > 11 || /[A-Z]/.test(normalizarCnpj(valor)) ? "pj" : "pf";
 
 /** Máscara do documento conforme o tipo escolhido (CPF corta em 11 dígitos). */
 export const formatarDocumento = (valor: string | null | undefined, tipo: TipoPessoa): string => {
-    const digitos = somenteDigitos(valor).slice(0, tipo === "pf" ? 11 : 14);
     if (tipo === "pf") {
+        const digitos = somenteDigitos(valor).slice(0, 11);
         return digitos
             .replace(/^(\d{3})(\d)/, "$1.$2")
             .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
             .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
     }
-    return digitos
-        .replace(/^(\d{2})(\d)/, "$1.$2")
-        .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
-        .replace(/\.(\d{3})(\d)/, ".$1/$2")
-        .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+    // CNPJ: 12 caracteres alfanuméricos + 2 dígitos verificadores
+    const c = normalizarCnpj(valor).slice(0, 14);
+    return c
+        .replace(/^([0-9A-Z]{2})([0-9A-Z])/, "$1.$2")
+        .replace(/^([0-9A-Z]{2})\.([0-9A-Z]{3})([0-9A-Z])/, "$1.$2.$3")
+        .replace(/\.([0-9A-Z]{3})([0-9A-Z])/, ".$1/$2")
+        .replace(/([0-9A-Z]{4})([0-9A-Z]{1,2})$/, "$1-$2");
 };

@@ -4,7 +4,7 @@ import { Alert, Skeleton, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
-import { useEhAdminDoTenant } from "../../hooks/useEhAdminDoTenant";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { ehIdDoModeloNovo } from "../../lib/leadTimeline";
 import { formatarDataIso } from "../../lib/orcamentos/formato";
 import { enderecoDoLead, paraOrcamento, type ClienteDoNegocio } from "../../lib/orcamentos/tipos";
@@ -41,7 +41,7 @@ const reais = (valor: number) => valor.toLocaleString("pt-BR", { style: "currenc
 export const OrcamentosDoLead = ({ lead, onDocumentoSalvo }: Props) => {
     const negocioId = ehIdDoModeloNovo(lead.id) ? String(lead.id) : null;
     const { identityUserId } = useTenant();
-    const { ehAdmin } = useEhAdminDoTenant();
+    const { isGerente: ehAdmin } = useCrmAccess();
     const [editor, setEditor] = useState<{ orcamentoId: string | null } | null>(null);
 
     const { query } = useList({

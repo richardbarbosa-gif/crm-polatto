@@ -3,7 +3,7 @@ import { Alert, App, ColorPicker, Divider, Form, Input, InputNumber, Skeleton, S
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
-import { useEhAdminDoTenant } from "../../hooks/useEhAdminDoTenant";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { regraCpfCnpj, somenteDigitos } from "../../lib/documentos";
 import { formatCpfCnpj } from "../../lib/formatters";
 import {
@@ -135,7 +135,7 @@ const PreviaProposta = ({ valores, logoUrl }: { valores: Partial<ValoresForm>; l
 export const IdentidadePropostaConfig = () => {
     const { message } = App.useApp();
     const { tenantId } = useTenant();
-    const { ehAdmin, carregando: carregandoPapel } = useEhAdminDoTenant();
+    const { isGerente: ehAdmin, isLoadingAccess: carregandoPapel } = useCrmAccess();
     const [form] = Form.useForm<ValoresForm>();
     const [carga, setCarga] = useState<Carga>({ estado: "carregando" });
     const [logoUrl, setLogoUrl] = useState<string | null>(null);

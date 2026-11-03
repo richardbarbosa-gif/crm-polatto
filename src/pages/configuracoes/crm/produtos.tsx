@@ -1,5 +1,5 @@
 import { Form, Input, InputNumber, Switch, Tag } from "antd";
-import { useEhAdminDoTenant } from "../../../hooks/useEhAdminDoTenant";
+import { useCrmAccess } from "../../../hooks/useCrmAccess";
 import { formatCurrencyBRL } from "../../../lib/formatters";
 import { propsMoeda } from "../../../lib/moedaInput";
 import { ConfigCrudTable, type ConfigRecord } from "./config-crud-table";
@@ -19,7 +19,7 @@ type ProdutoRecord = ConfigRecord & {
  * produto não altera proposta já emitida.
  */
 export const ProdutosConfig = () => {
-    const { ehAdmin } = useEhAdminDoTenant();
+    const { isGerente: ehAdmin } = useCrmAccess();
     const [form] = Form.useForm();
 
     return (

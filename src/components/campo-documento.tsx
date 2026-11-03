@@ -56,7 +56,9 @@ export const CampoDocumento = ({ form, tipo, onTipoChange, size = "large" }: Cam
                         size={size}
                         maxLength={ehPf ? 14 : 18}
                         placeholder={ehPf ? "000.000.000-00" : "00.000.000/0000-00"}
-                        inputMode="numeric"
+                        // CNPJ pode ter letras (formato alfanumérico da Receita, jul/2026)
+                        inputMode={ehPf ? "numeric" : "text"}
+                        autoCapitalize={ehPf ? undefined : "characters"}
                         onChange={(e) => form.setFieldValue("cpf_cnpj", formatarDocumento(e.target.value, tipo))}
                     />
                 </Form.Item>

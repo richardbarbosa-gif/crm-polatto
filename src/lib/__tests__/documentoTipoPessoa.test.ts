@@ -27,3 +27,21 @@ describe("tipo de pessoa e máscara do documento", () => {
         await expect(regraCpfCnpj("cnpj").validator(null, "529.982.247-25")).rejects.toThrow("CNPJ inválido");
     });
 });
+
+describe("CNPJ alfanumérico (Receita Federal, jul/2026)", () => {
+    it("valida o exemplo oficial e recusa dígito trocado (mesma conta do banco)", async () => {
+        const { validarCnpj, validarCpfOuCnpj } = await import("../documentos");
+        expect(validarCnpj("12.ABC.345/01DE-35")).toBe(true);
+        expect(validarCnpj("12abc34501de35")).toBe(true);
+        expect(validarCnpj("12.ABC.345/01DE-36")).toBe(false);
+        expect(validarCnpj("AAAAAAAAAAAAAA")).toBe(false);
+        expect(validarCnpj("11.222.333/0001-81")).toBe(true);
+        expect(validarCpfOuCnpj("12.ABC.345/01DE-35")).toBe(true);
+        expect(validarCpfOuCnpj("529.982.247-25")).toBe(true);
+    });
+
+    it("máscara e tipo aceitam letras no CNPJ", () => {
+        expect(formatarDocumento("12abc34501de35", "pj")).toBe("12.ABC.345/01DE-35");
+        expect(tipoPessoaDoDocumento("12.ABC.345/01DE-35")).toBe("pj");
+    });
+});

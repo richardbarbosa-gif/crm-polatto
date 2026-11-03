@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { EmptyState, StatCard } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
-import { useEhAdminDoTenant } from "../../hooks/useEhAdminDoTenant";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
 import { buscarClientesDosNegocios } from "../../lib/orcamentos/api";
 import { ROTULO_STATUS, STATUS_ORCAMENTO, formatarDataIso, type StatusOrcamento } from "../../lib/orcamentos/formato";
@@ -46,7 +46,7 @@ const useClientesDosNegocios = (ids: string[]) => {
 
 export const OrcamentosPage = () => {
     const { identityUserId } = useTenant();
-    const { ehAdmin, carregando: carregandoPapel } = useEhAdminDoTenant();
+    const { isGerente: ehAdmin, isLoadingAccess: carregandoPapel } = useCrmAccess();
     const [busca, setBusca] = useState("");
     const [status, setStatus] = useState<StatusOrcamento[]>([]);
     const [responsavel, setResponsavel] = useState<string | undefined>(undefined);
@@ -59,13 +59,12 @@ export const OrcamentosPage = () => {
         pagination: { mode: "off" },
     });
 
-    // Mesma regra da lista de leads: gerente/admin vê o time todo; o
-    // vendedor vê os orçamentos que criou ou dos quais é o responsável.
-    const visiveis = useMemo(() => {
-        const todos = ((query.data?.data ?? []) as Record<string, unknown>[]).map(paraOrcamento);
-        if (ehAdmin) return todos;
-        return todos.filter((o) => o.created_by === identityUserId || o.responsavel_id === identityUserId);
-    }, [ehAdmin, identityUserId, query.data?.data]);
+    // Mesma regra dos leads (Richard, 2026-11-03): todo vendedor vê os
+    // orçamentos da empresa; excluir é só de quem criou ou do gerente.
+    const visiveis = useMemo(
+        () => ((query.data?.data ?? []) as Record<string, unknown>[]).map(paraOrcamento),
+        [query.data?.data],
+    );
 
     const { mapa: clientes, carregando: carregandoClientes } = useClientesDosNegocios(visiveis.map((o) => o.negocio_id));
 
