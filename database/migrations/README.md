@@ -16,6 +16,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-07-19_09_rls_tabelas_legadas.sql` | **RLS nas tabelas legadas** (tarefas, atividades, documentos, funcionários, metas, clientes): backfill do `tenant_id` + ativação guardada |
 | `2026-11-02_10_hardening_seguranca.sql` | **Endurecimento de segurança** (auditoria 2026-11): view `clientes` não aceita tenant do payload, `fn_set_tenant_id` fail-closed, funções administrativas fora do alcance de `anon`/`authenticated`, retenção e anonimização LGPD só para admin, `tenant_features` só superadmin, monitoramento sem token na URL, RLS garantida em `utilizadores_empresas`/`empresas`, restos dos scripts avulsos trancados, bucket `lead-files` privado, `security_invoker` em toda view. **Rodar sempre depois da 01** (inclusive quando a 01 é reexecutada na virada). |
 | `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
+| `2026-11-03_13_orcamentos.sql` | **Orçamentos / propostas em PDF**: `empresa_identidade` (logo, dados, cores e textos padrão por tenant; escrita só gerente/admin), `produtos` (catálogo), `orcamentos` + `orcamento_itens` ligados a `negocios`, numeração por tenant e ano (`2026-0001`, contador travado por linha: sem buraco nem duplicata), totais recalculados no banco, soft delete só pelo criador ou gerente/admin (DELETE físico só gerente/admin), FKs compostas `(tenant_id, id)` contra referência cruzada entre tenants, bucket privado `empresa-assets` (PNG/JPEG/WEBP, 2 MB, sem SVG). Rodar depois da 10. |
 
 ## Testes automatizados
 
@@ -33,7 +34,9 @@ O runner: recria o banco, carrega `database/tests/00_harness_supabase.sql`
 (simula schemas `auth`/`storage`, roles e as tabelas legadas), executa as
 migrations em ordem, **repete a execução para provar idempotência** e roda as
 suítes de asserção (01 isolamento, 02 virada, 03 correções do PR #1, 04
-endurecimento). A suíte 04 recria o estado "produção suja" (policies dos
+endurecimento, 05 religar referências, 07 orçamentos). A Suíte 7b abre várias
+conexões em paralelo (inclusive transações que desistem com ROLLBACK) e prova
+que a numeração de orçamentos sai sem buraco e sem duplicata. A suíte 04 recria o estado "produção suja" (policies dos
 scripts avulsos, view sem `security_invoker`, bucket público), reaplica a
 migration 10 por cima e prova, para cada correção, que o ataque falha **e**
 que o fluxo legítimo do app continua igual. Qualquer falha aborta com a
