@@ -183,7 +183,10 @@ function App() {
                                     { name: "negocios" },
                                     { name: "tenant_features" }
                                 ]}
-                                options={{ syncWithLocation: true, warnWhenUnsavedChanges: true, projectId: "XZv4yn-qFPddw-0qWPSU" }}
+                                // disableTelemetry: o Refine manda um beacon para telemetry.refine.dev
+                                // a cada carga — a CSP de produção bloqueia (img-src) e o CRM não
+                                // deve falar com terceiros sem necessidade.
+                                options={{ syncWithLocation: true, warnWhenUnsavedChanges: true, projectId: "XZv4yn-qFPddw-0qWPSU", disableTelemetry: true }}
                             >
                                 <TenantProvider>
                                     <Routes>
