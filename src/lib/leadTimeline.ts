@@ -29,6 +29,8 @@ export type LeadStoredFile = {
     status: string;
     createdAt?: string;
     enviadoPor?: string;
+    /** Login de quem anexou (documentos_lead.created_by, migration 12). */
+    criadoPor?: string;
     fileType: "proposta" | "conta_luz" | "arquivo";
     canDelete: boolean;
     url?: string;
@@ -653,6 +655,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
                     status,
                     createdAt: item.created_at || undefined,
                     enviadoPor: item.enviado_por || undefined,
+                    criadoPor: item.created_by || undefined,
                     fileType,
                     canDelete: true,
                     url: undefined,
@@ -673,6 +676,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
                 status,
                 createdAt: item.created_at || undefined,
                 enviadoPor: item.enviado_por || undefined,
+                criadoPor: item.created_by || undefined,
                 fileType,
                 canDelete: true,
                 url: signedResult.data?.signedUrl,

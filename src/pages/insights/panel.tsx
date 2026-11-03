@@ -95,6 +95,7 @@ export const InsightsPanelPage = () => {
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
+        filters: [{ field: "deleted_at", operator: "null", value: true }],
         sorters: [{ field: "data_vencimento", order: "asc" }],
         meta: { select: "id,cliente_id,titulo,tipo,data_vencimento,created_at,responsavel,concluido,execucao_status" },
     });

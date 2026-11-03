@@ -23,6 +23,7 @@ import { BrowserRouter, Outlet, Route, Routes, Link } from "react-router";
 
 import {
     BankOutlined,
+    RestOutlined,
     BarChartOutlined,
     CalendarOutlined,
     ContactsOutlined,
@@ -57,6 +58,7 @@ const AgendaPage = lazy(() => import("./pages/agenda").then((m) => ({ default: m
 const BaseClientesPage = lazy(() => import("./pages/base-clientes").then((m) => ({ default: m.BaseClientesPage })));
 const ConfiguracoesPage = lazy(() => import("./pages/configuracoes").then((m) => ({ default: m.ConfiguracoesPage })));
 const OrganizacoesPage = lazy(() => import("./pages/organizacoes").then((m) => ({ default: m.OrganizacoesPage })));
+const LixeiraPage = lazy(() => import("./pages/lixeira").then((m) => ({ default: m.LixeiraPage })));
 const PessoasPage = lazy(() => import("./pages/pessoas").then((m) => ({ default: m.PessoasPage })));
 const HistoricoPage = lazy(() => import("./pages/historico").then((m) => ({ default: m.HistoricoPage })));
 const InsightsPanelPage = lazy(() => import("./pages/insights/panel").then((m) => ({ default: m.InsightsPanelPage })));
@@ -151,6 +153,11 @@ function App() {
                                     name: "metas",
                                     list: "/metas",
                                     meta: { label: "Metas", icon: <FlagOutlined /> },
+                                },
+                                {
+                                    name: "lixeira",
+                                    list: "/lixeira",
+                                    meta: { label: "Lixeira", icon: <RestOutlined /> },
                                 },
                                 {
                                     name: "insights",
@@ -262,6 +269,7 @@ function App() {
                                         <Route path="/agenda" element={<AgendaPage />} />
                                         <Route path="/base-clientes" element={<BaseClientesPage />} />
                                         <Route path="/organizacoes" element={<OrganizacoesPage />} />
+                                        <Route path="/lixeira" element={<LixeiraPage />} />
                                         <Route path="/pessoas" element={<PessoasPage />} />
                                         <Route path="/historico" element={<HistoricoPage />} />
                                         <Route path="/insights" element={<InsightsPanelPage />} />

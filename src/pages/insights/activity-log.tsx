@@ -47,6 +47,7 @@ export const InsightsActivityLogPage = () => {
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { currentPage: 1, pageSize: LIMITE_EVENTOS },
+        filters: [{ field: "deleted_at", operator: "null", value: true }],
         sorters: [{ field: "created_at", order: "desc" }],
     });
 

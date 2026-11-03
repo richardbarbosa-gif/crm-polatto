@@ -43,6 +43,7 @@ import {
     uploadLeadPdf,
 } from "../../lib/leadTimeline";
 import { canDelete } from "../../lib/permissions";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import type { PipelineStageRecord } from "../../types/db";
 
 const { Title, Text } = Typography;
@@ -137,6 +138,7 @@ export const LeadDetails = ({
     const automaticTemperature = resolveAutomaticLeadTemperature(stageDisplayName);
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
     const canDeleteDocuments = canDelete(role, isSystemAdmin);
+    const { userId } = useCrmAccess();
     const { isEnergiaSolar } = useTenantSegmento();
     const { campos: camposCustomizados } = useCustomFields("negocio");
 
@@ -174,7 +176,8 @@ export const LeadDetails = ({
             setFiles(
                 storedFiles.map((file) => ({
                     ...file,
-                    canDelete: canDeleteDocuments,
+                    // Gerente exclui qualquer anexo; vendedor, os que ele anexou (regra do banco).
+                    canDelete: canDeleteDocuments || Boolean(userId && file.criadoPor === userId),
                 })),
             );
         } catch (error: unknown) {
@@ -183,7 +186,7 @@ export const LeadDetails = ({
         } finally {
             setIsLoadingFiles(false);
         }
-    }, [canDeleteDocuments, record?.id]);
+    }, [canDeleteDocuments, record?.id, userId]);
 
     useEffect(() => {
         loadTimeline();
@@ -359,8 +362,8 @@ export const LeadDetails = ({
     };
 
     const handleDeleteFile = async (file: LeadStoredFile) => {
-        if (!canDeleteDocuments) {
-            message.warning("Apenas admin pode excluir documentos.");
+        if (!file.canDelete) {
+            message.warning("Só o gerente ou quem anexou pode excluir este documento.");
             return;
         }
 

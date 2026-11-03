@@ -29,6 +29,9 @@ export interface TarefaRecord {
     responsavel?: string | null;
     execucao_status?: string | null;
     created_at?: string | null;
+    /** Quem cadastrou (migration 12): decide se o vendedor pode excluir. */
+    created_by?: string | null;
+    deleted_at?: string | null;
 }
 
 export interface TaskContextData {

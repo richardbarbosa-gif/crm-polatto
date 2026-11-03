@@ -28,7 +28,8 @@ export interface ListViewProps {
     resolveLeadStageName: (record: KanbanLead) => string;
     onView: (lead: KanbanLead) => void;
     onEdit: (leadId: string | number) => void;
-    canDeleteRecords?: boolean;
+    /** Gerente exclui qualquer lead; vendedor só os seus (regra garantida no banco). */
+    podeExcluir?: (lead: KanbanLead) => boolean;
     stages?: ListViewStageOption[];
     onRefresh?: () => void;
 }
@@ -44,7 +45,7 @@ export const ListView: React.FC<ListViewProps> = ({
     resolveLeadStageName,
     onView,
     onEdit,
-    canDeleteRecords = false,
+    podeExcluir = () => false,
     stages,
     onRefresh,
 }) => {
@@ -101,6 +102,10 @@ export const ListView: React.FC<ListViewProps> = ({
     }, [hasStagesProp, stages, fallbackStages]);
 
     const selectedCount = selectedRowKeys.length;
+    const podeExcluirAlgum = useMemo(
+        () => listData.some((lead) => selectedRowKeys.includes(lead.id as React.Key) && podeExcluir(lead)),
+        [listData, podeExcluir, selectedRowKeys],
+    );
 
     const finishBulk = (successText: string) => {
         setSelectedRowKeys([]);
@@ -163,11 +168,20 @@ export const ListView: React.FC<ListViewProps> = ({
             return;
         }
 
-        const ids = [...selectedRowKeys];
+        const selecionados = listData.filter((lead) => selectedRowKeys.includes(lead.id as React.Key));
+        const ids = selecionados.filter((lead) => podeExcluir(lead)).map((lead) => lead.id as React.Key);
+        const deOutros = selectedRowKeys.length - ids.length;
+
+        if (ids.length === 0) {
+            message.warning("Você só pode excluir os seus leads. Peça ao gerente para excluir os de outros vendedores.");
+            return;
+        }
 
         Modal.confirm({
-            title: `Excluir ${ids.length} lead(s) selecionado(s)?`,
-            content: "Os negócios saem do funil e dos relatórios. O histórico é preservado no banco e um administrador pode restaurá-los.",
+            title: `Excluir ${ids.length} lead(s)?`,
+            content:
+                "Os negócios saem do funil e dos relatórios e vão para a Lixeira, de onde podem ser restaurados." +
+                (deOutros > 0 ? ` ${deOutros} lead(s) de outros vendedores ficam de fora: só o gerente exclui.` : ""),
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
@@ -243,7 +257,7 @@ export const ListView: React.FC<ListViewProps> = ({
                                 onChange={handleBulkMove}
                                 disabled={isBulkWorking || stageOptions.length === 0}
                             />
-                            {canDeleteRecords && (
+                            {podeExcluirAlgum && (
                                 <Button
                                     size="small"
                                     danger

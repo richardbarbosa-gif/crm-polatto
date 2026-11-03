@@ -71,6 +71,7 @@ export const ClienteList = () => {
     const {
         canViewAllLeads,
         canDeleteRecords,
+        podeExcluir,
         isLoadingAccess,
         tenantId,
         ownerCandidates,
@@ -182,6 +183,7 @@ export const ClienteList = () => {
                     .from("tarefas")
                     .select("cliente_id,titulo,tipo,data_vencimento")
                     .eq("concluido", false)
+                    .is("deleted_at", null)
                     .not("cliente_id", "is", null)
                     .order("data_vencimento", { ascending: true })
                     .limit(1000);
@@ -539,7 +541,7 @@ export const ClienteList = () => {
 
     const openStageManager = async () => {
         if (!canDeleteRecords) {
-            message.warning("Somente admin pode gerenciar colunas.");
+            message.warning("Somente o gerente pode gerenciar colunas.");
             return;
         }
         const ready = await persistDefaultStagesIfNeeded();
@@ -549,7 +551,7 @@ export const ClienteList = () => {
 
     const handleCreateStage = async () => {
         if (!canDeleteRecords) {
-            message.warning("Somente admin pode criar colunas.");
+            message.warning("Somente o gerente pode criar colunas.");
             return;
         }
         const nome = newStageName.trim();
@@ -606,7 +608,7 @@ export const ClienteList = () => {
 
     const requestDeleteStage = (stage: Stage) => {
         if (!canDeleteRecords) {
-            message.warning("Somente admin pode excluir colunas.");
+            message.warning("Somente o gerente pode excluir colunas.");
             return;
         }
         if (!canDeleteAnyStage) {
@@ -639,7 +641,7 @@ export const ClienteList = () => {
 
     const confirmDeleteStage = async () => {
         if (!canDeleteRecords) {
-            message.warning("Somente admin pode excluir colunas.");
+            message.warning("Somente o gerente pode excluir colunas.");
             return;
         }
         if (!stagePendingDelete) return;
@@ -1103,7 +1105,7 @@ export const ClienteList = () => {
                         resolveLeadStageName={resolveLeadStageName}
                         onView={openLeadDrawer}
                         onEdit={openLeadEdit}
-                        canDeleteRecords={canDeleteRecords}
+                        podeExcluir={podeExcluir}
                         stages={stages}
                         onRefresh={async () => {
                             await listQuery?.refetch?.();

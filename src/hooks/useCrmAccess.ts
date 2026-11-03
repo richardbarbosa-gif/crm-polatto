@@ -1,9 +1,9 @@
 import { useGetIdentity } from "@refinedev/core";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTenant } from "../contexts/tenant";
-import { type CrmEmployee, fetchEmployeeByEmail, isManagerRole } from "../lib/crmEmployees";
+import { type CrmEmployee, fetchEmployeeByEmail } from "../lib/crmEmployees";
 import { normalizeText } from "../lib/formatters";
-import { canDelete } from "../lib/permissions";
+import { canDelete, ehPapelGerente, podeExcluirRegistro, type RegistroComDono } from "../lib/permissions";
 
 type IdentityRecord = {
     email?: string | null;
@@ -114,22 +114,17 @@ export const useCrmAccess = () => {
         return () => { active = false; };
     }, [identityEmail, isSystemAdmin]);
 
-    const roleFromMetadata = useMemo(() => {
-        return (
-            toBusinessRole(identity?.app_metadata?.role) ||
-            toBusinessRole(identity?.user_metadata?.role) ||
-            toBusinessRole(identity?.user_metadata?.perfil) ||
-            toBusinessRole(identity?.role) ||
-            undefined
-        );
-    }, [identity]);
+    // Papel = vínculo do usuário com a empresa ATIVA (utilizadores_empresas.role),
+    // a mesma fonte que o banco usa em eh_admin_do_tenant(). funcionarios.cargo e
+    // user_metadata são editáveis pelo próprio usuário e NÃO concedem permissão.
+    const roleCandidate = toBusinessRole(tenant?.role);
+    const isGerente = isSystemAdmin || ehPapelGerente(roleCandidate);
 
-    const roleCandidate = toBusinessRole(employee?.cargo) || roleFromMetadata || toBusinessRole(tenant?.role);
-    const hasExplicitRole = Boolean(roleCandidate && roleCandidate.trim());
-    
-    // Permissões derivadas do banco — sem hacks
-    const canViewAllLeads = (hasExplicitRole && isManagerRole(roleCandidate)) || isSystemAdmin;
-    const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin) || isSystemAdmin;
+    // Regra do Richard (2026-11-03): todo vendedor vê os leads da empresa inteira.
+    const canViewAllLeads = true;
+    // Excluir QUALQUER registro e mexer na configuração: só gerente.
+    const canDeleteRecords = canDelete(roleCandidate, isSystemAdmin);
+    const userId = toStringValue(identity?.id) || null;
 
     const ownerCandidates = useMemo(() => {
         const identityName =
@@ -157,6 +152,27 @@ export const useCrmAccess = () => {
 
     const ownerDisplayName = ownerCandidates[0] || "Vendedor";
 
+    // Para decidir "é meu?" a tela usa só o que o banco também reconhece
+    // (registro_eh_do_usuario): nome e e-mail do funcionário e o e-mail do login.
+    const nomesDoDono = useMemo<string[]>(
+        () =>
+            [employee?.nome, employee?.email, identityEmail]
+                .map((value) => normalizeText(value))
+                .filter((value): value is string => Boolean(value)),
+        [employee?.email, employee?.nome, identityEmail],
+    );
+
+    const podeExcluir = useCallback(
+        (registro: RegistroComDono | null | undefined) =>
+            podeExcluirRegistro(registro, {
+                ehGerente: isGerente,
+                userId,
+                funcionarioId: employee?.id || null,
+                nomesNormalizados: nomesDoDono,
+            }),
+        [employee?.id, isGerente, nomesDoDono, userId],
+    );
+
     return {
         identity,
         employee,
@@ -166,7 +182,10 @@ export const useCrmAccess = () => {
         tenantId: tenant?.tenantId || null,
         canViewAllLeads,
         canDeleteRecords,
-        ownerDisplayName: isSystemAdmin ? ownerDisplayName : ownerDisplayName,
+        isGerente,
+        userId,
+        podeExcluir,
+        ownerDisplayName,
         ownerCandidates,
         ownerCandidatesNormalized,
         roleCandidate: isSystemAdmin ? "superadmin" : roleCandidate,

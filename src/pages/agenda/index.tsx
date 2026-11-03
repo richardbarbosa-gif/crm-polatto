@@ -8,7 +8,7 @@ import {
     UndoOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { useList, useInvalidate, useUpdate, useDelete } from "@refinedev/core";
+import { useList, useInvalidate, useUpdate } from "@refinedev/core";
 import {
     Alert,
     Badge,
@@ -39,6 +39,8 @@ import {
     type TaskExecutionStatus,
 } from "../../lib/taskExecutionStatus";
 import { supabaseClient } from "../../utility";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 const TIPO_LABELS: Record<string, string> = {
     visita: "Visita",
@@ -84,7 +86,7 @@ const TASK_EXECUTION_STATUS_COLORS: Record<TaskExecutionStatus, string> = {
 export const AgendaPage = () => {
     const invalidate = useInvalidate();
     const { mutateAsync: atualizarTarefa } = useUpdate();
-    const { mutateAsync: excluirTarefa } = useDelete();
+    const { podeExcluir } = useCrmAccess();
 
     /**
      * Concluir/reabrir agendamento.
@@ -111,16 +113,29 @@ export const AgendaPage = () => {
         }
     };
 
+    // Excluir manda para a LIXEIRA (deleted_at), de onde dá para restaurar.
+    // Vendedor só exclui os próprios agendamentos; o banco garante (migration 12).
     const removerTarefa = (tarefa: TarefaRecord) => {
         Modal.confirm({
             title: "Excluir agendamento?",
-            content: tarefa.titulo || "Este agendamento será removido da agenda.",
+            content: `${tarefa.titulo || "Este agendamento"} vai para a Lixeira e pode ser restaurado por lá.`,
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
             onOk: async () => {
-                await excluirTarefa({ resource: "tarefas", id: tarefa.id });
-                invalidate({ resource: "tarefas", invalidates: ["list"] });
+                try {
+                    await atualizarTarefa({
+                        resource: "tarefas",
+                        id: tarefa.id,
+                        values: { deleted_at: new Date().toISOString() },
+                        successNotification: () => ({ message: "Agendamento enviado para a Lixeira", type: "success" }),
+                        errorNotification: false,
+                    });
+                    invalidate({ resource: "tarefas", invalidates: ["list"] });
+                    setIsDrawerOpen(false);
+                } catch (error) {
+                    message.error(getSupabaseErrorMessage(error) || "Não foi possível excluir o agendamento.");
+                }
             },
         });
     };
@@ -152,6 +167,7 @@ export const AgendaPage = () => {
         sorters: [{ field: "data_vencimento", order: "asc" }],
         liveMode: "auto",
         filters: [
+            { field: "deleted_at", operator: "null", value: true },
             {
                 field: "data_vencimento",
                 operator: "gte",
@@ -501,17 +517,21 @@ export const AgendaPage = () => {
                                         >
                                             Ver
                                         </Button>,
-                                        <Button
-                                            key={`excluir-${tarefa.id}`}
-                                            size="small"
-                                            danger
-                                            icon={<DeleteOutlined />}
-                                            aria-label="Excluir agendamento"
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                removerTarefa(tarefa);
-                                            }}
-                                        />,
+                                        ...(podeExcluir(tarefa)
+                                            ? [
+                                                  <Button
+                                                      key={`excluir-${tarefa.id}`}
+                                                      size="small"
+                                                      danger
+                                                      icon={<DeleteOutlined />}
+                                                      aria-label="Excluir agendamento"
+                                                      onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          removerTarefa(tarefa);
+                                                      }}
+                                                  />,
+                                              ]
+                                            : []),
                                     ]}
                                 >
                                     <div style={{ width: "100%" }}>

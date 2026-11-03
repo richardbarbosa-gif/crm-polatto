@@ -21,7 +21,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
 import { regraCpfCnpj } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
-import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
 import type { OrganizacaoRecord } from "../../types/db";
 import { CustomFieldsForm } from "../../components/custom-fields";
@@ -52,7 +52,7 @@ const TAMANHO_OPTIONS = [
 
 export const OrganizacoesPage = () => {
     const { tenantId } = useTenant();
-    const { canDeleteRecords } = useCrmAccess();
+    const { podeExcluir } = useCrmAccess();
     const { campos: camposCustomizados } = useCustomFields("organizacao");
 
     const [busca, setBusca] = useState("");
@@ -199,8 +199,9 @@ export const OrganizacoesPage = () => {
             });
             message.success("Organização removida.");
             await query?.refetch?.();
-        } catch {
-            message.error("Não foi possível remover a organização.");
+        } catch (error) {
+            // Mostra o motivo do banco (ex.: "Você só pode excluir ou restaurar registros seus.")
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível remover a organização.");
         }
     };
 
@@ -307,7 +308,7 @@ export const OrganizacoesPage = () => {
                                             icon={<EditOutlined />}
                                             onClick={() => abrirEdicao(org)}
                                         />
-                                        {canDeleteRecords ? (
+                                        {podeExcluir(org) ? (
                                             <Popconfirm
                                                 title="Remover organização?"
                                                 description="Os negócios e contatos vinculados não são apagados."

@@ -42,6 +42,7 @@ const NotificationBell = () => {
                 .from("tarefas")
                 .select("id,titulo,data_vencimento,tipo,cliente_id")
                 .eq("concluido", false)
+                .is("deleted_at", null)
                 .lt("data_vencimento", dayjs().add(24, "hour").toISOString())
                 .order("data_vencimento", { ascending: true })
                 .limit(20);

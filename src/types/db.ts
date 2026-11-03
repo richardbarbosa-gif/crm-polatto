@@ -46,6 +46,10 @@ export type OrganizacaoRecord = {
     endereco?: Record<string, unknown> | null;
     dados_extras?: Record<string, unknown> | null;
     deleted_at?: string | null;
+    /** Quem cadastrou (migration 12). */
+    created_by?: string | null;
+    /** Quem mandou para a lixeira (migration 12). */
+    deleted_by?: string | null;
     created_at?: string | null;
     [key: string]: unknown;
 };
@@ -63,6 +67,10 @@ export type PessoaRecord = {
     dados_extras?: Record<string, unknown> | null;
     anonimizada_em?: string | null;
     deleted_at?: string | null;
+    /** Quem cadastrou (migration 12). */
+    created_by?: string | null;
+    /** Quem mandou para a lixeira (migration 12). */
+    deleted_by?: string | null;
     created_at?: string | null;
     [key: string]: unknown;
 };
@@ -86,6 +94,10 @@ export type NegocioRecord = {
     fechado_em?: string | null;
     dados_extras?: Record<string, unknown> | null;
     deleted_at?: string | null;
+    /** Quem cadastrou (migration 12). */
+    created_by?: string | null;
+    /** Quem mandou para a lixeira (migration 12). */
+    deleted_by?: string | null;
     created_at?: string | null;
     [key: string]: unknown;
 };
@@ -145,5 +157,9 @@ export type DocumentoLeadRecord = {
     enviado_por?: string | null;
     created_at?: string | null;
     deleted_at?: string | null;
+    /** Quem cadastrou (migration 12). */
+    created_by?: string | null;
+    /** Quem mandou para a lixeira (migration 12). */
+    deleted_by?: string | null;
     [key: string]: unknown;
 };

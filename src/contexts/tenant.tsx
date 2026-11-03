@@ -325,7 +325,7 @@ export const RequireTenant = ({ children }: { children: React.ReactNode }) => {
                 <Result
                     status="403"
                     title="Bem-vindo! Falta configurar sua empresa"
-                    subTitle="Seu usuário ainda não está vinculado a nenhuma empresa. Crie a sua agora mesmo ou solicite o convite ao administrador da sua equipe."
+                    subTitle="Seu usuário ainda não está vinculado a nenhuma empresa. Crie a sua agora mesmo ou peça ao gerente da sua equipe para cadastrar você."
                     extra={
                         <div style={{ display: "grid", gap: 12, justifyItems: "center" }}>
                             <CriarEmpresaOnboarding onProvisionado={refresh} />

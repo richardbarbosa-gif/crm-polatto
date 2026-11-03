@@ -91,6 +91,7 @@ export const InsightsActivitiesPage = () => {
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
+        filters: [{ field: "deleted_at", operator: "null", value: true }],
         sorters: [{ field: "data_vencimento", order: "asc" }],
     });
     const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);

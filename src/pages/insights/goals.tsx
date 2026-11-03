@@ -25,6 +25,7 @@ import { propsMoeda } from "../../lib/moedaInput";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 import { useTenant } from "../../contexts/tenant";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 
 type GoalViewMode = "valor" | "quantidade";
 
@@ -48,6 +49,7 @@ type EmployeePerformanceRow = {
 };
 
 export const InsightsGoalsPage = () => {
+    const { isGerente } = useCrmAccess();
     const { tenantId } = useTenant();
     const [form] = Form.useForm();
     const [monthRef, setMonthRef] = useState<Dayjs>(dayjs().startOf("month"));
@@ -235,7 +237,10 @@ export const InsightsGoalsPage = () => {
                     <Space wrap>
                         <DatePicker picker="month" value={monthRef} onChange={(val) => setMonthRef(val || dayjs())} allowClear={false} />
                         <Segmented<GoalViewMode> options={[{ label: "Receita (R$)", value: "valor" }, { label: "Volume (Qtd)", value: "quantidade" }]} value={viewMode} onChange={setViewMode} />
-                        <Button type="primary" icon={<PlusOutlined />} onClick={openBatchModal}>Definir Metas</Button>
+                        {/* Metas são definidas pelo gerente (o banco recusa gravação de vendedor) */}
+                        {isGerente ? (
+                            <Button type="primary" icon={<PlusOutlined />} onClick={openBatchModal}>Definir Metas</Button>
+                        ) : null}
                     </Space>
                 }
             />

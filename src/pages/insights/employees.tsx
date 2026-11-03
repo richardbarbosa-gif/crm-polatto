@@ -33,6 +33,7 @@ import { formatCurrencyBRL } from "../../lib/formatters";
 import { percentual } from "../../lib/pipelineMetrics";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { normalizarPapel, rotuloDoPapel } from "../../lib/permissions";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 
@@ -47,6 +48,8 @@ type EmployeeRecord = {
     active?: boolean | null;
     created_at?: string | null;
     has_login?: boolean;
+    /** Id do login (auth) — o vínculo com a empresa é por ele. */
+    auth_uid?: string | null;
     realizado_valor?: number;
     realizado_qtd?: number;
 };
@@ -104,13 +107,15 @@ type EmployeeFormValues = {
     active?: boolean;
 };
 
+// Dois papéis (regra do Richard): gerente faz tudo; vendedor vê tudo e só
+// exclui o que é dele. O banco normaliza qualquer outro valor para estes dois.
 const ROLE_OPTIONS = [
     { value: "vendedor", label: "Vendedor" },
-    { value: "gestor", label: "Gestor" },
-    { value: "admin", label: "Administrador" },
+    { value: "gerente", label: "Gerente" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
+    gerente: "blue",
     admin: "blue",
     gestor: "purple",
     vendedor: "default",
@@ -199,7 +204,9 @@ export const InsightsEmployeesPage = () => {
                     id,
                     full_name: row.nome || "Sem nome",
                     email: row.email || null,
-                    role: vinculo || row.cargo || null,
+                    // Papel = vínculo com a empresa (fonte do banco); sem login, "vendedor".
+                    role: normalizarPapel(vinculo),
+                    auth_uid: vinculoMap.has(id) ? id : row.user_id ? String(row.user_id) : null,
                     monthly_goal_value: meta ? Number(meta.valor_meta) || 0 : 0,
                     active: row.ativo !== false,
                     created_at: row.created_at || null,
@@ -385,25 +392,26 @@ export const InsightsEmployeesPage = () => {
                     }
                 }
 
-                // Atualiza role na utilizadores_empresas (se tem login e o papel mudou).
-                // A RLS só deixa o administrador da plataforma alterar vínculos:
-                // para os demais o update afeta 0 linhas sem erro, então conferimos
-                // o retorno em vez de anunciar uma mudança que não aconteceu.
-                let papelNaoAlterado = false;
-                if (editingEmployee!.has_login && values.role && values.role !== editingEmployee!.role) {
-                    const { data: alterados, error: roleError } = await supabaseClient
-                        .from("utilizadores_empresas")
-                        .update({ role: values.role })
-                        .eq("auth_uid", editingEmployee!.id)
-                        .select("auth_uid");
-                    papelNaoAlterado = Boolean(roleError) || !alterados?.length;
+                // Papel: RPC alterar_papel_membro (só gerente, nunca o próprio, a
+                // empresa nunca fica sem gerente). Antes era um update direto que a
+                // RLS ignorava em silêncio.
+                const papelNovo = values.role ? normalizarPapel(values.role) : null;
+                const authUid = editingEmployee!.auth_uid;
+                let avisoPapel: string | null = null;
+                if (editingEmployee!.has_login && authUid && papelNovo && papelNovo !== normalizarPapel(editingEmployee!.role)) {
+                    const { data: resultado, error: papelError } = await supabaseClient.rpc("alterar_papel_membro", {
+                        p_user_id: authUid,
+                        p_papel: papelNovo,
+                    });
+                    const resposta = (resultado ?? {}) as RespostaRpcEquipe;
+                    if (papelError || !resposta.success) {
+                        avisoPapel = papelError?.message || resposta.error || "O nível de acesso não foi alterado.";
+                    }
                 }
 
                 message.success("Membro atualizado.");
-                if (papelNaoAlterado) {
-                    message.warning(
-                        "O nível de acesso ao CRM não foi alterado: só o administrador da plataforma muda permissões.",
-                    );
+                if (avisoPapel) {
+                    message.warning(avisoPapel);
                 }
             }
 
@@ -513,11 +521,11 @@ export const InsightsEmployeesPage = () => {
                                 title: "Permissão",
                                 width: 130,
                                 render: (_, record: EmployeeRow) => {
-                                    const role = record.role || "vendedor";
+                                    const papel = normalizarPapel(record.role);
                                     return (
-                                        <Tag color={ROLE_COLORS[role] || "default"} style={{ borderRadius: 6 }}>
-                                            {role === "admin" && <CrownOutlined style={{ marginRight: 4 }} />}
-                                            {role.charAt(0).toUpperCase() + role.slice(1)}
+                                        <Tag color={ROLE_COLORS[papel] || "default"} style={{ borderRadius: 6 }}>
+                                            {papel === "gerente" && <CrownOutlined style={{ marginRight: 4 }} />}
+                                            {rotuloDoPapel(record.role)}
                                         </Tag>
                                     );
                                 },
@@ -623,11 +631,11 @@ export const InsightsEmployeesPage = () => {
                             name="senha"
                             rules={[
                                 { required: true, message: "Defina uma senha inicial." },
-                                { min: 6, message: "Mínimo 6 caracteres." },
+                                { min: 8, message: "Mínimo 8 caracteres." },
                             ]}
                             extra="O membro poderá alterar a senha depois."
                         >
-                            <Input.Password prefix={<LockOutlined />} placeholder="Mínimo 6 caracteres" autoComplete="new-password" data-lpignore="true" data-form-type="other" />
+                            <Input.Password prefix={<LockOutlined />} placeholder="Mínimo 8 caracteres" autoComplete="new-password" data-lpignore="true" data-form-type="other" />
                         </Form.Item>
                     )}
 
@@ -638,7 +646,7 @@ export const InsightsEmployeesPage = () => {
                             style={{ flex: 1 }}
                             extra={
                                 <Text type="secondary" style={{ fontSize: 11 }}>
-                                    Vendedor: vê só seus leads. Gestor/Admin: vê tudo.
+                                    Vendedor: vê todos os leads e exclui só os seus. Gerente: faz tudo, inclusive excluir e configurar.
                                 </Text>
                             }
                         >

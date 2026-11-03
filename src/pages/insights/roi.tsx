@@ -40,6 +40,7 @@ export const InsightsROIPage = () => {
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
+        filters: [{ field: "deleted_at", operator: "null", value: true }],
         meta: { select: "id,data_vencimento,created_at" },
     });
     const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({

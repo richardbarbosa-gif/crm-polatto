@@ -135,7 +135,7 @@ export function ConfigCrudTable<T extends ConfigRecord>({
                 <Alert
                     type="info"
                     showIcon
-                    message="Somente administradores podem alterar configurações do CRM."
+                    message="Somente o gerente pode alterar as configurações do CRM."
                     style={{ marginBottom: 16 }}
                 />
             ) : (

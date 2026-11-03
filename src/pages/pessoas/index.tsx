@@ -29,7 +29,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
 import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
-import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import type { OrganizacaoRecord, PessoaRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 import { CustomFieldsForm } from "../../components/custom-fields";
@@ -72,7 +72,7 @@ const baixarJson = (nomeArquivo: string, conteudo: unknown) => {
 
 export const PessoasPage = () => {
     const { tenantId } = useTenant();
-    const { canDeleteRecords } = useCrmAccess();
+    const { canDeleteRecords, podeExcluir } = useCrmAccess();
     const { campos: camposCustomizados } = useCustomFields("pessoa");
 
     const [busca, setBusca] = useState("");
@@ -292,8 +292,9 @@ export const PessoasPage = () => {
             });
             message.success("Contato removido.");
             await query?.refetch?.();
-        } catch {
-            message.error("Não foi possível remover o contato.");
+        } catch (error) {
+            // Mostra o motivo do banco (ex.: "Você só pode excluir ou restaurar registros seus.")
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível remover o contato.");
         }
     };
 
@@ -429,6 +430,11 @@ export const PessoasPage = () => {
                                                               label: "Anonimizar titular (LGPD)",
                                                               onClick: () => anonimizarLgpd(pessoa),
                                                           },
+                                                      ]
+                                                    : []),
+                                                // Lixeira: gerente remove qualquer contato; vendedor só os que cadastrou
+                                                ...(podeExcluir(pessoa)
+                                                    ? [
                                                           {
                                                               key: "excluir",
                                                               icon: <DeleteOutlined />,

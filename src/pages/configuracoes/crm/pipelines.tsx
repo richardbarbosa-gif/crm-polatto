@@ -217,7 +217,7 @@ export const PipelinesConfig = () => {
                 <Alert
                     type="info"
                     showIcon
-                    message="Somente administradores podem alterar funis e etapas."
+                    message="Somente o gerente pode alterar funis e etapas."
                     style={{ marginBottom: 16 }}
                 />
             ) : (
