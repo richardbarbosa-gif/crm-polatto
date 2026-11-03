@@ -10,7 +10,7 @@ import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { normalizeText } from "../../lib/formatters";
+import { formatPercentBR, normalizeText } from "../../lib/formatters";
 import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
 import { buildLeadCountByStageId, buildStagesVisiveis, type KpiRow } from "../../lib/kanbanStages";
 import {
@@ -369,7 +369,7 @@ export const ClienteList = () => {
         return {
             totalLeads: resumo.totalLeads,
             totalValor: resumo.valorTotal,
-            taxaConversao: resumo.conversao.toFixed(1),
+            taxaConversao: formatPercentBR(resumo.conversao),
         };
     }, [kpiRows, persistedStagesRaw]);
 

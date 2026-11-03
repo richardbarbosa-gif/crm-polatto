@@ -12,7 +12,7 @@ import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { formatCurrencyBRL, formatDateBR, parseCurrencyLikeValue } from "../../lib/formatters";
+import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue } from "../../lib/formatters";
 import {
     classificarDesfecho,
     indexarEtapas,
@@ -217,11 +217,11 @@ export const DashboardPage = () => {
                 <Col xs={24} sm={12} lg={6}>
                     <StatCard
                         title="Conversão"
-                        value={resumo.conversao.toFixed(1)}
+                        value={formatPercentBR(resumo.conversao)}
                         suffix="%"
                         prefix={<RiseOutlined style={{ color: "#3b82f6" }} />}
                         accentColor="#3b82f6"
-                        subtitle={`Taxa de ganho nos decididos: ${resumo.taxaDeGanho.toFixed(1)}%`}
+                        subtitle={`Taxa de ganho nos decididos: ${formatPercentBR(resumo.taxaDeGanho)}%`}
                         style={{ height: "100%" }}
                     />
                 </Col>
