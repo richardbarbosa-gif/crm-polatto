@@ -1,0 +1,12 @@
+# Nada de segredo, dependência local ou histórico entra no contexto do build.
+.env
+.env.*
+!.env.example
+node_modules
+dist
+coverage
+.git
+.github
+.claude
+database
+*.log
