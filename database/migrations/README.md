@@ -16,6 +16,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-07-19_09_rls_tabelas_legadas.sql` | **RLS nas tabelas legadas** (tarefas, atividades, documentos, funcionários, metas, clientes): backfill do `tenant_id` + ativação guardada |
 | `2026-11-02_10_hardening_seguranca.sql` | **Endurecimento de segurança** (auditoria 2026-11): view `clientes` não aceita tenant do payload, `fn_set_tenant_id` fail-closed, funções administrativas fora do alcance de `anon`/`authenticated`, retenção e anonimização LGPD só para admin, `tenant_features` só superadmin, monitoramento sem token na URL, RLS garantida em `utilizadores_empresas`/`empresas`, restos dos scripts avulsos trancados, bucket `lead-files` privado, `security_invoker` em toda view. **Rodar sempre depois da 01** (inclusive quando a 01 é reexecutada na virada). |
 | `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
+| `2026-11-03_12_papeis_exclusao_lixeira.sql` | **Papéis e lixeira**: gerente faz tudo; vendedor vê os leads de todos, mas só exclui/restaura os seus (trigger `guarda_exclusao`, vale também para a API direta); DELETE físico só gerente; configuração, metas e equipe só gerente; `created_by`/`deleted_by`; `criar_usuario_equipe`, `excluir_usuario_equipe`, `alterar_papel_membro` e `check_feature` versionadas e seguras (antes só existiam em produção, abertas para a chave pública) |
 
 ## Testes automatizados
 

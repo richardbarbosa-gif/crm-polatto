@@ -57,6 +57,31 @@ create table if not exists auth.users (
     email text unique
 );
 
+-- Colunas reais do auth.users do Supabase usadas por criar_usuario_equipe
+alter table auth.users add column if not exists instance_id uuid;
+alter table auth.users add column if not exists aud text;
+alter table auth.users add column if not exists role text;
+alter table auth.users add column if not exists encrypted_password text;
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
+alter table auth.users add column if not exists confirmation_token text;
+alter table auth.users add column if not exists recovery_token text;
+alter table auth.users add column if not exists email_change_token_new text;
+alter table auth.users add column if not exists raw_app_meta_data jsonb;
+alter table auth.users add column if not exists raw_user_meta_data jsonb;
+alter table auth.users add column if not exists created_at timestamptz;
+alter table auth.users add column if not exists updated_at timestamptz;
+
+create table if not exists auth.identities (
+    id uuid primary key,
+    user_id uuid not null references auth.users (id) on delete cascade,
+    provider_id text not null,
+    identity_data jsonb not null,
+    provider text not null,
+    last_sign_in_at timestamptz,
+    created_at timestamptz,
+    updated_at timestamptz
+);
+
 -- storage.objects + foldername (split do path em segmentos)
 create table if not exists storage.objects (
     id uuid primary key default gen_random_uuid(),

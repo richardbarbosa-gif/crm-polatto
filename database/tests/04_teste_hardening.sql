@@ -93,11 +93,19 @@ where id = 'lead-files';
 create view public.vw_teste_definer as
     select id, tenant_id, titulo from public.negocios;
 
--- (5) RPC que só existe em produção (corpo desconhecido)
-create function public.criar_usuario_equipe(
-    p_email text, p_senha text, p_nome text, p_cargo text, p_role text
-) returns jsonb language sql security definer set search_path = public
-as $$ select jsonb_build_object('success', false) $$;
+-- (5) RPC que só existia em produção (corpo desconhecido). A migration 12
+-- passou a versioná-la; o simulacro só entra se ela ainda não existir.
+do $$
+begin
+    if to_regprocedure('public.criar_usuario_equipe(text, text, text, text, text)') is null then
+        execute $f$
+            create function public.criar_usuario_equipe(
+                p_email text, p_senha text, p_nome text, p_cargo text, p_role text
+            ) returns jsonb language sql security definer set search_path = public
+            as 'select jsonb_build_object(''success'', false)'
+        $f$;
+    end if;
+end $$;
 
 -- (6) policy using(true) reaplicada numa tabela legada já isolada
 create policy tarefas_authenticated_all on public.tarefas

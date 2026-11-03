@@ -320,7 +320,9 @@ $$;
 --
 -- Fonte: utilizadores_empresas.role (o usuário não consegue alterar: a
 -- tabela só tem policy de leitura). Mesmos termos do frontend
--- (src/lib/permissions.ts): admin, superadmin, administrador, owner.
+-- (src/lib/permissions.ts): admin, superadmin, administrador, owner, gerente,
+-- gestor, manager. O papel canônico de quem administra a empresa é "gerente"
+-- (revisão 2026-11-03); "admin" segue valendo (é o que provisionar_tenant grava).
 -- NÃO usa funcionarios.cargo nem user_metadata: os dois são editáveis
 -- pelo próprio usuário e não servem como prova de papel.
 -- Coluna de tenant/papel detectada dinamicamente, como em current_tenant_id().
@@ -371,14 +373,14 @@ begin
                         from public.utilizadores_empresas ue
                         where ue.auth_uid = auth.uid()
                           and ue.%1$I::uuid = coalesce(p_tenant_id, public.current_tenant_id())
-                          and lower(coalesce(ue.%2$I::text, '')) ~ '(admin|owner)'
+                          and lower(coalesce(ue.%2$I::text, '')) ~ '(admin|owner|gerente|gestor|manager)'
                     )
                 );
         $body$;
     $fn$, v_col, v_role_col);
 end $$;
 
-comment on function public.eh_admin_do_tenant(uuid) is 'Usuário autenticado é admin (admin/administrador/superadmin/owner em utilizadores_empresas) do tenant informado — ou do tenant ativo — ou superadmin da plataforma.';
+comment on function public.eh_admin_do_tenant(uuid) is 'Usuário autenticado é gerente (gerente/gestor/manager/admin/administrador/superadmin/owner em utilizadores_empresas) do tenant informado — ou do tenant ativo — ou superadmin da plataforma.';
 
 -- ---------------------------------------------------------------------
 -- 4. LGPD
