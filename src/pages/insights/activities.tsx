@@ -17,7 +17,7 @@ import {
     isDateInLastDays,
     toSafeDayjs,
     type TaskSituation,
-    type InsightClienteRecord,
+
     type InsightTaskRecord,
 } from "../../lib/insights";
 import {
@@ -26,6 +26,7 @@ import {
     TASK_EXECUTION_STATUS_LABELS,
     type TaskExecutionStatus,
 } from "../../lib/taskExecutionStatus";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 
 const PERIOD_OPTIONS = [
@@ -87,29 +88,17 @@ export const InsightsActivitiesPage = () => {
         });
     }, []);
 
-    const tarefasResult = useList<InsightTaskRecord>({
+    const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
-    }) as any;
-    const clientesResult = useList<InsightClienteRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-    }) as any;
+    });
+    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
+    const isLoading = Boolean(tarefasQuery?.isLoading);
 
-    const tarefasQuery = tarefasResult.query || tarefasResult;
-    const clientesQuery = clientesResult.query || clientesResult;
-    const tarefas = (tarefasQuery?.data?.data || []) as InsightTaskRecord[];
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-    const isLoading = Boolean(tarefasQuery?.isLoading || clientesQuery?.isLoading);
-
-    const clienteById = useMemo(() => {
-        const map = new Map<string, string>();
-        clientes.forEach((cliente) => {
-            map.set(String(cliente.id), cliente.nome?.trim() || `Cliente #${cliente.id}`);
-        });
-        return map;
-    }, [clientes]);
+    // Só os nomes dos clientes citados nas tarefas (antes: a base inteira de leads).
+    const idsDosClientes = useMemo(() => tarefas.map((task) => task.cliente_id), [tarefas]);
+    const clienteById = useNomesDeClientes(idsDosClientes);
 
     const filteredTasks = useMemo(() => {
         return tarefas.filter((task) => {

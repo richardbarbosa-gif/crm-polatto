@@ -12,13 +12,13 @@ import { Button, Card, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import {
+    COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
-    getInsightValue,
     isDateInLastDays,
-    isWonStatus,
     type InsightClienteRecord,
     type InsightTaskRecord,
 } from "../../lib/insights";
+import { classificarDesfecho, indexarEtapas, valorDoLead, type EtapaFunil } from "../../lib/pipelineMetrics";
 import { InsightsHeader, IntroCard } from "./shared";
 
 const PERIOD_OPTIONS = [
@@ -32,19 +32,25 @@ export const InsightsROIPage = () => {
     const [costPerLead, setCostPerLead] = useState<number>(85);
     const [costPerActivity, setCostPerActivity] = useState<number>(18);
 
-    const clientesResult = useList<InsightClienteRecord>({
+    const { query: clientesQuery } = useList<InsightClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
-    }) as any;
-    const tarefasResult = useList<InsightTaskRecord>({
+        meta: { select: COLUNAS_INSIGHT_CLIENTE },
+    });
+    const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
-    }) as any;
+        meta: { select: "id,data_vencimento,created_at" },
+    });
+    const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        queryOptions: { retry: false },
+    });
 
-    const clientesQuery = clientesResult.query || clientesResult;
-    const tarefasQuery = tarefasResult.query || tarefasResult;
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-    const tarefas = (tarefasQuery?.data?.data || []) as InsightTaskRecord[];
+    const clientes = useMemo(() => clientesQuery?.data?.data ?? [], [clientesQuery?.data?.data]);
+    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
+    const etapasPorId = useMemo(() => indexarEtapas(stagesQuery?.data?.data), [stagesQuery?.data?.data]);
 
     const isLoading = Boolean(clientesQuery?.isLoading || tarefasQuery?.isLoading);
 
@@ -56,11 +62,10 @@ export const InsightsROIPage = () => {
             isDateInLastDays(task.data_vencimento || task.created_at, periodDays),
         );
 
-        const ganhos = clientesPeriodo.filter((cliente) => isWonStatus(cliente.status));
-        const ganhosValor = ganhos.reduce(
-            (acc, cliente) => acc + getInsightValue(cliente.conta_energia_media),
-            0,
+        const ganhos = clientesPeriodo.filter(
+            (cliente) => classificarDesfecho(cliente, etapasPorId) === "ganho",
         );
+        const ganhosValor = ganhos.reduce((acc, cliente) => acc + valorDoLead(cliente), 0);
         const investimento = clientesPeriodo.length * costPerLead + tarefasPeriodo.length * costPerActivity;
         const lucro = ganhosValor - investimento;
         const roiPercent = investimento > 0 ? (lucro / investimento) * 100 : 0;
@@ -77,16 +82,18 @@ export const InsightsROIPage = () => {
             cobertura,
             retornoMedio,
         };
-    }, [clientes, tarefas, periodDays, costPerLead, costPerActivity]);
+    }, [clientes, etapasPorId, tarefas, periodDays, costPerLead, costPerActivity]);
 
     const ownerBreakdown = useMemo(() => {
         const clientesPeriodo = clientes.filter((cliente) =>
             isDateInLastDays(cliente.created_at, periodDays),
         );
 
-        return buildOwnerPerformance(clientesPeriodo).map((owner) => {
+        return buildOwnerPerformance(clientesPeriodo, etapasPorId).map((owner) => {
             const investimentoOwner = owner.total * costPerLead;
-            const retornoOwner = owner.valor;
+            // Retorno = só o que foi GANHO. Antes somava a carteira inteira do
+            // consultor (abertos e perdidos) e o ROI por consultor saía inflado.
+            const retornoOwner = owner.valorGanho;
             const lucroOwner = retornoOwner - investimentoOwner;
             const roiOwner = investimentoOwner > 0 ? (lucroOwner / investimentoOwner) * 100 : 0;
 
@@ -98,7 +105,7 @@ export const InsightsROIPage = () => {
                 roi: roiOwner,
             };
         });
-    }, [clientes, periodDays, costPerLead]);
+    }, [clientes, etapasPorId, periodDays, costPerLead]);
 
     if (isLoading) {
         return <Skeleton active />;

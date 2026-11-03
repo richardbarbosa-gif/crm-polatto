@@ -9,7 +9,6 @@ import {
     TrophyOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { useList } from "@refinedev/core";
 import {
     Alert,
     Form,
@@ -30,8 +29,8 @@ import {
 import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
-import { buildOwnerPerformance, type InsightClienteRecord } from "../../lib/insights";
+import { formatCurrencyBRL } from "../../lib/formatters";
+import { percentual } from "../../lib/pipelineMetrics";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { supabaseClient } from "../../utility";
@@ -48,6 +47,51 @@ type EmployeeRecord = {
     active?: boolean | null;
     created_at?: string | null;
     has_login?: boolean;
+    realizado_valor?: number;
+    realizado_qtd?: number;
+};
+
+type EmployeeRow = EmployeeRecord & {
+    atualValor: number;
+    atualGanhos: number;
+    valueProgress: number;
+};
+
+type FuncionarioRow = {
+    id: string;
+    user_id?: string | null;
+    nome?: string | null;
+    email?: string | null;
+    cargo?: string | null;
+    ativo?: boolean | null;
+    created_at?: string | null;
+};
+type MetaRow = { id?: string; funcionario_id?: string | null; valor_meta?: number | string | null };
+type PerformanceRow = {
+    funcionario_id?: string | null;
+    vendas_qtd?: number | string | null;
+    vendas_valor?: number | string | null;
+};
+type RespostaRpcEquipe = {
+    success?: boolean;
+    error?: string;
+    message?: string;
+    user_id?: string;
+    tenant_id?: string | number;
+};
+
+/**
+ * As funções criar_usuario_equipe / excluir_usuario_equipe não estão nas
+ * migrations do repositório (foram criadas à mão no banco de produção).
+ * Num banco novo a chamada falha com uma mensagem técnica em inglês.
+ */
+const mensagemDeErroDaEquipe = (error: unknown, padrao: string): string => {
+    const texto = String((error as { message?: unknown })?.message ?? "");
+    const codigo = String((error as { code?: unknown })?.code ?? "");
+    if (codigo === "PGRST202" || /could not find the function/i.test(texto)) {
+        return "A função de gestão de usuários não está instalada neste banco. Fale com o administrador do sistema.";
+    }
+    return texto || padrao;
 };
 
 type EmployeeFormValues = {
@@ -74,26 +118,10 @@ const ROLE_COLORS: Record<string, string> = {
     superadmin: "gold",
 };
 
-const matchOwnerPerformance = (
-    ownerRows: ReturnType<typeof buildOwnerPerformance>,
-    employeeName: string,
-) => {
-    const employeeKey = normalizeText(employeeName);
-    if (!employeeKey) return null;
-    return (
-        ownerRows.find((owner) => normalizeText(owner.owner) === employeeKey) ||
-        ownerRows.find(
-            (owner) =>
-                normalizeText(owner.owner).includes(employeeKey) ||
-                employeeKey.includes(normalizeText(owner.owner)),
-        ) ||
-        null
-    );
-};
-
 export const InsightsEmployeesPage = () => {
     const [form] = Form.useForm<EmployeeFormValues>();
-    const { isSystemAdmin, canDeleteRecords } = useCrmAccess();
+    // Criar, editar e excluir membros (e logins) é tarefa de administrador.
+    const { canDeleteRecords: podeGerenciarEquipe } = useCrmAccess();
 
     const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
     const [isLoadingEmployees, setIsLoadingEmployees] = useState<boolean>(true);
@@ -105,13 +133,6 @@ export const InsightsEmployeesPage = () => {
     const [deletingEmployee, setDeletingEmployee] = useState<EmployeeRecord | null>(null);
     const [isDeleting, setIsDeleting] = useState<boolean>(false);
 
-    const clientesResult = useList<InsightClienteRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-    }) as any;
-    const clientesQuery = clientesResult.query || clientesResult;
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-
     const loadEmployees = useCallback(async () => {
         setIsLoadingEmployees(true);
         setErrorMessage(null);
@@ -119,6 +140,7 @@ export const InsightsEmployeesPage = () => {
             const { data: funcData, error: funcError } = await supabaseClient
                 .from("funcionarios")
                 .select("*")
+                .is("deleted_at", null)
                 .order("created_at", { ascending: false });
 
             if (funcError) {
@@ -137,38 +159,60 @@ export const InsightsEmployeesPage = () => {
                 .select("*")
                 .eq("mes_referencia", monthStart);
 
-            const metasMap = new Map<string, any>();
-            (metasData || []).forEach((m: any) => metasMap.set(m.funcionario_id, m));
+            const metasMap = new Map<string, MetaRow>();
+            ((metasData || []) as MetaRow[]).forEach((m) => {
+                if (m.funcionario_id) metasMap.set(String(m.funcionario_id), m);
+            });
 
-            // Verifica quais funcionários têm login (existem na utilizadores_empresas)
+            // Realizado do mês calculado no banco (ganhos com data de fechamento
+            // no mês). Antes a "Receita" somava TODOS os negócios do vendedor —
+            // abertos e perdidos, de todos os tempos — e era comparada com a
+            // meta MENSAL: o progresso não significava nada.
+            const { data: perfData, error: perfError } = await supabaseClient
+                .from("vw_performance_vendedores")
+                .select("funcionario_id,vendas_qtd,vendas_valor")
+                .eq("mes_referencia", monthStart);
+            if (perfError && !isSupabaseMissingRelation(perfError)) throw perfError;
+            const realizadoMap = new Map<string, PerformanceRow>();
+            ((perfData || []) as PerformanceRow[]).forEach((p) => {
+                if (p.funcionario_id) realizadoMap.set(String(p.funcionario_id), p);
+            });
+
+            // Login: a RLS de utilizadores_empresas só mostra o PRÓPRIO vínculo,
+            // então a consulta não revela o login dos colegas. funcionarios.user_id
+            // (preenchido quando o login é criado) é a fonte que todos enxergam.
             const { data: vinculos } = await supabaseClient
                 .from("utilizadores_empresas")
                 .select("auth_uid, role");
 
             const vinculoMap = new Map<string, string>();
-            (vinculos || []).forEach((v: any) => {
+            ((vinculos || []) as Array<{ auth_uid?: string | null; role?: string | null }>).forEach((v) => {
                 if (v.auth_uid) vinculoMap.set(v.auth_uid, v.role || "vendedor");
             });
 
-            const mapped: EmployeeRecord[] = (funcData || []).map((row: any) => {
-                const meta = metasMap.get(row.id);
-                const vinculo = vinculoMap.get(row.id);
+            const mapped: EmployeeRecord[] = ((funcData || []) as FuncionarioRow[]).map((row) => {
+                const id = String(row.id);
+                const meta = metasMap.get(id);
+                const realizado = realizadoMap.get(id);
+                const vinculo = vinculoMap.get(id) ?? (row.user_id ? vinculoMap.get(String(row.user_id)) : undefined);
                 return {
-                    id: String(row.id),
+                    id,
                     full_name: row.nome || "Sem nome",
                     email: row.email || null,
                     role: vinculo || row.cargo || null,
-                    monthly_goal_value: meta ? Number(meta.valor_meta) : 0,
+                    monthly_goal_value: meta ? Number(meta.valor_meta) || 0 : 0,
                     active: row.ativo !== false,
                     created_at: row.created_at || null,
-                    has_login: Boolean(vinculo),
+                    has_login: Boolean(vinculo || row.user_id),
+                    realizado_valor: Number(realizado?.vendas_valor) || 0,
+                    realizado_qtd: Number(realizado?.vendas_qtd) || 0,
                 };
             });
 
             setEmployees(mapped);
             setSchemaMissing(false);
-        } catch (error: any) {
-            setErrorMessage(error?.message || "Falha ao carregar funcionários.");
+        } catch (error: unknown) {
+            setErrorMessage((error as { message?: string })?.message || "Falha ao carregar a equipe.");
         } finally {
             setIsLoadingEmployees(false);
         }
@@ -178,19 +222,16 @@ export const InsightsEmployeesPage = () => {
         loadEmployees();
     }, [loadEmployees]);
 
-    const ownerRows = useMemo(() => buildOwnerPerformance(clientes), [clientes]);
-
     const enrichedEmployees = useMemo(() => {
         return employees.map((employee) => {
-            const owner = matchOwnerPerformance(ownerRows, employee.full_name);
-            const atualValor = owner?.valor || 0;
-            const atualGanhos = owner?.ganhos || 0;
+            const atualValor = employee.realizado_valor || 0;
+            const atualGanhos = employee.realizado_qtd || 0;
             const goalValue = Number(employee.monthly_goal_value || 0);
-            const valueProgress = goalValue > 0 ? (atualValor / goalValue) * 100 : 0;
+            const valueProgress = percentual(atualValor, goalValue);
 
             return { ...employee, atualValor, atualGanhos, valueProgress };
         });
-    }, [employees, ownerRows]);
+    }, [employees]);
 
     const summary = useMemo(() => {
         const active = enrichedEmployees.filter((e) => e.active !== false).length;
@@ -214,7 +255,7 @@ export const InsightsEmployeesPage = () => {
 
             if (error) throw error;
 
-            const result = data as any;
+            const result = (data ?? {}) as RespostaRpcEquipe;
             if (!result?.success) {
                 message.error(result?.error || "Não foi possível excluir.");
                 return;
@@ -223,8 +264,8 @@ export const InsightsEmployeesPage = () => {
             message.success(result.message || `${deletingEmployee.full_name} removido.`);
             setDeletingEmployee(null);
             await loadEmployees();
-        } catch (error: any) {
-            message.error(error?.message || "Não foi possível excluir o membro.");
+        } catch (error: unknown) {
+            message.error(mensagemDeErroDaEquipe(error, "Não foi possível excluir o membro."));
         } finally {
             setIsDeleting(false);
         }
@@ -288,7 +329,7 @@ export const InsightsEmployeesPage = () => {
 
                 if (error) throw error;
 
-                const result = data as any;
+                const result = (data ?? {}) as RespostaRpcEquipe;
                 if (!result?.success) {
                     message.error(result?.error || "Não foi possível criar o usuário.");
                     return;
@@ -358,15 +399,15 @@ export const InsightsEmployeesPage = () => {
             setIsModalOpen(false);
             setEditingEmployee(null);
             await loadEmployees();
-        } catch (error: any) {
-            if (error?.errorFields) return;
-            message.error(error?.message || "Não foi possível salvar.");
+        } catch (error: unknown) {
+            if (typeof error === "object" && error && "errorFields" in error) return;
+            message.error(mensagemDeErroDaEquipe(error, "Não foi possível salvar."));
         } finally {
             setIsSaving(false);
         }
     };
 
-    if (isLoadingEmployees || clientesQuery?.isLoading) {
+    if (isLoadingEmployees) {
         return <Skeleton active />;
     }
 
@@ -376,9 +417,11 @@ export const InsightsEmployeesPage = () => {
                 title="Equipe"
                 subtitle="Gerencie membros, permissões de acesso e metas do time comercial."
                 extra={
-                    <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
-                        Novo membro
-                    </Button>
+                    podeGerenciarEquipe ? (
+                        <Button type="primary" icon={<PlusOutlined />} onClick={openCreateModal}>
+                            Novo membro
+                        </Button>
+                    ) : null
                 }
             />
 
@@ -411,7 +454,7 @@ export const InsightsEmployeesPage = () => {
                     accentColor="#f59e0b"
                 />
                 <StatCard
-                    title="Receita atribuída"
+                    title="Vendido no mês"
                     value={formatCurrencyBRL(summary.totalRevenue, "R$ 0,00")}
                     prefix={<UserOutlined style={{ color: "#0f766e" }} />}
                     accentColor="#0f766e"
@@ -423,8 +466,8 @@ export const InsightsEmployeesPage = () => {
                     <EmptyState
                         title="Nenhum membro cadastrado"
                         description="Crie o primeiro membro da equipe para começar a distribuir leads."
-                        actionLabel="Novo membro"
-                        onAction={openCreateModal}
+                        actionLabel={podeGerenciarEquipe ? "Novo membro" : undefined}
+                        onAction={podeGerenciarEquipe ? openCreateModal : undefined}
                     />
                 ) : (
                     <Table
@@ -435,7 +478,7 @@ export const InsightsEmployeesPage = () => {
                         columns={[
                             {
                                 title: "Membro",
-                                render: (_, record: any) => (
+                                render: (_, record: EmployeeRow) => (
                                     <Space direction="vertical" size={0}>
                                         <Space size={6}>
                                             <Text strong>{record.full_name}</Text>
@@ -458,7 +501,7 @@ export const InsightsEmployeesPage = () => {
                             {
                                 title: "Permissão",
                                 width: 130,
-                                render: (_, record: any) => {
+                                render: (_, record: EmployeeRow) => {
                                     const role = record.role || "vendedor";
                                     return (
                                         <Tag color={ROLE_COLORS[role] || "default"} style={{ borderRadius: 6 }}>
@@ -471,26 +514,26 @@ export const InsightsEmployeesPage = () => {
                             {
                                 title: "Status",
                                 width: 100,
-                                render: (_, record: any) => (
+                                render: (_, record: EmployeeRow) => (
                                     <Tag color={record.active !== false ? "green" : "default"} style={{ borderRadius: 6 }}>
                                         {record.active !== false ? "Ativo" : "Inativo"}
                                     </Tag>
                                 ),
                             },
                             {
-                                title: "Receita",
+                                title: "Vendido no mês",
                                 width: 130,
-                                render: (_, record: any) => formatCurrencyBRL(record.atualValor, "R$ 0,00"),
+                                render: (_, record: EmployeeRow) => formatCurrencyBRL(record.atualValor, "R$ 0,00"),
                             },
                             {
                                 title: "Meta mensal",
                                 width: 130,
-                                render: (_, record: any) => formatCurrencyBRL(record.monthly_goal_value, "R$ 0,00"),
+                                render: (_, record: EmployeeRow) => formatCurrencyBRL(record.monthly_goal_value, "R$ 0,00"),
                             },
                             {
                                 title: "Progresso",
                                 width: 180,
-                                render: (_, record: any) => (
+                                render: (_, record: EmployeeRow) => (
                                     <Progress
                                         percent={Number(record.valueProgress?.toFixed(1) || 0)}
                                         size="small"
@@ -501,7 +544,7 @@ export const InsightsEmployeesPage = () => {
                             {
                                 title: "",
                                 width: 160,
-                                render: (_, record: any) => (
+                                render: (_, record: EmployeeRow) => !podeGerenciarEquipe ? null : (
                                     <Space size={4}>
                                         <Button size="small" onClick={() => openEditModal(record)}>
                                             Editar

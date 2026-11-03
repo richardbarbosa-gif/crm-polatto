@@ -6,13 +6,13 @@ import { Button, Card, EmptyState } from "../../components/ui";
 import {
     sortByDateDesc,
     toSafeDayjs,
-    type InsightClienteRecord,
     type InsightStatusHistoryRecord,
     type InsightTaskRecord,
 } from "../../lib/insights";
 import { exportRowsToCsv } from "../../lib/exportCsv";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 
 type LogRow = {
@@ -26,6 +26,9 @@ type LogRow = {
     after: string;
 };
 
+/** Quantos eventos de cada tipo (mudança de etapa, atividade) o registro exibe. */
+const LIMITE_EVENTOS = 500;
+
 const OBJECT_FILTER_OPTIONS = [
     { value: "todos", label: "Todos os objetos" },
     { value: "Lead", label: "Leads" },
@@ -35,28 +38,20 @@ const OBJECT_FILTER_OPTIONS = [
 export const InsightsActivityLogPage = () => {
     const [objectFilter, setObjectFilter] = useState<string>("todos");
     const [historyItems, setHistoryItems] = useState<InsightStatusHistoryRecord[]>([]);
-    const [historyError, setHistoryError] = useState<any>(null);
+    const [historyError, setHistoryError] = useState<{ message?: string } | null>(null);
     const [isHistoryUnavailable, setIsHistoryUnavailable] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
 
-    const tarefasResult = useList<InsightTaskRecord>({
+    // O registro mostra os eventos mais recentes: limita no servidor em vez
+    // de baixar todas as tarefas, todo o histórico e a base de leads inteira.
+    const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
-        pagination: { mode: "off" },
+        pagination: { currentPage: 1, pageSize: LIMITE_EVENTOS },
         sorters: [{ field: "created_at", order: "desc" }],
-    }) as any;
-    const clientesResult = useList<InsightClienteRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-    }) as any;
+    });
 
-    const tarefasQuery = tarefasResult.query || tarefasResult;
-    const clientesQuery = clientesResult.query || clientesResult;
-
-    const tarefas = (tarefasQuery?.data?.data || []) as InsightTaskRecord[];
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-    const isLoading = Boolean(
-        isLoadingHistory || tarefasQuery?.isLoading || clientesQuery?.isLoading,
-    );
+    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
+    const isLoading = Boolean(isLoadingHistory || tarefasQuery?.isLoading);
 
     const loadHistory = useCallback(async () => {
         setIsLoadingHistory(true);
@@ -67,14 +62,15 @@ export const InsightsActivityLogPage = () => {
             const { data, error } = await supabaseClient
                 .from("cliente_status_history")
                 .select("id,cliente_id,de_status,para_status,movido_em,movido_por")
-                .order("movido_em", { ascending: false });
+                .order("movido_em", { ascending: false })
+                .limit(LIMITE_EVENTOS);
 
             if (error) {
                 throw error;
             }
 
             setHistoryItems((data || []) as InsightStatusHistoryRecord[]);
-        } catch (error: any) {
+        } catch (error: unknown) {
             if (isSupabaseMissingRelation(error)) {
                 setHistoryItems([]);
                 setHistoryError(null);
@@ -83,7 +79,7 @@ export const InsightsActivityLogPage = () => {
             }
 
             setHistoryItems([]);
-            setHistoryError(error);
+            setHistoryError(error as { message?: string });
         } finally {
             setIsLoadingHistory(false);
         }
@@ -93,13 +89,11 @@ export const InsightsActivityLogPage = () => {
         loadHistory();
     }, [loadHistory]);
 
-    const clienteNames = useMemo(() => {
-        const map = new Map<string, string>();
-        clientes.forEach((cliente) => {
-            map.set(String(cliente.id), cliente.nome?.trim() || `Cliente #${cliente.id}`);
-        });
-        return map;
-    }, [clientes]);
+    const idsDosClientes = useMemo(
+        () => [...historyItems.map((item) => item.cliente_id), ...tarefas.map((task) => task.cliente_id)],
+        [historyItems, tarefas],
+    );
+    const clienteNames = useNomesDeClientes(idsDosClientes);
 
     const rows = useMemo(() => {
         const statusRows: LogRow[] = historyItems.map((item) => {

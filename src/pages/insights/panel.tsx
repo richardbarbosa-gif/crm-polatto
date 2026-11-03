@@ -12,18 +12,24 @@ import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import {
+    COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
-    getInsightValue,
+    dataDeDecisao,
     getTaskSituation,
     isDateInMonth,
-    isOpenStatus,
-    isWonStatus,
     sortByDateDesc,
     toSafeDayjs,
     type InsightClienteRecord,
     type InsightStatusHistoryRecord,
     type InsightTaskRecord,
 } from "../../lib/insights";
+import {
+    classificarDesfecho,
+    indexarEtapas,
+    percentual,
+    valorDoLead,
+    type EtapaFunil,
+} from "../../lib/pipelineMetrics";
 import {
     resolveTaskExecutionStatus,
     subscribeTaskExecutionStatusUpdates,
@@ -60,7 +66,10 @@ export const InsightsPanelPage = () => {
             const { data, error } = await supabaseClient
                 .from("cliente_status_history")
                 .select("id,cliente_id,de_status,para_status,movido_em,movido_por")
-                .order("movido_em", { ascending: false });
+                .order("movido_em", { ascending: false })
+                // O painel mostra os 12 eventos mais recentes: não há por que
+                // baixar o histórico inteiro.
+                .limit(50);
 
             if (error) {
                 throw error;
@@ -78,21 +87,26 @@ export const InsightsPanelPage = () => {
         loadHistory();
     }, [loadHistory]);
 
-    const clientesResult = useList<InsightClienteRecord>({
+    const { query: clientesQuery } = useList<InsightClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
-    }) as any;
-    const tarefasResult = useList<InsightTaskRecord>({
+        meta: { select: COLUNAS_INSIGHT_CLIENTE },
+    });
+    const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
-    }) as any;
+        meta: { select: "id,cliente_id,titulo,tipo,data_vencimento,created_at,responsavel,concluido,execucao_status" },
+    });
+    const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        queryOptions: { retry: false },
+    });
 
-    const clientesQuery = clientesResult.query || clientesResult;
-    const tarefasQuery = tarefasResult.query || tarefasResult;
-
-    const clientes = (clientesQuery?.data?.data || []) as InsightClienteRecord[];
-    const tarefas = (tarefasQuery?.data?.data || []) as InsightTaskRecord[];
+    const clientes = useMemo(() => clientesQuery?.data?.data ?? [], [clientesQuery?.data?.data]);
+    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
+    const etapasPorId = useMemo(() => indexarEtapas(stagesQuery?.data?.data), [stagesQuery?.data?.data]);
 
     const isLoading = Boolean(
         isLoadingHistory || clientesQuery?.isLoading || tarefasQuery?.isLoading,
@@ -107,36 +121,33 @@ export const InsightsPanelPage = () => {
     }, [clientes]);
 
     const metrics = useMemo(() => {
-        const nowDate = new Date();
-        const currentMonthRef = toSafeDayjs(nowDate.toISOString());
-        const pipelineValue = clientes
-            .filter((cliente) => isOpenStatus(cliente.status))
-            .reduce((acc, cliente) => acc + getInsightValue(cliente.conta_energia_media), 0);
-        const closedThisMonth = clientes.filter(
-            (cliente) =>
-                isWonStatus(cliente.status) &&
-                currentMonthRef &&
-                isDateInMonth(cliente.created_at, currentMonthRef),
-        );
-        const closedThisMonthValue = closedThisMonth.reduce(
-            (acc, cliente) => acc + getInsightValue(cliente.conta_energia_media),
+        const nowRef = dayjs();
+        const desfechos = clientes.map((cliente) => classificarDesfecho(cliente, etapasPorId));
+        // Pipeline aberto = nem ganho nem perdido, pelos flags da etapa. Antes
+        // só contavam etapas cujo nome tinha "novo", "visita", "proposta"...
+        const pipelineValue = clientes.reduce(
+            (acc, cliente, i) => (desfechos[i] === "aberto" ? acc + valorDoLead(cliente) : acc),
             0,
         );
-        const closed = clientes.filter((cliente) => isWonStatus(cliente.status)).length;
-        const cycleBase = clientes.length || 1;
-        const conversion = Number(((closed / cycleBase) * 100).toFixed(1));
-        const nowRef = dayjs();
+        // "Fechado no mês" pela DATA DE FECHAMENTO. Antes filtrava pela data
+        // de criação: um negócio criado em março e ganho hoje não aparecia.
+        const closedThisMonthValue = clientes.reduce(
+            (acc, cliente, i) =>
+                desfechos[i] === "ganho" && isDateInMonth(dataDeDecisao(cliente), nowRef)
+                    ? acc + valorDoLead(cliente)
+                    : acc,
+            0,
+        );
+        const closed = desfechos.filter((d) => d === "ganho").length;
+        const conversion = Number(percentual(closed, clientes.length).toFixed(1));
         const lateTasks = tarefas.filter(
             (task) =>
-                getTaskSituation(
-                    task.data_vencimento,
-                    nowRef,
-                    resolveTaskExecutionStatus(task),
-                ) === "atrasada",
+                getTaskSituation(task.data_vencimento, nowRef, resolveTaskExecutionStatus(task)) === "atrasada",
         ).length;
         const todayTasks = tarefas.filter((task) => {
+            if (task.concluido) return false;
             const due = toSafeDayjs(task.data_vencimento);
-            return due ? due.isSame(nowDate, "day") : false;
+            return due ? due.isSame(nowRef, "day") : false;
         }).length;
 
         return {
@@ -147,14 +158,18 @@ export const InsightsPanelPage = () => {
             todayTasks,
             totalClientes: clientes.length,
         };
-    }, [clientes, tarefas]);
+    }, [clientes, etapasPorId, tarefas]);
 
-    const ownerPerformance = useMemo(() => buildOwnerPerformance(clientes).slice(0, 8), [clientes]);
+    const ownerPerformance = useMemo(
+        () => buildOwnerPerformance(clientes, etapasPorId).slice(0, 8),
+        [clientes, etapasPorId],
+    );
 
     const upcomingTasks = useMemo(() => {
         const now = new Date();
         return tarefas
             .filter((task) => {
+                if (task.concluido) return false;
                 const due = toSafeDayjs(task.data_vencimento);
                 return due ? due.isAfter(now) : false;
             })
