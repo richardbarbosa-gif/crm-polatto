@@ -167,7 +167,7 @@ export const ListView: React.FC<ListViewProps> = ({
 
         Modal.confirm({
             title: `Excluir ${ids.length} lead(s) selecionado(s)?`,
-            content: "Esta ação é permanente e não pode ser desfeita.",
+            content: "Os negócios saem do funil e dos relatórios. O histórico é preservado no banco e um administrador pode restaurá-los.",
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
