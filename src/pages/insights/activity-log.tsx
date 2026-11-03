@@ -99,7 +99,7 @@ export const InsightsActivityLogPage = () => {
         const statusRows: LogRow[] = historyItems.map((item) => {
             const clienteLabel = item.cliente_id
                 ? clienteNames.get(String(item.cliente_id)) || `Cliente #${item.cliente_id}`
-                : "Lead sem referencia";
+                : "Lead sem referência";
             return {
                 key: `status-${item.id}`,
                 date: item.movido_em,
@@ -144,7 +144,7 @@ export const InsightsActivityLogPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Registro de atividades"
-                subtitle="Auditoria de alteracoes no funil e eventos operacionais."
+                subtitle="Auditoria de alterações no funil e eventos operacionais."
                 extra={
                     <Space wrap>
                         <Select
@@ -197,7 +197,7 @@ export const InsightsActivityLogPage = () => {
                     type="warning"
                     showIcon
                     style={{ marginBottom: 12 }}
-                    message="Nao foi possivel consultar o historico de status."
+                    message="Não foi possível consultar o histórico de etapas."
                     description={
                         historyError?.message ||
                         "Verifique se a tabela cliente_status_history existe no banco."
@@ -210,7 +210,7 @@ export const InsightsActivityLogPage = () => {
                     type="info"
                     showIcon
                     style={{ marginBottom: 12 }}
-                    message="Historico de etapas ainda nao configurado no banco."
+                    message="Histórico de etapas ainda não configurado no banco."
                     description="Enquanto isso, o registro segue mostrando os eventos de atividades."
                 />
             ) : null}
@@ -235,7 +235,7 @@ export const InsightsActivityLogPage = () => {
                                 render: (value?: string | null) =>
                                     toSafeDayjs(value)?.format("DD/MM/YYYY HH:mm") || "-",
                             },
-                            { title: "Usuario", dataIndex: "user", width: 180 },
+                            { title: "Usuário", dataIndex: "user", width: 180 },
                             { title: "Tipo", dataIndex: "objectType", width: 100 },
                             {
                                 title: "Objeto",

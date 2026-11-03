@@ -115,7 +115,7 @@ export const InsightsROIPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="ROI Comercial"
-                subtitle="Modelo de retorno baseado no volume de leads e esforco operacional."
+                subtitle="Modelo de retorno baseado no volume de leads e esforço operacional."
                 extra={
                     <Space wrap>
                         <Select
@@ -166,7 +166,7 @@ export const InsightsROIPage = () => {
 
             <IntroCard
                 title="ROI orientado por dados do CRM"
-                description="Ajuste o custo por lead e por atividade para simular diferentes cenarios de operacao."
+                description="Ajuste o custo por lead e por atividade para simular diferentes cenários de operação."
             />
 
             <Row gutter={[12, 12]}>
@@ -187,7 +187,7 @@ export const InsightsROIPage = () => {
                         prefix={<DollarCircleOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         valueStyle={{ color: "#166534" }}
-                        subtitle="Valor fechado no periodo"
+                        subtitle="Valor ganho no período (leads criados no período)"
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
@@ -198,12 +198,12 @@ export const InsightsROIPage = () => {
                         prefix={<RiseOutlined style={{ color: "#2563eb" }} />}
                         accentColor="#2563eb"
                         valueStyle={{ color: roi.roiPercent >= 0 ? "#1d4ed8" : "#b91c1c" }}
-                        subtitle={roi.roiPercent >= 0 ? "Operacao positiva" : "Ajustar custo de aquisicao"}
+                        subtitle={roi.roiPercent >= 0 ? "Operação positiva" : "Ajustar custo de aquisição"}
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
-                        title="Retorno medio por ganho"
+                        title="Retorno médio por ganho"
                         value={roi.retornoMedio}
                         prefix={<ExperimentOutlined style={{ color: "#f97316" }} />}
                         accentColor="#f97316"
@@ -215,9 +215,9 @@ export const InsightsROIPage = () => {
 
             <Row gutter={[12, 12]} style={{ marginTop: 12 }}>
                 <Col xs={24} xl={10}>
-                    <Card title="Formula aplicada">
+                    <Card title="Fórmula aplicada">
                         <Typography.Paragraph>
-                            <Typography.Text strong>Investimento:</Typography.Text> Leads no periodo
+                            <Typography.Text strong>Investimento:</Typography.Text> Leads no período
                             x custo por lead + atividades x custo por atividade.
                         </Typography.Paragraph>
                         <Typography.Paragraph>

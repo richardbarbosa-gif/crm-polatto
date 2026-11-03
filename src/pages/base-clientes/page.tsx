@@ -191,7 +191,7 @@ export const BaseClientesPage = () => {
         }
 
         if (!navigator?.clipboard) {
-            message.error("Area de transferencia indisponivel neste navegador.");
+            message.error("Área de transferência indisponível neste navegador.");
             return;
         }
 
@@ -199,7 +199,7 @@ export const BaseClientesPage = () => {
             await navigator.clipboard.writeText(contato);
             message.success("Contato copiado.");
         } catch {
-            message.error("Nao foi possivel copiar o contato.");
+            message.error("Não foi possível copiar o contato.");
         }
     };
 
@@ -252,7 +252,7 @@ export const BaseClientesPage = () => {
             ),
         },
         {
-            title: "Cidade / Endereco",
+            title: "Cidade / Endereço",
             dataIndex: "endereco_instalacao",
             key: "endereco_instalacao",
             render: (value) => value || "-",
@@ -264,7 +264,7 @@ export const BaseClientesPage = () => {
                 formatCurrencyBRL(valorDoLead(record), "--"),
         },
         {
-            title: "Responsavel",
+            title: "Responsável",
             dataIndex: "responsavel",
             key: "responsavel",
             render: (value) => value || "-",
@@ -276,7 +276,7 @@ export const BaseClientesPage = () => {
             render: (value) => formatDateBR(value, "-"),
         },
         {
-            title: "Acoes",
+            title: "Ações",
             key: "acoes",
             render: (_, record) => (
                 <Space wrap className="crm-base-table-actions">
@@ -351,10 +351,10 @@ export const BaseClientesPage = () => {
                     subtitle="Soma dos clientes listados"
                 />
                 <StatCard
-                    title="Ticket medio"
+                    title="Ticket médio"
                     value={ticketMedio === null ? "--" : formatCurrencyBRL(ticketMedio, "--")}
                     accentColor="#ed8936"
-                    subtitle="Receita media por cliente"
+                    subtitle="Receita média por cliente"
                 />
             </div>
 
@@ -369,7 +369,7 @@ export const BaseClientesPage = () => {
                     />
                     <div className="crm-toolbar-group">
                         <Select
-                            placeholder="Responsavel"
+                            placeholder="Responsável"
                             allowClear
                             style={{ width: 200 }}
                             value={responsavelFiltro}
@@ -394,7 +394,7 @@ export const BaseClientesPage = () => {
                 <Alert
                     type="error"
                     showIcon
-                    message="Nao foi possivel carregar a base de clientes."
+                    message="Não foi possível carregar a base de clientes."
                     description={errorMessage}
                     action={
                         <Button

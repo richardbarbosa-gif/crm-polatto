@@ -208,7 +208,7 @@ export const InsightsPanelPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Painel de Insights"
-                subtitle="Visao executiva de desempenho comercial, atividades e previsibilidade."
+                subtitle="Visão executiva de desempenho comercial, atividades e previsibilidade."
                 extra={
                     <Space wrap>
                         <Button onClick={() => navigate("/insights/roi")}>ROI</Button>
@@ -221,8 +221,8 @@ export const InsightsPanelPage = () => {
             />
 
             <IntroCard
-                title="Diagnostico comercial em tempo real"
-                description="Acompanhe ROI, ritmo de atividades, ganhos/perdas e evolucao do time sem sair do CRM."
+                title="Diagnóstico comercial em tempo real"
+                description="Acompanhe ROI, ritmo de atividades, ganhos/perdas e evolução do time sem sair do CRM."
             />
 
             <Row gutter={[12, 12]}>
@@ -238,17 +238,17 @@ export const InsightsPanelPage = () => {
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
-                        title="Fechado no mes"
+                        title="Ganho no mês"
                         value={metrics.closedThisMonthValue}
                         prefix={<FlagOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         valueStyle={{ color: "#166534" }}
-                        subtitle="Volume de ganhos do mes atual"
+                        subtitle="Negócios ganhos com fechamento neste mês"
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
-                        title="Conversao geral"
+                        title="Conversão geral"
                         value={metrics.conversion}
                         suffix="%"
                         prefix={<TeamOutlined style={{ color: "#e67e22" }} />}
@@ -289,7 +289,7 @@ export const InsightsPanelPage = () => {
                                 { title: "Ativos", dataIndex: "ativos", width: 72 },
                                 { title: "Ganhos", dataIndex: "ganhos", width: 82 },
                                 {
-                                    title: "Conversao",
+                                    title: "Conversão",
                                     width: 170,
                                     render: (_, record: { ganhos: number; perdas: number }) => {
                                         const base = record.ganhos + record.perdas;
@@ -315,7 +315,7 @@ export const InsightsPanelPage = () => {
                 </Col>
 
                 <Col xs={24} xl={8}>
-                    <Card title="Proximas atividades">
+                    <Card title="Próximas atividades">
                         {upcomingTasks.length === 0 ? (
                             <EmptyState
                                 title="Sem atividades futuras"
@@ -384,7 +384,7 @@ export const InsightsPanelPage = () => {
                             render: (value?: string | null) =>
                                 toSafeDayjs(value)?.format("DD/MM/YYYY HH:mm") || "-",
                         },
-                        { title: "Usuario", dataIndex: "user", width: 180 },
+                        { title: "Usuário", dataIndex: "user", width: 180 },
                         { title: "Objeto", dataIndex: "object", width: 100 },
                         { title: "Evento", dataIndex: "event" },
                         { title: "Antes", dataIndex: "before", width: 160 },

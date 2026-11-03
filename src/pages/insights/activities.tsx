@@ -38,7 +38,7 @@ const PERIOD_OPTIONS = [
 const TYPE_OPTIONS = [
     { value: "todos", label: "Todos os tipos" },
     { value: "visita", label: "Visitas" },
-    { value: "ligacao", label: "Ligacoes" },
+    { value: "ligacao", label: "Ligações" },
     { value: "whatsapp", label: "WhatsApp" },
     { value: "email", label: "Email" },
 ];
@@ -73,7 +73,7 @@ const getSituationTag = (
     if (situation === "atrasada") return <Tag color="red">Atrasada</Tag>;
     if (situation === "tratada") return <Tag color="green">Tratada</Tag>;
     if (situation === "hoje") return <Tag color="blue">Hoje</Tag>;
-    if (situation === "proxima") return <Tag color="gold">Proxima</Tag>;
+    if (situation === "proxima") return <Tag color="gold">Próxima</Tag>;
     return <Tag>Pendente</Tag>;
 };
 
@@ -241,7 +241,7 @@ export const InsightsActivitiesPage = () => {
                 {filteredTasks.length === 0 ? (
                     <EmptyState
                         title="Nenhuma atividade encontrada"
-                        description="Ajuste filtros ou lance novas tarefas para alimentar o relatorio."
+                        description="Ajuste os filtros ou registre novas tarefas para alimentar o relatório."
                     />
                 ) : (
                     <Table
@@ -261,7 +261,7 @@ export const InsightsActivitiesPage = () => {
                                 title: "Atividade",
                                 dataIndex: "titulo",
                                 render: (value?: string | null) => (
-                                    <Typography.Text strong>{value || "Sem titulo"}</Typography.Text>
+                                    <Typography.Text strong>{value || "Sem título"}</Typography.Text>
                                 ),
                             },
                             {

@@ -138,7 +138,7 @@ export const InsightsGainsLossesPage = () => {
         <div style={{ padding: 20 }}>
             <InsightsHeader
                 title="Ganhos e perdas"
-                subtitle="Leia a saude de fechamento por volume, valor e ritmo de conversao."
+                subtitle="Leia a saúde de fechamento por volume, valor e ritmo de conversão."
                 extra={
                     <Space wrap>
                         <Select
@@ -262,7 +262,7 @@ export const InsightsGainsLossesPage = () => {
                     <Card title="Motivos de perda">
                         {topLossReasons.length === 0 ? (
                             <EmptyState
-                                title="Sem perdas no periodo"
+                                title="Sem perdas no período"
                                 description="Otimo sinal. Continue registrando os motivos para manter inteligencia de funil."
                             />
                         ) : (

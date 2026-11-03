@@ -31,7 +31,7 @@ export const ClienteShow = () => {
                     type="warning"
                     showIcon
                     message="Acesso restrito"
-                    description="Este lead nao esta vinculado ao seu usuario."
+                    description="Este lead não está vinculado ao seu usuário."
                 />
             ) : (
                 <LeadDetails
