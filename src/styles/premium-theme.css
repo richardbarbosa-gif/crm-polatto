@@ -2188,3 +2188,15 @@ html[data-theme="dark"] .ant-layout:not(:has(.ant-layout-sider)) h3.ant-typograp
     font-weight: 600;
     letter-spacing: 0.01em;
 }
+
+/* Últimos leads do dashboard: linha clicável acessível por teclado */
+.crm-dashboard-recent-lead {
+  transition: background 0.15s;
+  font: inherit;
+  color: inherit;
+}
+.crm-dashboard-recent-lead:hover,
+.crm-dashboard-recent-lead:focus-visible {
+  background: var(--crm-surface-2) !important;
+  outline: none;
+}
