@@ -27,6 +27,21 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- A requisição veio da API pública (PostgREST com JWT anon/authenticated)?
+-- Falso no SQL Editor, em service_role e em jobs agendados — os contextos
+-- administrativos em que informar o tenant explicitamente é legítimo.
+-- (Também definida na migration 10, que é quem a introduz em produção.)
+-- ---------------------------------------------------------------------
+create or replace function public.requisicao_api_publica()
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+    select coalesce(auth.jwt() ->> 'role', '') in ('anon', 'authenticated');
+$$;
+
+-- ---------------------------------------------------------------------
 -- Conversor numérico seguro: aceita numeric, "1234.56", "1.234,56",
 -- "R$ 1.234,56" — retorna null em vez de abortar quando não parseável.
 -- Usado na migração de dados e na view de compatibilidade.
@@ -738,6 +753,13 @@ begin
     -- IGNORA a RLS de negocios/pessoas/organizacoes — vazaria dados entre
     -- tenants. Com security_invoker=on, a RLS do usuário logado é aplicada.
     execute 'alter view public.clientes set (security_invoker = on)';
+
+    -- O Supabase concede tudo em objeto novo do schema public também ao
+    -- role anon. A view tem triggers INSTEAD OF (SECURITY DEFINER), então
+    -- a chave pública não pode nem tentar escrever nela.
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        execute 'revoke all on public.clientes from anon';
+    end if;
 end $$;
 
 -- Triggers INSTEAD OF para a view (só se clientes for view)
@@ -754,9 +776,22 @@ declare
     v_negocio_id uuid;
     v_digits text;
 begin
-    v_tenant := coalesce(new.tenant_id, public.current_tenant_id());
+    -- SEGURANÇA (migration 10): o tenant vem do VÍNCULO do usuário, nunca do
+    -- payload. Esta função é SECURITY DEFINER e ignora a RLS: com o antigo
+    -- coalesce(new.tenant_id, ...) um anônimo (ou usuário sem vínculo)
+    -- gravava leads em qualquer tenant, e um usuário logado ligava o próprio
+    -- negócio ao contato/organização de outro tenant pela busca de duplicata.
+    -- Só superadmin ou contexto administrativo (SQL Editor, service_role,
+    -- cron) pode informar o tenant explicitamente.
+    v_tenant := public.current_tenant_id();
     if v_tenant is null then
-        raise exception 'tenant_id não pôde ser resolvido para o insert em clientes.';
+        if new.tenant_id is not null
+           and (public.is_system_admin() or not public.requisicao_api_publica()) then
+            v_tenant := new.tenant_id;
+        else
+            raise exception 'tenant_id não pôde ser resolvido para o insert em clientes.'
+                using errcode = '42501';
+        end if;
     end if;
 
     v_digits := regexp_replace(coalesce(new.cpf_cnpj, ''), '\D', '', 'g');
@@ -845,6 +880,17 @@ begin
     -- garante que nenhum caminho futuro permita editar negócio de outro tenant.
     if v_tenant is null or not public.tenant_filter(v_tenant) then
         raise exception 'Registro fora do seu tenant.' using errcode = '42501';
+    end if;
+
+    -- SEGURANÇA (migration 10): o contato principal precisa ser do MESMO
+    -- tenant do negócio. Sem isto, um negócio apontado para a pessoa de
+    -- outro tenant faria o fork-on-write abaixo COPIAR o CPF/cargo/campos
+    -- dela para cá, ou o update gravar por cima dela (tudo como definer).
+    if v_pessoa_id is not null and not exists (
+        select 1 from public.pessoas p
+        where p.id = v_pessoa_id and p.tenant_id = v_tenant
+    ) then
+        v_pessoa_id := null;
     end if;
 
     -- FORK-ON-WRITE: a mesma pessoa pode estar em vários negócios (é o

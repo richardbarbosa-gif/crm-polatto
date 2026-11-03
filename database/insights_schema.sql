@@ -1,3 +1,19 @@
+-- =====================================================================
+-- ARQUIVO OBSOLETO — NÃO EXECUTAR. Mantido só como histórico.
+--
+-- Rodar isto num banco migrado REABRE vazamento entre empresas: recria
+-- policies using(true), policies de Storage sem prefixo de tenant e/ou
+-- permite que o usuário se vincule a qualquer empresa (com e-mail de admin
+-- fixo no código). O schema vigente está em database/migrations/ (ver o
+-- README de lá). Se este script já rodou em produção, a migration 10
+-- (2026-11-02_10_hardening_seguranca.sql) desfaz o estrago.
+--
+-- As linhas abaixo abortam a execução de propósito, tanto no psql quanto no
+-- SQL Editor do Supabase (onde o "\set" já é erro de sintaxe e nada roda).
+-- =====================================================================
+\set ON_ERROR_STOP on
+do $$ begin raise exception 'Script obsoleto e inseguro: use database/migrations/ (ver README).'; end $$;
+
 -- Execute this script in the Supabase SQL Editor.
 -- It creates the tables used by:
 -- - /insights/employees

@@ -81,6 +81,16 @@ $$;
 
 alter table storage.objects enable row level security;
 
+-- storage.buckets (configuração do bucket: público/privado, limites)
+create table if not exists storage.buckets (
+    id text primary key,
+    name text not null,
+    public boolean default false,
+    file_size_limit bigint,
+    allowed_mime_types text[],
+    created_at timestamptz default now()
+);
+
 grant usage on schema public, auth, storage to anon, authenticated, service_role;
 grant all on all tables in schema public to anon, authenticated, service_role;
 grant all on all tables in schema storage to anon, authenticated, service_role;
