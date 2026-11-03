@@ -67,9 +67,9 @@ export const matchesLeadOwner = (
 
 export const useCrmAccess = () => {
     const tenant = useTenant();
-    const identityResult = useGetIdentity<IdentityRecord>() as any;
-    const identity = (identityResult?.data || null) as IdentityRecord | null;
-    const isIdentityLoading = Boolean(identityResult?.isLoading);
+    const identityResult = useGetIdentity<IdentityRecord>();
+    const identity = identityResult.data ?? null;
+    const isIdentityLoading = Boolean(identityResult.isLoading);
 
     const [employee, setEmployee] = useState<CrmEmployee | null>(null);
     const [employeeError, setEmployeeError] = useState<string | null>(null);

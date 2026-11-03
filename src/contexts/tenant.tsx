@@ -135,9 +135,9 @@ const checkIsSystemAdmin = async (email?: string | null): Promise<boolean> => {
 type TenantProviderProps = { children: React.ReactNode };
 
 export const TenantProvider = ({ children }: TenantProviderProps) => {
-    const identityResult = useGetIdentity<IdentityRecord>() as any;
-    const identity = (identityResult?.data || null) as IdentityRecord | null;
-    const isIdentityLoading = Boolean(identityResult?.isLoading);
+    const identityResult = useGetIdentity<IdentityRecord>();
+    const identity = identityResult.data ?? null;
+    const isIdentityLoading = Boolean(identityResult.isLoading);
 
     const identityEmail = toStringValue(identity?.email)?.toLowerCase() || null;
     const identityUserId = toStringValue(identity?.id);

@@ -35,6 +35,10 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      # Falha em erro (any, variável sem uso etc.); avisos não bloqueiam.
+      - name: Lint
+        run: npm run lint
+
       - name: Testes
         run: npm test
 

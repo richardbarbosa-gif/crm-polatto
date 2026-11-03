@@ -178,9 +178,9 @@ export const InsightsEmployeesPage = () => {
                 if (p.funcionario_id) realizadoMap.set(String(p.funcionario_id), p);
             });
 
-            // Login: a RLS de utilizadores_empresas só mostra o PRÓPRIO vínculo,
-            // então a consulta não revela o login dos colegas. funcionarios.user_id
-            // (preenchido quando o login é criado) é a fonte que todos enxergam.
+            // Login: a RLS de utilizadores_empresas mostra o próprio vínculo e os
+            // da empresa ATIVA (migration 10). funcionarios.user_id (preenchido
+            // quando o login é criado) segue como fonte de reserva.
             const { data: vinculos } = await supabaseClient
                 .from("utilizadores_empresas")
                 .select("auth_uid, role");
@@ -385,15 +385,26 @@ export const InsightsEmployeesPage = () => {
                     }
                 }
 
-                // Atualiza role na utilizadores_empresas (se tem login)
-                if (editingEmployee!.has_login && values.role) {
-                    await supabaseClient
+                // Atualiza role na utilizadores_empresas (se tem login e o papel mudou).
+                // A RLS só deixa o administrador da plataforma alterar vínculos:
+                // para os demais o update afeta 0 linhas sem erro, então conferimos
+                // o retorno em vez de anunciar uma mudança que não aconteceu.
+                let papelNaoAlterado = false;
+                if (editingEmployee!.has_login && values.role && values.role !== editingEmployee!.role) {
+                    const { data: alterados, error: roleError } = await supabaseClient
                         .from("utilizadores_empresas")
                         .update({ role: values.role })
-                        .eq("auth_uid", editingEmployee!.id);
+                        .eq("auth_uid", editingEmployee!.id)
+                        .select("auth_uid");
+                    papelNaoAlterado = Boolean(roleError) || !alterados?.length;
                 }
 
                 message.success("Membro atualizado.");
+                if (papelNaoAlterado) {
+                    message.warning(
+                        "O nível de acesso ao CRM não foi alterado: só o administrador da plataforma muda permissões.",
+                    );
+                }
             }
 
             setIsModalOpen(false);

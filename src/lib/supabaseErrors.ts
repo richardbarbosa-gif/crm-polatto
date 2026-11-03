@@ -1,7 +1,14 @@
-export const isSupabaseMissingRelation = (error: any): boolean => {
-    if (!error) {
+/** Forma mínima dos erros do Supabase/PostgREST que estas funções inspecionam. */
+type ErroSupabase = { code?: unknown; statusCode?: unknown; message?: unknown; details?: unknown };
+
+const comoErro = (error: unknown): ErroSupabase =>
+    error && typeof error === "object" ? (error as ErroSupabase) : {};
+
+export const isSupabaseMissingRelation = (erro: unknown): boolean => {
+    if (!erro) {
         return false;
     }
+    const error = comoErro(erro);
 
     const message = String(error?.message || error?.details || "").toLowerCase();
 
@@ -14,19 +21,21 @@ export const isSupabaseMissingRelation = (error: any): boolean => {
     );
 };
 
-export const isSupabaseMissingColumn = (error: any): boolean => {
-    if (!error) {
+export const isSupabaseMissingColumn = (erro: unknown): boolean => {
+    if (!erro) {
         return false;
     }
+    const error = comoErro(erro);
 
     const message = String(error?.message || error?.details || "").toLowerCase();
     return error?.code === "42703" || (message.includes("column") && message.includes("does not exist"));
 };
 
-export const isSupabasePolicyRecursion = (error: any): boolean => {
-    if (!error) {
+export const isSupabasePolicyRecursion = (erro: unknown): boolean => {
+    if (!erro) {
         return false;
     }
+    const error = comoErro(erro);
 
     const message = String(error?.message || error?.details || "").toLowerCase();
 
@@ -37,10 +46,11 @@ export const isSupabasePolicyRecursion = (error: any): boolean => {
     );
 };
 
-export const getSupabaseErrorMessage = (error: any): string => {
-    if (!error) {
+export const getSupabaseErrorMessage = (erro: unknown): string => {
+    if (!erro) {
         return "";
     }
+    const error = comoErro(erro);
 
     const message = String(error?.message || "").trim();
     const details = String(error?.details || "").trim();
