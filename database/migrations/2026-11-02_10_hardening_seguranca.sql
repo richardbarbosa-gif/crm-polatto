@@ -857,10 +857,77 @@ end $$;
 -- Escrita direta fica só com o superadmin (system_admins); o resto passa
 -- pelas funções SECURITY DEFINER (provisionar_tenant, criar_usuario_equipe).
 -- ---------------------------------------------------------------------
+--
+-- Leitura (ajuste da revisão final): o membro lê os vínculos do tenant
+-- ATIVO (a tela de equipe precisa saber quem tem login) e o nome de TODAS
+-- as empresas às quais pertence (o seletor do topo lista todas). Antes só
+-- a própria linha e só a empresa ativa: quem tinha 2 empresas via 1 nome.
+-- Sem recursão de RLS: current_tenant_id() e membro_do_tenant() são
+-- SECURITY DEFINER do dono da tabela.
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_col text;
+begin
+    select column_name into v_col
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'utilizadores_empresas'
+      and column_name in ('empresa_id', 'tenant_id', 'company_id', 'id_empresa')
+    order by array_position(array['empresa_id', 'tenant_id', 'company_id', 'id_empresa'], column_name)
+    limit 1;
+
+    if v_col is null then
+        create or replace function public.membro_do_tenant(p_tenant_id uuid)
+        returns boolean language sql stable security definer set search_path = public
+        as 'select false';
+    else
+        execute format($fn$
+            create or replace function public.membro_do_tenant(p_tenant_id uuid)
+            returns boolean
+            language sql
+            stable
+            security definer
+            set search_path = public
+            as $body$
+                select auth.uid() is not null
+                   and p_tenant_id is not null
+                   and exists (
+                       select 1 from public.utilizadores_empresas ue
+                       where ue.auth_uid = auth.uid()
+                         and ue.%I::uuid = p_tenant_id
+                   );
+            $body$;
+        $fn$, v_col);
+    end if;
+
+    revoke execute on function public.membro_do_tenant(uuid) from public;
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        revoke execute on function public.membro_do_tenant(uuid) from anon;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function public.membro_do_tenant(uuid) to authenticated;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'service_role') then
+        grant execute on function public.membro_do_tenant(uuid) to service_role;
+    end if;
+end $$;
+
+comment on function public.membro_do_tenant(uuid) is 'O usuário autenticado tem vínculo com o tenant informado (usado pela policy de empresas: o seletor lista todas as empresas do usuário).';
+
 do $$
 declare
     r record;
+    v_col text;
 begin
+    select column_name into v_col
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'utilizadores_empresas'
+      and column_name in ('empresa_id', 'tenant_id', 'company_id', 'id_empresa')
+    order by array_position(array['empresa_id', 'tenant_id', 'company_id', 'id_empresa'], column_name)
+    limit 1;
+
     if to_regclass('public.utilizadores_empresas') is not null then
         alter table public.utilizadores_empresas enable row level security;
 
@@ -871,9 +938,19 @@ begin
         drop policy if exists ue_admin_only_all on public.utilizadores_empresas;
 
         drop policy if exists utilizadores_empresas_proprio on public.utilizadores_empresas;
-        create policy utilizadores_empresas_proprio on public.utilizadores_empresas
-            for select to authenticated
-            using (auth_uid = auth.uid() or public.is_system_admin());
+        if v_col is null then
+            create policy utilizadores_empresas_proprio on public.utilizadores_empresas
+                for select to authenticated
+                using (auth_uid = auth.uid() or public.is_system_admin());
+        else
+            execute format(
+                'create policy utilizadores_empresas_proprio on public.utilizadores_empresas
+                    for select to authenticated
+                    using (auth_uid = auth.uid() or public.is_system_admin()
+                           or %I::uuid = public.current_tenant_id())',
+                v_col
+            );
+        end if;
 
         drop policy if exists utilizadores_empresas_superadmin_escrita on public.utilizadores_empresas;
         create policy utilizadores_empresas_superadmin_escrita on public.utilizadores_empresas
@@ -897,7 +974,7 @@ begin
         drop policy if exists empresas_proprio_tenant on public.empresas;
         create policy empresas_proprio_tenant on public.empresas
             for select to authenticated
-            using (id = public.current_tenant_id() or public.is_system_admin());
+            using (public.membro_do_tenant(id) or public.is_system_admin());
     end if;
 end $$;
 

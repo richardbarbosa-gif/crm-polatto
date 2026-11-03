@@ -710,7 +710,9 @@ begin
     end;
     update public.utilizadores_empresas set empresa_id = v_tenant_b, role = 'admin' where auth_uid = v_user_a;
     get diagnostics v_afetados = row_count;
-    select count(*) into v_proprios from public.utilizadores_empresas;
+    -- só a linha do próprio usuário: colegas do mesmo tenant também são
+    -- visíveis (tela de equipe), o que o H17 cobre separadamente
+    select count(*) into v_proprios from public.utilizadores_empresas where auth_uid = v_user_a;
     perform public.login_admin();
 
     perform public.assert(v_insert_bloqueado, 'H13a: usuário não se vincula a empresa alheia');
@@ -957,6 +959,62 @@ begin
         raise notice 'Críticos: %', v_detalhe;
     end if;
     perform public.assert(v_criticos = 0, 'H16: relatorio_rls() sem problema CRÍTICO após a migration 10');
+end $$;
+
+-- ---------------------------------------------------------------------
+-- H17 — seletor de empresa e tela de equipe enxergam o que precisam,
+-- e só isso. A policy antiga de empresas liberava só o tenant ATIVO (o
+-- seletor de quem tem 2 empresas mostrava 1 nome) e a de vínculos só a
+-- linha do próprio usuário (a equipe não sabia quem tem login).
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_multi uuid := (select valor from crm_teste.ctx where chave = 'multi_user');
+    v_emp1 uuid := (select valor from crm_teste.ctx where chave = 'multi_emp1');
+    v_emp2 uuid := (select valor from crm_teste.ctx where chave = 'multi_emp2');
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_tenant_b uuid := (select valor from crm_teste.ctx where chave = 'tenant_b');
+    v_user_a uuid := (select valor from crm_teste.ctx where chave = 'user_a');
+    v_vendedor uuid := (select valor from crm_teste.ctx where chave = 'vendedor_a');
+    v_nomes_multi bigint;
+    v_alheias_multi bigint;
+    v_colegas_a bigint;
+    v_vinculos_b bigint;
+    v_vinculos_b_forjado bigint;
+    v_empresa_b_forjado bigint;
+    v_vinculos_anon bigint;
+    v_empresas_anon bigint;
+begin
+    -- (b) quem tem duas empresas lê o nome das duas, com qualquer uma ativa
+    perform public.login_como(v_multi, 'multi@teste.com', v_emp1);
+    select count(*) into v_nomes_multi from public.empresas where id in (v_emp1, v_emp2);
+    select count(*) into v_alheias_multi from public.empresas where id not in (v_emp1, v_emp2);
+    perform public.login_admin();
+
+    -- (b) o vendedor do A vê os vínculos da própria empresa (colegas)
+    perform public.login_como(v_vendedor, 'vendedor.comum.a@teste.com');
+    select count(*) into v_colegas_a from public.utilizadores_empresas where empresa_id = v_tenant_a;
+    -- (a) e nenhum vínculo do B, nem forjando o header para o B
+    select count(*) into v_vinculos_b from public.utilizadores_empresas where empresa_id = v_tenant_b;
+    perform public.login_admin();
+    perform public.login_como(v_vendedor, 'vendedor.comum.a@teste.com', v_tenant_b);
+    select count(*) into v_vinculos_b_forjado from public.utilizadores_empresas where empresa_id = v_tenant_b;
+    select count(*) into v_empresa_b_forjado from public.empresas where id = v_tenant_b;
+    perform public.login_admin();
+
+    -- (a) a chave pública não lê nada
+    perform public.login_anon();
+    select count(*) into v_vinculos_anon from public.utilizadores_empresas;
+    select count(*) into v_empresas_anon from public.empresas;
+    perform public.login_admin();
+
+    perform public.assert(v_nomes_multi = 2, 'H17b: seletor — usuário de 2 empresas lê o nome das duas');
+    perform public.assert(v_alheias_multi = 0, 'H17a: seletor — e nenhuma empresa da qual não participa');
+    perform public.assert(v_colegas_a >= 2, 'H17b: equipe — membro lê os vínculos da própria empresa (quem tem login)');
+    perform public.assert(v_vinculos_b = 0, 'H17a: equipe — membro do A não lê vínculos do B');
+    perform public.assert(v_vinculos_b_forjado = 0 and v_empresa_b_forjado = 0,
+        'H17a: header x-tenant-id forjado para o B não abre vínculos nem a empresa do B');
+    perform public.assert(v_vinculos_anon = 0 and v_empresas_anon = 0, 'H17a: anon não lê vínculos nem empresas');
 end $$;
 
 do $$
