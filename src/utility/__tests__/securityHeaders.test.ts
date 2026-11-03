@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 
@@ -58,6 +58,31 @@ describe("cabeçalhos de segurança de produção", () => {
         expect(csp["connect-src"]).toEqual(
             expect.arrayContaining(["https://*.supabase.co", "wss://*.supabase.co"]),
         );
+    });
+
+    it("CSP libera todo host externo que o código chama via fetch (ex.: ViaCEP)", () => {
+        // Varre o src/ atrás de fetch("https://host...") e exige o host no
+        // connect-src. Sem isso, uma chamada nova a API externa passa no
+        // build e só quebra em produção, bloqueada pela CSP.
+        const connect: string[] = diretivas(doServeJson()["Content-Security-Policy"])["connect-src"];
+        const liberado = (host: string) =>
+            connect.some((origem) => {
+                const padrao = origem.replace(/^https:\/\//, "");
+                return padrao.startsWith("*.") ? host.endsWith(padrao.slice(1)) : host === padrao;
+            });
+        const arquivos = (dir: string): string[] =>
+            readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+                const p = path.join(dir, e.name);
+                if (e.isDirectory()) return e.name === "__tests__" ? [] : arquivos(p);
+                return /\.(ts|tsx)$/.test(e.name) ? [p] : [];
+            });
+        const hosts = new Set<string>();
+        for (const arquivo of arquivos(path.join(raiz, "src"))) {
+            const codigo = readFileSync(arquivo, "utf8");
+            for (const m of codigo.matchAll(/fetch\(\s*[`'"]https:\/\/([a-z0-9.-]+)/gi)) hosts.add(m[1]);
+        }
+        expect(hosts.size).toBeGreaterThan(0);
+        expect([...hosts].filter((h) => !liberado(h))).toEqual([]);
     });
 
     it("demais cabeçalhos obrigatórios presentes", () => {
