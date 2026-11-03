@@ -5,6 +5,7 @@
  *
  * Consulta dos erros: select * from client_errors order by criado_em desc;
  */
+import { safeReportUrl } from "./safeReportUrl";
 import { supabaseClient } from "./supabaseClient";
 
 type ErrorOrigin = "window.onerror" | "unhandledrejection" | "error-boundary" | "manual";
@@ -47,7 +48,8 @@ export const reportError = (
             .rpc("registrar_erro_cliente", {
                 p_mensagem: message,
                 p_stack: stack,
-                p_url: window.location.href,
+                // Sem query/hash: o link de recuperação de senha traz tokens no hash
+                p_url: safeReportUrl(window.location.href),
                 p_user_agent: navigator.userAgent,
                 p_origem: origin,
                 p_contexto: context,
