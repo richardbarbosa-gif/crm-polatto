@@ -384,6 +384,95 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- O3b: salvar_orcamento() — cabeçalho e itens numa transação só
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_ta uuid := (select valor from crm_teste.ctx where chave = 'orc_ta');
+    v_v1 uuid := (select valor from crm_teste.ctx where chave = 'orc_v1');
+    v_vb uuid := (select valor from crm_teste.ctx where chave = 'orc_vb');
+    v_neg_a uuid := (select valor from crm_teste.ctx where chave = 'orc_neg_a');
+    v_prod_a uuid := (select valor from crm_teste.ctx where chave = 'orc_prod_a');
+    v_id uuid;
+    v_item_manter uuid;
+    v_orc record;
+    v_n bigint;
+    v_estado text;
+begin
+    perform public.login_como(v_v1, 'vendedor1.orc@a.com');
+    v_id := public.salvar_orcamento(
+        jsonb_build_object('negocio_id', v_neg_a, 'titulo', 'Via RPC', 'desconto_tipo', 'valor', 'desconto_valor', 50,
+                           'tenant_id', gen_random_uuid(), 'total', 1),
+        jsonb_build_array(
+            jsonb_build_object('produto_id', v_prod_a, 'descricao', '', 'quantidade', 2, 'valor_unitario', 1000),
+            jsonb_build_object('descricao', 'Mão de obra', 'unidade', 'h', 'quantidade', 4, 'valor_unitario', 125.5)
+        )
+    );
+    perform public.login_admin();
+
+    select * into v_orc from public.orcamentos where id = v_id;
+    perform public.assert(v_orc.tenant_id = v_ta and v_orc.created_by = v_v1, 'O3b: RPC cria o orçamento no tenant e com o criador do servidor');
+    perform public.assert(v_orc.subtotal = 2502.00 and v_orc.total = 2452.00, 'O3b: RPC grava itens e o banco recalcula (2.000 + 502 - 50 = 2.452)');
+    select id into v_item_manter from public.orcamento_itens where orcamento_id = v_id and ordem = 1;
+    perform public.assert(
+        (select descricao from public.orcamento_itens where id = v_item_manter) = 'Módulo fotovoltaico 550 W',
+        'O3b: item do catálogo com descrição vazia herda o nome do produto');
+
+    -- edição: mantém o 1º (quantidade nova), remove o 2º, inclui um 3º
+    perform public.login_como(v_v1, 'vendedor1.orc@a.com');
+    perform public.salvar_orcamento(
+        jsonb_build_object('id', v_id, 'titulo', 'Via RPC (rev. 2)', 'desconto_tipo', 'percentual', 'desconto_valor', 10),
+        jsonb_build_array(
+            jsonb_build_object('descricao', 'Estrutura de fixação', 'quantidade', 1, 'valor_unitario', 800),
+            jsonb_build_object('id', v_item_manter, 'produto_id', v_prod_a, 'descricao', 'Módulo fotovoltaico 550 W', 'quantidade', 3, 'valor_unitario', 1000)
+        )
+    );
+    perform public.login_admin();
+
+    select count(*) into v_n from public.orcamento_itens where orcamento_id = v_id;
+    select * into v_orc from public.orcamentos where id = v_id;
+    perform public.assert(v_n = 2, 'O3b: item que saiu da lista é removido');
+    perform public.assert(
+        (select ordem from public.orcamento_itens where id = v_item_manter) = 2
+        and (select quantidade from public.orcamento_itens where id = v_item_manter) = 3,
+        'O3b: item mantido é atualizado (quantidade e ordem) sem trocar de id');
+    perform public.assert(v_orc.subtotal = 3800.00 and v_orc.desconto_total = 380.00 and v_orc.total = 3420.00,
+        'O3b: totais recalculados após a edição (3.800 - 10% = 3.420)');
+
+    -- atomicidade: item inválido no meio derruba tudo (cabeçalho inclusive)
+    perform public.login_como(v_v1, 'vendedor1.orc@a.com');
+    v_estado := crm_teste.sqlstate_de(format(
+        $q$select public.salvar_orcamento(%L::jsonb, %L::jsonb)$q$,
+        jsonb_build_object('id', v_id, 'titulo', 'NÃO PODE GRAVAR'),
+        jsonb_build_array(
+            jsonb_build_object('descricao', 'Ok', 'quantidade', 1, 'valor_unitario', 1),
+            jsonb_build_object('descricao', 'Quantidade zero', 'quantidade', 0, 'valor_unitario', 1))));
+    perform public.login_admin();
+    perform public.assert(v_estado = '23514', 'O3b: item inválido recusa o salvamento inteiro');
+    perform public.assert((select titulo from public.orcamentos where id = v_id) = 'Via RPC (rev. 2)'
+        and (select count(*) from public.orcamento_itens where orcamento_id = v_id) = 2,
+        'O3b: nada foi gravado pela metade (cabeçalho e itens intactos)');
+
+    -- outro tenant não edita pela RPC
+    perform public.login_como(v_vb, 'vendedor.orc@b.com', v_ta);
+    v_estado := crm_teste.sqlstate_de(format(
+        $q$select public.salvar_orcamento(%L::jsonb, '[]'::jsonb)$q$, jsonb_build_object('id', v_id, 'titulo', 'invadido')));
+    perform public.assert(v_estado = 'P0002', 'O3b: tenant B não edita orçamento de A pela RPC (não encontrado)');
+    v_estado := crm_teste.sqlstate_de(format(
+        $q$select public.salvar_orcamento(%L::jsonb, '[]'::jsonb)$q$, jsonb_build_object('negocio_id', v_neg_a)));
+    perform public.assert(v_estado = '23503', 'O3b: tenant B não cria orçamento no negócio de A pela RPC');
+    perform public.login_admin();
+    perform public.assert((select count(*) from public.orcamento_itens where orcamento_id = v_id) = 2,
+        'O3b: itens de A intactos depois da tentativa de B');
+
+    perform public.assert(
+        has_function_privilege('authenticated', 'public.salvar_orcamento(jsonb, jsonb)', 'execute')
+        and not has_function_privilege('anon', 'public.salvar_orcamento(jsonb, jsonb)', 'execute')
+        and not (select prosecdef from pg_proc where oid = 'public.salvar_orcamento(jsonb, jsonb)'::regprocedure),
+        'O3b: salvar_orcamento é SECURITY INVOKER, executável só por authenticated');
+end $$;
+
+-- ---------------------------------------------------------------------
 -- O4: isolamento entre tenants
 -- ---------------------------------------------------------------------
 do $$
@@ -472,11 +561,11 @@ begin
         'O5: número do orçamento é imutável');
     perform public.login_admin();
 
-    perform public.assert(v_numero = v_ano || '-0003', 'O5: a tentativa que falhou não consumiu número (próximo = ' || v_ano || '-0003)');
+    perform public.assert(v_numero = v_ano || '-0004', 'O5: a tentativa que falhou não consumiu número (próximo = ' || v_ano || '-0004)');
     select array_agg(numero_seq order by numero_seq) into v_seqs from public.orcamentos where tenant_id = v_ta;
-    perform public.assert(v_seqs = array[1, 2, 3], 'O5: sequência do tenant A sem buraco e sem duplicata (1, 2, 3)');
+    perform public.assert(v_seqs = array[1, 2, 3, 4], 'O5: sequência do tenant A sem buraco e sem duplicata (1..4)');
     perform public.assert(
-        (select ultimo from public.orcamento_contadores where tenant_id = v_ta and ano = v_ano) = 3,
+        (select ultimo from public.orcamento_contadores where tenant_id = v_ta and ano = v_ano) = 4,
         'O5: contador do tenant A consistente com os orçamentos gravados');
 end $$;
 

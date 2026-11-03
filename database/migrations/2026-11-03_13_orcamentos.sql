@@ -771,7 +771,144 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
--- 13. STORAGE empresa-assets — logo da empresa
+-- 13. SALVAR ORÇAMENTO + ITENS NUMA TRANSAÇÃO SÓ
+-- Sem isto o frontend gravaria o cabeçalho e cada item em requisições
+-- separadas: uma queda de rede no meio deixava proposta pela metade.
+-- SECURITY INVOKER: roda com a RLS e os triggers do usuário, então não
+-- abre nada que o PostgREST já não permitisse.
+-- p_orcamento: {id?, negocio_id, titulo, status, data_emissao, valido_ate,
+--   desconto_tipo, desconto_valor, condicoes_pagamento, observacoes,
+--   responsavel_nome, responsavel_email, responsavel_telefone}
+-- p_itens: [{id?, produto_id, descricao, detalhes, unidade, quantidade,
+--   valor_unitario, desconto_tipo, desconto_valor}] — a ordem do array é a
+--   ordem no PDF; item que não vier no array é removido.
+-- ---------------------------------------------------------------------
+create or replace function public.salvar_orcamento(p_orcamento jsonb, p_itens jsonb)
+returns uuid
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+    v_id uuid := nullif(p_orcamento ->> 'id', '')::uuid;
+    v_itens jsonb := coalesce(p_itens, '[]'::jsonb);
+    v_item jsonb;
+    v_item_id uuid;
+    v_mantidos uuid[] := '{}';
+    v_ordem integer := 0;
+begin
+    if auth.uid() is null then
+        raise exception 'Sessão expirada: entre novamente.' using errcode = '42501';
+    end if;
+    if jsonb_typeof(p_orcamento) is distinct from 'object' or jsonb_typeof(v_itens) <> 'array' then
+        raise exception 'Dados do orçamento inválidos.' using errcode = '22023';
+    end if;
+    if jsonb_array_length(v_itens) > 200 then
+        raise exception 'Máximo de 200 itens por orçamento.' using errcode = '22023';
+    end if;
+
+    if v_id is null then
+        insert into public.orcamentos (
+            negocio_id, titulo, status, data_emissao, valido_ate, desconto_tipo, desconto_valor,
+            condicoes_pagamento, observacoes, responsavel_nome, responsavel_email, responsavel_telefone
+        ) values (
+            (p_orcamento ->> 'negocio_id')::uuid,
+            nullif(btrim(p_orcamento ->> 'titulo'), ''),
+            coalesce(nullif(p_orcamento ->> 'status', ''), 'rascunho'),
+            coalesce(nullif(p_orcamento ->> 'data_emissao', '')::date, (now() at time zone 'America/Sao_Paulo')::date),
+            nullif(p_orcamento ->> 'valido_ate', '')::date,
+            coalesce(nullif(p_orcamento ->> 'desconto_tipo', ''), 'valor'),
+            coalesce(nullif(p_orcamento ->> 'desconto_valor', '')::numeric, 0),
+            p_orcamento ->> 'condicoes_pagamento',
+            p_orcamento ->> 'observacoes',
+            nullif(btrim(p_orcamento ->> 'responsavel_nome'), ''),
+            nullif(btrim(p_orcamento ->> 'responsavel_email'), ''),
+            nullif(btrim(p_orcamento ->> 'responsavel_telefone'), '')
+        )
+        returning id into v_id;
+    else
+        update public.orcamentos set
+            titulo = nullif(btrim(p_orcamento ->> 'titulo'), ''),
+            data_emissao = coalesce(nullif(p_orcamento ->> 'data_emissao', '')::date, data_emissao),
+            valido_ate = coalesce(nullif(p_orcamento ->> 'valido_ate', '')::date, valido_ate),
+            desconto_tipo = coalesce(nullif(p_orcamento ->> 'desconto_tipo', ''), 'valor'),
+            desconto_valor = coalesce(nullif(p_orcamento ->> 'desconto_valor', '')::numeric, 0),
+            condicoes_pagamento = p_orcamento ->> 'condicoes_pagamento',
+            observacoes = p_orcamento ->> 'observacoes',
+            responsavel_nome = nullif(btrim(p_orcamento ->> 'responsavel_nome'), ''),
+            responsavel_email = nullif(btrim(p_orcamento ->> 'responsavel_email'), ''),
+            responsavel_telefone = nullif(btrim(p_orcamento ->> 'responsavel_telefone'), '')
+        where id = v_id and deleted_at is null;
+        if not found then
+            raise exception 'Orçamento não encontrado (ou excluído).' using errcode = 'P0002';
+        end if;
+    end if;
+
+    for v_item in select value from jsonb_array_elements(v_itens) loop
+        v_ordem := v_ordem + 1;
+        v_item_id := nullif(v_item ->> 'id', '')::uuid;
+
+        if v_item_id is not null then
+            update public.orcamento_itens set
+                produto_id = nullif(v_item ->> 'produto_id', '')::uuid,
+                descricao = coalesce(v_item ->> 'descricao', ''),
+                detalhes = nullif(btrim(v_item ->> 'detalhes'), ''),
+                unidade = coalesce(nullif(btrim(v_item ->> 'unidade'), ''), 'un'),
+                quantidade = (v_item ->> 'quantidade')::numeric,
+                valor_unitario = (v_item ->> 'valor_unitario')::numeric,
+                desconto_tipo = coalesce(nullif(v_item ->> 'desconto_tipo', ''), 'valor'),
+                desconto_valor = coalesce(nullif(v_item ->> 'desconto_valor', '')::numeric, 0),
+                ordem = v_ordem
+            where id = v_item_id and orcamento_id = v_id;
+            if not found then
+                v_item_id := null; -- id de outro orçamento: vira item novo, nunca é "puxado"
+            end if;
+        end if;
+
+        if v_item_id is null then
+            insert into public.orcamento_itens (
+                orcamento_id, produto_id, descricao, detalhes, unidade, quantidade,
+                valor_unitario, desconto_tipo, desconto_valor, ordem
+            ) values (
+                v_id,
+                nullif(v_item ->> 'produto_id', '')::uuid,
+                coalesce(v_item ->> 'descricao', ''),
+                nullif(btrim(v_item ->> 'detalhes'), ''),
+                coalesce(nullif(btrim(v_item ->> 'unidade'), ''), 'un'),
+                (v_item ->> 'quantidade')::numeric,
+                (v_item ->> 'valor_unitario')::numeric,
+                coalesce(nullif(v_item ->> 'desconto_tipo', ''), 'valor'),
+                coalesce(nullif(v_item ->> 'desconto_valor', '')::numeric, 0),
+                v_ordem
+            )
+            returning id into v_item_id;
+        end if;
+
+        v_mantidos := v_mantidos || v_item_id;
+    end loop;
+
+    delete from public.orcamento_itens
+    where orcamento_id = v_id and id <> all (v_mantidos);
+
+    return v_id;
+end;
+$$;
+
+comment on function public.salvar_orcamento(jsonb, jsonb) is 'Grava cabeçalho e itens do orçamento numa transação. SECURITY INVOKER: valem a RLS e os triggers do usuário.';
+
+do $$
+begin
+    revoke execute on function public.salvar_orcamento(jsonb, jsonb) from public;
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        revoke execute on function public.salvar_orcamento(jsonb, jsonb) from anon;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        grant execute on function public.salvar_orcamento(jsonb, jsonb) to authenticated;
+    end if;
+end $$;
+
+-- ---------------------------------------------------------------------
+-- 14. STORAGE empresa-assets — logo da empresa
 -- Caminho: <tenant_id>/logo-<timestamp>.<png|jpg|jpeg|webp>
 -- Leitura: qualquer membro do tenant (o PDF de todo vendedor leva o logo).
 -- Escrita: só gerente/admin do tenant. Extensão conferida na policy (além
