@@ -33,17 +33,27 @@ export default defineConfig({
   build: {
     // Divide dependências pesadas em chunks próprios: melhora cache do
     // navegador entre deploys e reduz o bundle inicial.
+    //
+    // Por CAMINHO do módulo, não por nome de pacote: com a forma de objeto,
+    // o Rollup >= 4.55 passou a colocar o corpo CommonJS do React
+    // (react/cjs/*) dentro do chunk "refine", criando import circular
+    // react <-> refine e tela branca ("Cannot set properties of undefined
+    // (setting 'Activity')"). Casando pelo caminho, todo arquivo do pacote
+    // vai para o chunk dele e o grafo fica acíclico.
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom", "react-router"],
-          antd: ["antd", "@ant-design/icons"],
-          refine: [
-            "@refinedev/core",
-            "@refinedev/antd",
-            "@refinedev/supabase",
-            "@refinedev/react-router",
-          ],
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler|react-router)[\\/]/.test(id)) {
+            return "react";
+          }
+          if (/[\\/]node_modules[\\/](antd|@ant-design[\\/]icons)[\\/]/.test(id)) {
+            return "antd";
+          }
+          if (/[\\/]node_modules[\\/]@refinedev[\\/](core|antd|supabase|react-router)[\\/]/.test(id)) {
+            return "refine";
+          }
+          return undefined;
         },
       },
     },
