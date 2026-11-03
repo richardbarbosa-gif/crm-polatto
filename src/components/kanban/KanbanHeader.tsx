@@ -162,7 +162,7 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
             </div>
 
             {/* Centro: KPIs inline */}
-            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+            <div className="crm-kanban-kpis" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", whiteSpace: "nowrap" }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
                     <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }} title="Soma do valor dos negócios exibidos">Valor</Text>
                     <Text style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "var(--crm-ink-900)" }}>

@@ -2200,3 +2200,16 @@ html[data-theme="dark"] .ant-layout:not(:has(.ant-layout-sider)) h3.ant-typograp
   background: var(--crm-surface-2) !important;
   outline: none;
 }
+
+/* Celular: o topo não cabe nome + e-mail + seletor + busca; o avatar basta */
+@media (max-width: 640px) {
+  .crm-topbar-user-info {
+    display: none;
+  }
+  .crm-topbar-actions {
+    gap: 6px;
+  }
+  .crm-kanban-kpis {
+    gap: 10px !important;
+  }
+}
