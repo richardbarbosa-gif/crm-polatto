@@ -18,6 +18,7 @@ import {
     indexarEtapas,
     percentual,
     resumirFunil,
+    taxaDeConversao,
     valorDoLead,
     type EtapaFunil,
     type LinhaKpi,
@@ -221,7 +222,7 @@ export const DashboardPage = () => {
                         suffix="%"
                         prefix={<RiseOutlined style={{ color: "#3b82f6" }} />}
                         accentColor="#3b82f6"
-                        subtitle={`Taxa de ganho nos decididos: ${formatPercentBR(resumo.taxaDeGanho)}%`}
+                        subtitle={`${resumo.ganhos} ganho${resumo.ganhos === 1 ? "" : "s"} de ${resumo.encerrados} encerrado${resumo.encerrados === 1 ? "" : "s"}`}
                         style={{ height: "100%" }}
                     />
                 </Col>
@@ -449,7 +450,7 @@ export const DashboardPage = () => {
                                     title: "Conversão",
                                     width: 140,
                                     render: (_, r) => (
-                                        <Progress percent={Number(percentual(r.ganhos, r.total).toFixed(0))} size="small" strokeColor="#10b981" />
+                                        <Progress percent={Number(taxaDeConversao(r.ganhos, r.perdidos).toFixed(0))} size="small" strokeColor="#10b981" />
                                     ),
                                 },
                                 {

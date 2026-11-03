@@ -26,7 +26,7 @@ import {
 import {
     classificarDesfecho,
     indexarEtapas,
-    percentual,
+    taxaDeConversao,
     valorDoLead,
     type EtapaFunil,
 } from "../../lib/pipelineMetrics";
@@ -140,7 +140,8 @@ export const InsightsPanelPage = () => {
             0,
         );
         const closed = desfechos.filter((d) => d === "ganho").length;
-        const conversion = Number(percentual(closed, clientes.length).toFixed(1));
+        const lost = desfechos.filter((d) => d === "perdido").length;
+        const conversion = Number(taxaDeConversao(closed, lost).toFixed(1));
         const lateTasks = tarefas.filter(
             (task) =>
                 getTaskSituation(task.data_vencimento, nowRef, resolveTaskExecutionStatus(task)) === "atrasada",
@@ -155,6 +156,8 @@ export const InsightsPanelPage = () => {
             pipelineValue,
             closedThisMonthValue,
             conversion,
+            ganhos: closed,
+            encerrados: closed + lost,
             lateTasks,
             todayTasks,
             totalClientes: clientes.length,
@@ -249,13 +252,13 @@ export const InsightsPanelPage = () => {
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
-                        title="Conversão geral"
+                        title="Conversão"
                         value={metrics.conversion}
                         suffix="%"
                         prefix={<TeamOutlined style={{ color: "#e67e22" }} />}
                         accentColor="#e67e22"
                         valueStyle={{ color: "#b45309" }}
-                        subtitle={`${metrics.totalClientes} oportunidades no CRM`}
+                        subtitle={`${metrics.ganhos} ganho(s) de ${metrics.encerrados} encerrado(s)`}
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>

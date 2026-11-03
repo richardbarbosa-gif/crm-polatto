@@ -171,7 +171,7 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                 </div>
                 <div style={{ width: 1, height: 16, background: "var(--crm-border)" }} />
                 <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                    <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Conv.</Text>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-400)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }} title="Taxa de conversão: dos negócios encerrados, quantos foram ganhos">Conv.</Text>
                     <Text style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Sora','Inter',sans-serif", color: "#059669" }}>
                         {kpis.taxaConversao}%
                     </Text>

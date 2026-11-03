@@ -4,6 +4,7 @@ import {
     indexarEtapas,
     percentual,
     resumirFunil,
+    taxaDeConversao,
     totaisPorEtapa,
     valorDoLead,
     type EtapaFunil,
@@ -92,13 +93,20 @@ describe("resumirFunil", () => {
         expect(resumo.temProbabilidade).toBe(true);
     });
 
-    it("conversão e taxa de ganho sem divisão por zero", () => {
+    it("conversão = ganhos ÷ encerrados (ganhos + perdidos), sem divisão por zero", () => {
         const resumo = resumirFunil(linhas, etapas);
-        expect(resumo.conversao).toBe(25);
-        expect(resumo.taxaDeGanho).toBe(75);
+        // Antes: 25% (ganhos ÷ total, contando os abertos como se fossem perda)
+        expect(resumo.conversao).toBe(75);
+        expect(resumo.encerrados).toBe(resumo.ganhos + resumo.perdidos);
         const vazio = resumirFunil([], etapas);
         expect(vazio.conversao).toBe(0);
-        expect(vazio.taxaDeGanho).toBe(0);
+        expect(vazio.encerrados).toBe(0);
+    });
+
+    it("taxaDeConversao: lead novo em aberto não derruba a taxa", () => {
+        expect(taxaDeConversao(3, 1)).toBe(75);
+        expect(taxaDeConversao(0, 0)).toBe(0);
+        expect(taxaDeConversao(5, 0)).toBe(100);
     });
 
     it("agrupa por etapa na ordem do funil", () => {

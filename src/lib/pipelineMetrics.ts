@@ -80,6 +80,17 @@ export const classificarDesfecho = (
 };
 
 /** Percentual seguro: nunca NaN nem Infinity. */
+/**
+ * Taxa de conversão do CRM (definição única, decidida em 2026-11-03):
+ * dos negócios ENCERRADOS, quantos foram ganhos.
+ *
+ * Por que não ganhos ÷ total: negócio em aberto ainda não é perda. Com a
+ * conta antiga, a taxa caía toda vez que entrava lead novo — o time que
+ * mais prospecta parecia o que menos converte.
+ */
+export const taxaDeConversao = (ganhos: number, perdidos: number): number =>
+    percentual(ganhos, ganhos + perdidos);
+
 export const percentual = (parte: number, todo: number): number => {
     if (!Number.isFinite(parte) || !Number.isFinite(todo) || todo <= 0) return 0;
     return (parte / todo) * 100;
@@ -129,10 +140,13 @@ export type ResumoFunil = {
     valorPonderado: number;
     /** Existe ao menos uma etapa com probabilidade configurada. */
     temProbabilidade: boolean;
-    /** Ganhos sobre o total de negócios (definição usada no Kanban). */
+    /**
+     * Taxa de conversão OFICIAL do CRM: ganhos ÷ (ganhos + perdidos).
+     * Mesma conta em Kanban, Dashboard, Painel e Ganhos e perdas.
+     */
     conversao: number;
-    /** Ganhos sobre negócios decididos (ganhos + perdidos). */
-    taxaDeGanho: number;
+    /** Encerrados = ganhos + perdidos (a base da conversão). */
+    encerrados: number;
     porEtapa: ResumoEtapa[];
     porResponsavel: ResumoResponsavel[];
     porTemperatura: Record<"quente" | "morno" | "frio", number>;
@@ -166,7 +180,7 @@ export const resumirFunil = (
         valorPonderado: 0,
         temProbabilidade: (etapas ?? []).some((e) => numero(e?.probabilidade) > 0),
         conversao: 0,
-        taxaDeGanho: 0,
+        encerrados: 0,
         porEtapa: [],
         porResponsavel: [],
         porTemperatura,
@@ -241,8 +255,8 @@ export const resumirFunil = (
         }
     });
 
-    resumo.conversao = percentual(resumo.ganhos, resumo.totalLeads);
-    resumo.taxaDeGanho = percentual(resumo.ganhos, resumo.ganhos + resumo.perdidos);
+    resumo.encerrados = resumo.ganhos + resumo.perdidos;
+    resumo.conversao = taxaDeConversao(resumo.ganhos, resumo.perdidos);
     resumo.porEtapa = Array.from(porEtapa.values()).sort(
         (a, b) => a.ordem - b.ordem || a.nome.localeCompare(b.nome),
     );
