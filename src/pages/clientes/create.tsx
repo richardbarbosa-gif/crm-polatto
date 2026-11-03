@@ -23,9 +23,9 @@ import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
-import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
+import { type TipoPessoa, validarTelefone } from "../../lib/documentos";
+import { CampoDocumento } from "../../components/campo-documento";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
-import { formatCpfCnpj } from "../../lib/formatters";
 import { MAX_PDF_FILE_SIZE_BYTES, uploadNewLeadDocument } from "../../lib/leadTimeline";
 import {
     buildLeadStageOptions,
@@ -120,6 +120,7 @@ export const ClienteCreate = () => {
 
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
+    const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>("pf");
     const numeroInputRef = useRef<InputRef>(null);
     const [propostaFile, setPropostaFile] = useState<File | null>(null);
     const [contaLuzFile, setContaLuzFile] = useState<File | null>(null);
@@ -290,10 +291,6 @@ export const ClienteCreate = () => {
 
     const handlePhoneChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         form.setFieldValue("telefone", formatarTelefone(event.target.value, paisSelecionado));
-    };
-
-    const handleCpfCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        form.setFieldValue("cpf_cnpj", formatCpfCnpj(event.target.value));
     };
 
     const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -471,19 +468,16 @@ export const ClienteCreate = () => {
     return (
         <Create saveButtonProps={finalSaveButtonProps} title={isEnergiaSolar ? "Novo cliente solar" : "Nova oportunidade"}>
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteCreateFormValues)}>
+                <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} />
+
                 <Row gutter={20}>
-                    <Col xs={24} lg={12}>
-                        <Form.Item label="Nome completo" name="nome" rules={[{ required: true, whitespace: true, message: "Informe o nome." }]}>
-                            <Input size="large" autoComplete="name" />
-                        </Form.Item>
-                    </Col>
-                    <Col xs={24} lg={12}>
+                    <Col xs={24}>
                         <Form.Item
-                            label="CPF ou CNPJ"
-                            name="cpf_cnpj"
-                            rules={[{ required: true, message: "Informe o CPF ou CNPJ." }, regraCpfCnpj()]}
+                            label={tipoPessoa === "pf" ? "Nome completo" : "Razão social / nome da empresa"}
+                            name="nome"
+                            rules={[{ required: true, whitespace: true, message: "Informe o nome." }]}
                         >
-                            <Input size="large" maxLength={18} placeholder="000.000.000-00 ou 00.000.000/0000-00" onChange={handleCpfCnpjChange} inputMode="numeric" />
+                            <Input size="large" autoComplete={tipoPessoa === "pf" ? "name" : "organization"} />
                         </Form.Item>
                     </Col>
                 </Row>

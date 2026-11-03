@@ -133,3 +133,25 @@ export const variantesDocumento = (valor?: string | null): string[] => {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const validarEmail = (valor?: string | null): boolean => EMAIL_RE.test((valor ?? "").trim());
+
+/** Pessoa física (CPF) ou empresa (CNPJ) — inferido do documento salvo. */
+export type TipoPessoa = "pf" | "pj";
+
+export const tipoPessoaDoDocumento = (valor?: string | null): TipoPessoa =>
+    somenteDigitos(valor).length > 11 ? "pj" : "pf";
+
+/** Máscara do documento conforme o tipo escolhido (CPF corta em 11 dígitos). */
+export const formatarDocumento = (valor: string | null | undefined, tipo: TipoPessoa): string => {
+    const digitos = somenteDigitos(valor).slice(0, tipo === "pf" ? 11 : 14);
+    if (tipo === "pf") {
+        return digitos
+            .replace(/^(\d{3})(\d)/, "$1.$2")
+            .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+            .replace(/\.(\d{3})(\d{1,2})$/, ".$1-$2");
+    }
+    return digitos
+        .replace(/^(\d{2})(\d)/, "$1.$2")
+        .replace(/^(\d{2})\.(\d{3})(\d)/, "$1.$2.$3")
+        .replace(/\.(\d{3})(\d)/, ".$1/$2")
+        .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+};

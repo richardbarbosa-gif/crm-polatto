@@ -10,8 +10,8 @@ import { useTenant } from "../../contexts/tenant";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
-import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
-import { formatCpfCnpj } from "../../lib/formatters";
+import { formatarDocumento, tipoPessoaDoDocumento, type TipoPessoa, validarTelefone } from "../../lib/documentos";
+import { CampoDocumento } from "../../components/campo-documento";
 import {
     buildLeadStageOptions,
     buildLeadStages,
@@ -46,7 +46,7 @@ type ClienteEditFormValues = {
 
 export const ClienteEdit = () => {
     const { tenantId } = useTenant();
-    const { canDeleteRecords, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
+    const { podeExcluir, canViewAllLeads, ownerDisplayName, ownerCandidatesNormalized } = useCrmAccess();
     const { isEnergiaSolar } = useTenantSegmento();
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
 
@@ -138,10 +138,14 @@ export const ClienteEdit = () => {
         }
     }, [form, leadStages, record?.stage_id, record?.status, stageOptions]);
 
+    // Tipo de cliente inferido do documento salvo (14 dígitos = empresa).
+    const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>("pf");
     useEffect(() => {
+        const tipo = tipoPessoaDoDocumento(typeof record?.cpf_cnpj === "string" ? record.cpf_cnpj : null);
+        setTipoPessoa(tipo);
         const currentDocument = form.getFieldValue("cpf_cnpj") as string | undefined;
         if (!currentDocument) return;
-        form.setFieldValue("cpf_cnpj", formatCpfCnpj(currentDocument));
+        form.setFieldValue("cpf_cnpj", formatarDocumento(currentDocument, tipo));
     }, [form, record?.cpf_cnpj]);
 
     // Carrega os valores já gravados dos campos customizados no formulário.
@@ -154,10 +158,6 @@ export const ClienteEdit = () => {
         );
         if (Object.keys(valores).length) form.setFieldValue("dados_extras", valores);
     }, [form, camposCustomizados, record?.dados_extras]);
-
-    const handleCpfCnpjChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-        form.setFieldValue("cpf_cnpj", formatCpfCnpj(event.target.value));
-    };
 
     const handleFinish = async (values: ClienteEditFormValues) => {
         const { temperature, stage_id, responsavel_id, ...payload } = values;
@@ -197,7 +197,7 @@ export const ClienteEdit = () => {
 
     if (recordError) {
         return (
-            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="error" showIcon message="Falha ao carregar o lead" description={recordError.message || "Não foi possível abrir o cadastro para edição."} />
             </Edit>
         );
@@ -205,7 +205,7 @@ export const ClienteEdit = () => {
 
     if (isRecordLoading && !record) {
         return (
-            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
                     <Spin tip="Carregando lead..." />
                 </div>
@@ -215,7 +215,7 @@ export const ClienteEdit = () => {
 
     if (!record && !isRecordLoading) {
         return (
-            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="warning" showIcon message="Lead não encontrado" description="O registro não existe, foi excluído ou você não tem permissão de acesso." />
             </Edit>
         );
@@ -223,7 +223,7 @@ export const ClienteEdit = () => {
 
     if (!canEditRecord && record) {
         return (
-            <Edit canDelete={canDeleteRecords} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="warning" showIcon message="Acesso restrito" description="Este lead não está vinculado ao seu usuário." />
             </Edit>
         );
@@ -232,7 +232,7 @@ export const ClienteEdit = () => {
     const ddi = typeof record?.ddi === "string" && record.ddi ? record.ddi : "+55";
 
     return (
-        <Edit canDelete={canDeleteRecords} saveButtonProps={saveButtonProps}>
+        <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={saveButtonProps}>
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteEditFormValues)}>
                 <Form.Item label="Nome completo" name="nome" rules={[{ required: true, whitespace: true, message: "Informe o nome do cliente." }]}>
                     <Input autoComplete="name" />
@@ -260,9 +260,7 @@ export const ClienteEdit = () => {
                     <Input inputMode="tel" autoComplete="tel" />
                 </Form.Item>
 
-                <Form.Item label="CPF ou CNPJ" name="cpf_cnpj" rules={[regraCpfCnpj()]}>
-                    <Input maxLength={18} placeholder="000.000.000-00 ou 00.000.000/0000-00" onChange={handleCpfCnpjChange} inputMode="numeric" />
-                </Form.Item>
+                <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} size="middle" />
 
                 {isEnergiaSolar ? (
                     <>
