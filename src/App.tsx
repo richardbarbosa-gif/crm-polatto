@@ -28,6 +28,7 @@ import {
     CalendarOutlined,
     ContactsOutlined,
     DashboardOutlined,
+    FileTextOutlined,
     LineChartOutlined,
     ProjectOutlined,
     RiseOutlined,
@@ -55,6 +56,7 @@ const ClienteCreate = lazy(() => import("./pages/clientes/create").then((m) => (
 const ClienteEdit = lazy(() => import("./pages/clientes/edit").then((m) => ({ default: m.ClienteEdit })));
 const ClienteShow = lazy(() => import("./pages/clientes/show").then((m) => ({ default: m.ClienteShow })));
 const AgendaPage = lazy(() => import("./pages/agenda").then((m) => ({ default: m.AgendaPage })));
+const OrcamentosPage = lazy(() => import("./pages/orcamentos").then((m) => ({ default: m.OrcamentosPage })));
 const BaseClientesPage = lazy(() => import("./pages/base-clientes").then((m) => ({ default: m.BaseClientesPage })));
 const ConfiguracoesPage = lazy(() => import("./pages/configuracoes").then((m) => ({ default: m.ConfiguracoesPage })));
 const OrganizacoesPage = lazy(() => import("./pages/organizacoes").then((m) => ({ default: m.OrganizacoesPage })));
@@ -118,6 +120,11 @@ function App() {
                                     edit: "/clientes/edit/:id",
                                     show: "/clientes/show/:id",
                                     meta: { canDelete: true, label: "Oportunidades", icon: <ProjectOutlined /> },
+                                },
+                                {
+                                    name: "orcamentos",
+                                    list: "/orcamentos",
+                                    meta: { label: "Orçamentos", icon: <FileTextOutlined /> },
                                 },
                                 {
                                     name: "agenda",
@@ -267,6 +274,7 @@ function App() {
                                             <Route path="show/:id" element={<ClienteShow />} />
                                         </Route>
                                         <Route path="/agenda" element={<AgendaPage />} />
+                                        <Route path="/orcamentos" element={<OrcamentosPage />} />
                                         <Route path="/base-clientes" element={<BaseClientesPage />} />
                                         <Route path="/organizacoes" element={<OrganizacoesPage />} />
                                         <Route path="/lixeira" element={<LixeiraPage />} />

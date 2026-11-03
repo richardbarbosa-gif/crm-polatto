@@ -1,0 +1,236 @@
+/* Módulo de orçamentos — estilos locais (tokens do premium-theme.css). */
+
+/* ---------- Editor: itens ---------- */
+.orc-itens {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.orc-item {
+    border: 1px solid var(--crm-border);
+    border-radius: 12px;
+    padding: 12px;
+    background: var(--crm-surface-1);
+}
+
+.orc-item-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.orc-item-grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 12px;
+}
+
+.orc-item-grade .ant-form-item {
+    margin-bottom: 10px;
+}
+
+.orc-item-total {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--crm-ink-900);
+}
+
+@media (min-width: 720px) {
+    .orc-item-grade {
+        grid-template-columns: minmax(0, 2.4fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+        align-items: start;
+    }
+    .orc-item-grade .orc-col-cheia {
+        grid-column: 1 / -1;
+    }
+}
+
+/* ---------- Editor: resumo de totais ---------- */
+.orc-resumo {
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: var(--crm-surface-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.orc-resumo-linha {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--crm-ink-600);
+    padding: 2px 0;
+}
+
+.orc-resumo-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--crm-border);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--crm-ink-900);
+}
+
+/* ---------- Lista de orçamentos do lead ---------- */
+.orc-lista-lead {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.orc-linha {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    padding: 12px 14px;
+    border: 1px solid var(--crm-border);
+    border-radius: 12px;
+    background: var(--crm-surface-1);
+}
+
+.orc-linha-info {
+    min-width: 0;
+    flex: 1 1 240px;
+}
+
+.orc-linha-numero {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--crm-ink-900);
+}
+
+.orc-linha-total {
+    font-weight: 700;
+    font-size: 16px;
+    font-variant-numeric: tabular-nums;
+    color: var(--crm-ink-900);
+    white-space: nowrap;
+}
+
+/* ---------- Configurações: prévia da identidade ---------- */
+/* Mede o espaço da aba (não a tela): dentro das Configurações a coluna é
+   estreita mesmo em monitor grande. */
+.orc-identidade {
+    container-type: inline-size;
+}
+
+.orc-identidade-grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+}
+
+.orc-identidade-previa {
+    order: -1;
+    max-width: 360px;
+}
+
+@container (min-width: 820px) {
+    .orc-identidade-grade {
+        grid-template-columns: minmax(0, 1fr) 300px;
+        align-items: start;
+    }
+    .orc-identidade-previa {
+        order: 0;
+        position: sticky;
+        top: 88px;
+    }
+}
+
+.orc-previa-folha {
+    background: #ffffff;
+    color: #1f2937;
+    border-radius: 10px;
+    box-shadow: var(--crm-shadow-md);
+    overflow: hidden;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    font-size: 9px;
+    line-height: 1.35;
+}
+
+.orc-previa-faixa {
+    display: flex;
+    height: 6px;
+}
+
+.orc-previa-corpo {
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.orc-previa-cabecalho {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.orc-previa-cabecalho img {
+    max-width: 120px;
+    max-height: 40px;
+    object-fit: contain;
+}
+
+.orc-previa-rotulo {
+    font-size: 7px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.orc-previa-linhas span {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: #eef1f5;
+    margin-bottom: 5px;
+}
+
+.orc-previa-total {
+    margin-left: auto;
+    border-radius: 6px;
+    padding: 7px 10px;
+    min-width: 55%;
+    display: flex;
+    justify-content: space-between;
+    font-weight: 700;
+}
+
+.orc-logo-caixa {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.orc-logo-quadro {
+    width: 160px;
+    height: 72px;
+    border: 1.5px dashed var(--crm-border);
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    background: repeating-conic-gradient(#f3f4f6 0% 25%, #ffffff 0% 50%) 50% / 16px 16px;
+    overflow: hidden;
+}
+
+.orc-logo-quadro img {
+    max-width: 92%;
+    max-height: 88%;
+    object-fit: contain;
+}

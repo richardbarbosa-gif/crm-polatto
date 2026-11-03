@@ -1,10 +1,12 @@
 import {
+    AppstoreOutlined,
     BellOutlined,
     BgColorsOutlined,
     CloseCircleOutlined,
     FormOutlined,
     FunnelPlotOutlined,
     GlobalOutlined,
+    IdcardOutlined,
     ScheduleOutlined,
     SettingOutlined,
 } from "@ant-design/icons";
@@ -13,8 +15,10 @@ import {
     CustomFieldsConfig,
     MotivosPerdaConfig,
     PipelinesConfig,
+    ProdutosConfig,
     TiposAtividadeConfig,
 } from "./crm";
+import { IdentidadePropostaConfig } from "./identidade-proposta";
 
 const { Title, Text } = Typography;
 
@@ -229,6 +233,45 @@ export const ConfiguracoesPage = () => {
                                         (Ligação, Reunião, Demo, Follow-up...).
                                     </Text>
                                     <TiposAtividadeConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "identidade-proposta",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <IdcardOutlined /> Identidade e proposta
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Identidade e proposta
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Logo, dados, cores e textos padrão que saem em todo PDF de orçamento.
+                                    </Text>
+                                    <IdentidadePropostaConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "produtos",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <AppstoreOutlined /> Produtos e serviços
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Catálogo de produtos e serviços
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Itens prontos para montar orçamentos. Mudar um preço aqui não altera
+                                        propostas já emitidas.
+                                    </Text>
+                                    <ProdutosConfig />
                                 </div>
                             ),
                         },

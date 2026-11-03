@@ -66,6 +66,49 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/05_teste_ajustes_funcionais
 echo "==> Suíte 6: papéis, exclusão, lixeira e equipe (migration 12)"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/06_teste_papeis_exclusao.sql"
 
+echo "==> Suíte 7: orçamentos (migration 13) — ataque falha, uso legítimo segue"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/07_teste_orcamentos.sql"
+
+echo "==> Suíte 7b: numeração de orçamento sob concorrência (conexões em paralelo)"
+# 4 conexões criam 25 orçamentos cada no tenant C, 1 conexão abre 25
+# transações que numeram e depois fazem ROLLBACK, e 2 conexões criam 25
+# cada no tenant D — tudo ao mesmo tempo. Esperado: C com 1..100 e D com
+# 1..50, sem buraco (os rollbacks não queimam número) e sem duplicata.
+ctx() { psql -tAq -c "select valor from crm_teste.ctx where chave = '$1'"; }
+TC="$(ctx orc_tc)"; TD="$(ctx orc_td)"
+NEG_C="$(ctx orc_neg_c)"; NEG_D="$(ctx orc_neg_d)"; AUTOR="$(ctx orc_v1)"
+inserir() {
+    for _ in $(seq 1 25); do
+        echo "insert into public.orcamentos (tenant_id, negocio_id, created_by) values ('$1', '$2', '$AUTOR');"
+    done | psql -v ON_ERROR_STOP=1 -q >/dev/null
+}
+desistir() {
+    for _ in $(seq 1 25); do
+        echo "begin; insert into public.orcamentos (tenant_id, negocio_id, created_by) values ('$1', '$2', '$AUTOR'); select pg_sleep(0.01); rollback;"
+    done | psql -v ON_ERROR_STOP=1 -q >/dev/null
+}
+pids=()
+for _ in 1 2 3 4; do inserir "$TC" "$NEG_C" & pids+=($!); done
+desistir "$TC" "$NEG_C" & pids+=($!)
+for _ in 1 2; do inserir "$TD" "$NEG_D" & pids+=($!); done
+for p in "${pids[@]}"; do
+    wait "$p" || { echo "FALHOU: conexão concorrente $p abortou"; exit 1; }
+done
+psql -v ON_ERROR_STOP=1 -q <<SQL
+do \$\$
+declare
+    v_c int[];
+    v_d int[];
+begin
+    select array_agg(numero_seq order by numero_seq) into v_c from public.orcamentos where tenant_id = '$TC';
+    select array_agg(numero_seq order by numero_seq) into v_d from public.orcamentos where tenant_id = '$TD';
+    perform public.assert(v_c = array(select generate_series(1, 100)),
+        'O9: 100 orçamentos simultâneos no tenant C numerados 1..100, sem buraco nem duplicata (25 rollbacks não queimaram número)');
+    perform public.assert(v_d = array(select generate_series(1, 50)),
+        'O9: tenant D numerado 1..50 em paralelo, independente do C');
+end \$\$;
+SQL
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

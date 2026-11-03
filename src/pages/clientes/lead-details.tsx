@@ -45,6 +45,7 @@ import {
 import { canDelete } from "../../lib/permissions";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import type { PipelineStageRecord } from "../../types/db";
+import { OrcamentosDoLead } from "../orcamentos/orcamentos-do-lead";
 
 const { Title, Text } = Typography;
 
@@ -577,6 +578,14 @@ export const LeadDetails = ({
                     </div>
                 ) : null}
             </Card>
+
+            <OrcamentosDoLead
+                lead={record}
+                onDocumentoSalvo={() => {
+                    void loadFiles();
+                    void loadTimeline();
+                }}
+            />
 
             <Card title={isEnergiaSolar ? "Arquivos do lead (PDF)" : "Documentos do lead (PDF)"}>
                 <input
