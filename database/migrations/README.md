@@ -14,6 +14,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-07-19_07_monitoramento_erros.sql` | Tabela `client_errors` + RPC `registrar_erro_cliente` usada pelo frontend |
 | `2026-07-19_08_saas_readiness.sql` | `provisionar_tenant()` (onboarding self-service), planos e limites por tenant, `vw_dashboard_kpis` |
 | `2026-07-19_09_rls_tabelas_legadas.sql` | **RLS nas tabelas legadas** (tarefas, atividades, documentos, funcionários, metas, clientes): backfill do `tenant_id` + ativação guardada |
+| `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
 
 ## Testes automatizados
 
@@ -39,6 +40,7 @@ duas suítes de asserção. Qualquer falha aborta com a descrição do teste.
 3. `select * from public.migrar_clientes_para_negocios(false);` — migra de verdade.
 4. `alter table public.clientes rename to clientes_legado;`
 5. Rodar o arquivo 01 novamente — agora ele cria a view de compatibilidade `clientes` (o frontend atual continua funcionando sem mudança).
+   Em seguida: `select * from public.religar_referencias_legadas();` (migration 11) — troca o id antigo pelo UUID do negócio em tarefas, timeline e documentos. Sem isso a agenda, a timeline e os anexos dos leads migrados somem da tela.
 6. `select public.provisionar_defaults_tenant('<tenant_id>');` para cada tenant.
 7. `select * from public.backfill_tenant_dados_legados('<tenant_id_polatto>');` — carimba tenant nos dados legados.
 8. `select * from public.backfill_tenant_legado();` seguido de

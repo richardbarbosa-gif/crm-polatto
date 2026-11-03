@@ -56,3 +56,6 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/02_teste_virada_view.sql"
 
 echo "==> Suíte 3: correções apontadas na revisão do PR #1"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/03_teste_correcoes_pr.sql"
+
+echo "==> Suíte 4: migration 11 (religar referências legadas após a virada)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/04_teste_ajustes_funcionais.sql"
