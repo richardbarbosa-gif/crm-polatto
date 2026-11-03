@@ -40,6 +40,21 @@ migration 10 por cima e prova, para cada correção, que o ataque falha **e**
 que o fluxo legítimo do app continua igual. Qualquer falha aborta com a
 descrição do teste. O CI roda tudo isso a cada push (job `database`).
 
+## Banco novo (instalação do zero)
+
+Para um projeto Supabase vazio — inclusive a reconstrução da produção de
+2026-11, que estava vazia e num schema de outra geração:
+
+1. Rodar **todas** as migrations em ordem (00 → última).
+2. `alter table public.clientes rename to clientes_legado;` (a 00 cria a tabela legada vazia).
+3. Rodar de novo a **01** e, depois, todas a partir da **10** (10, 11, 12, …). A 01
+   cria a view `clientes` do modelo novo; as demais reaplicam as travas sobre ela.
+4. `select * from public.relatorio_rls();` — nenhuma linha CRÍTICA.
+5. Quem se cadastrar pelo app cria a empresa e vira gerente (`provisionar_tenant`).
+
+O CI ensaia exatamente essa sequência (fase 2 do `run-migrations-test.sh`,
+suíte `08_teste_banco_novo.sql`).
+
 ## Sequência de virada (produção)
 
 1. Rodar 00–10 em ordem (a 10 **sempre por último**; se qualquer migration

@@ -65,3 +65,24 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/05_teste_ajustes_funcionais
 
 echo "==> Suíte 6: papéis, exclusão, lixeira e equipe (migration 12)"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/06_teste_papeis_exclusao.sql"
+
+# ---------------------------------------------------------------------
+# FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
+# 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.
+# ---------------------------------------------------------------------
+DB_NOVO="${DB}_novo"
+export PGDATABASE=postgres
+echo "==> Fase 2: banco novo '$DB_NOVO' (sequência de instalação do zero)"
+psql -q -c "drop database if exists $DB_NOVO;" >/dev/null
+psql -q -c "create database $DB_NOVO;" >/dev/null
+export PGDATABASE="$DB_NOVO"
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/tests/00_harness_supabase.sql" >/dev/null
+for f in "$REPO_DIR"/database/migrations/*.sql; do
+    psql -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>&1 || { echo "FALHOU (banco novo): $(basename "$f")"; psql -v ON_ERROR_STOP=1 -f "$f" 2>&1 | grep -E "ERROR" | head -3; exit 1; }
+done
+psql -v ON_ERROR_STOP=1 -q -c "alter table public.clientes rename to clientes_legado;" >/dev/null
+for f in "$REPO_DIR"/database/migrations/2026-07-19_01_*.sql "$REPO_DIR"/database/migrations/2026-1[1-9]-*.sql; do
+    psql -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>&1 || { echo "FALHOU (virada do banco novo): $(basename "$f")"; exit 1; }
+done
+echo "  ok — virada do banco novo concluída"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/08_teste_banco_novo.sql"
