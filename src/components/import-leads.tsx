@@ -1,238 +1,229 @@
-import React, { useState } from "react";
+import { useRef, useState } from "react";
 import { useInvalidate } from "@refinedev/core";
 import { Button, Modal, message } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import Papa from "papaparse";
 
 import { useCrmAccess } from "../hooks/useCrmAccess";
-import { supabaseClient } from "../utility"; // Importamos o cliente do Supabase diretamente
+import {
+    chavesDeIdentidade,
+    emLotesDe,
+    mapearLinha,
+    separarDuplicadasNaPlanilha,
+    type ErroDeLinha,
+    type LinhaImportada,
+} from "../lib/csvImport";
+import { variantesDocumento, variantesTelefone } from "../lib/documentos";
+import { supabaseClient } from "../utility";
+
+type Etapa = { id: string | number; nome?: string | null; pipeline_id?: string | null };
+
+/** Lotes pequenos: a lista de valores vai na URL (GET) e há limite de tamanho. */
+const LOTE_CONSULTA = 80;
+const LOTE_INSERCAO = 50;
+
+const normalizar = (v: unknown) => String(v ?? "").trim().toLowerCase();
+
+/**
+ * Já cadastrados (telefone, e-mail ou documento), em lotes. Antes as três
+ * consultas iam com TODOS os valores da planilha numa única URL; acima de
+ * algumas centenas de linhas a requisição falhava, o erro era ignorado e a
+ * deduplicação era desligada em silêncio.
+ */
+const buscarChavesExistentes = async (linhas: LinhaImportada[]): Promise<Set<string>> => {
+    const existentes = new Set<string>();
+    const telefones = Array.from(new Set(linhas.flatMap((l) => variantesTelefone(l.telefone))));
+    const emails = Array.from(new Set(linhas.map((l) => l.email?.trim()).filter((e): e is string => Boolean(e))));
+    const documentos = Array.from(new Set(linhas.flatMap((l) => variantesDocumento(l.cpf_cnpj))));
+
+    const consultar = async (coluna: "telefone" | "email" | "cpf_cnpj", valores: string[]) => {
+        for (const lote of emLotesDe(valores, LOTE_CONSULTA)) {
+            const { data, error } = await supabaseClient.from("clientes").select("telefone,email,cpf_cnpj").in(coluna, lote);
+            if (error) throw new Error(`Falha ao verificar duplicatas (${coluna}): ${error.message}`);
+            ((data ?? []) as Array<{ telefone?: string | null; email?: string | null; cpf_cnpj?: string | null }>).forEach((r) =>
+                chavesDeIdentidade({ telefone: r.telefone ?? "", email: r.email ?? null, cpf_cnpj: r.cpf_cnpj ?? null }).forEach(
+                    (chave) => existentes.add(chave),
+                ),
+            );
+        }
+    };
+
+    await consultar("telefone", telefones);
+    await consultar("email", emails);
+    await consultar("cpf_cnpj", documentos);
+    return existentes;
+};
 
 export const ImportLeadsButton = () => {
     const { tenantId, ownerDisplayName } = useCrmAccess();
     const invalidate = useInvalidate();
     const [isImporting, setIsImporting] = useState(false);
+    const inputRef = useRef<HTMLInputElement | null>(null);
+
+    const importar = async (brutas: Record<string, unknown>[]) => {
+        message.loading({ content: "Analisando planilha e checando duplicatas...", key: "import-status", duration: 0 });
+
+        // Etapas do funil para converter o texto do status em stage_id. Sem
+        // isso o lead importado nasce sem etapa e cai na coluna "Outros".
+        const { data: etapasData } = await supabaseClient
+            .from("pipeline_stages")
+            .select("id,nome,ordem,pipeline_id")
+            .order("ordem", { ascending: true });
+        const etapas = (etapasData ?? []) as Etapa[];
+        let funilAtivo: string | null = null;
+        try {
+            funilAtivo = window.localStorage.getItem(`crm_pipeline_${tenantId || "default"}`);
+        } catch {
+            funilAtivo = null;
+        }
+        const etapasDoFunil = funilAtivo ? etapas.filter((e) => e.pipeline_id === funilAtivo) : [];
+        const etapaPorNome = new Map(
+            [...etapasDoFunil, ...etapas].filter((e) => e.nome).reverse().map((e) => [normalizar(e.nome), e]),
+        );
+        const etapaPadrao = etapasDoFunil[0] ?? etapas[0];
+
+        // 1. Validação linha a linha (linha 1 é o cabeçalho)
+        const erros: ErroDeLinha[] = [];
+        const validas: LinhaImportada[] = [];
+        brutas.forEach((bruta, indice) => {
+            const resultado = mapearLinha(bruta, indice + 2);
+            if (resultado.ok) validas.push(resultado.dados);
+            else erros.push(resultado.erro);
+        });
+
+        // 2. Repetidas dentro da própria planilha
+        const { unicas, repetidas } = separarDuplicadasNaPlanilha(validas);
+
+        // 3. Já cadastradas no CRM
+        const existentes = await buscarChavesExistentes(unicas);
+        const novas = unicas.filter((l) => !chavesDeIdentidade(l).some((chave) => existentes.has(chave)));
+        const jaCadastradas = unicas.length - novas.length;
+
+        // 4. Inserção em lotes; se um lote falha, tenta linha a linha para
+        //    importar as boas e apontar exatamente quais falharam.
+        const paraInserir = (linha: LinhaImportada) => {
+            const etapa = (linha.status && etapaPorNome.get(normalizar(linha.status))) || etapaPadrao;
+            return {
+                tenant_id: tenantId || undefined,
+                nome: linha.nome,
+                email: linha.email,
+                telefone: linha.telefone,
+                cpf_cnpj: linha.cpf_cnpj,
+                responsavel: linha.responsavel || ownerDisplayName,
+                conta_energia_media: linha.conta_energia_media,
+                valor: linha.valor,
+                status: etapa?.nome || linha.status || "Novo Lead",
+                stage_id: etapa?.id ?? null,
+                ...(etapa?.pipeline_id ? { pipeline_id: etapa.pipeline_id } : {}),
+                temperatura: linha.temperatura,
+            };
+        };
+
+        let importadas = 0;
+        for (const lote of emLotesDe(novas, LOTE_INSERCAO)) {
+            const { error } = await supabaseClient.from("clientes").insert(lote.map(paraInserir));
+            if (!error) {
+                importadas += lote.length;
+                continue;
+            }
+            for (const linha of lote) {
+                const { error: erroLinha } = await supabaseClient.from("clientes").insert(paraInserir(linha));
+                if (erroLinha) erros.push({ linha: linha.linha, motivo: erroLinha.message });
+                else importadas += 1;
+            }
+        }
+
+        message.destroy("import-status");
+        erros.sort((a, b) => a.linha - b.linha);
+        const resumo = (
+            <div style={{ marginTop: 12 }}>
+                <ul style={{ background: "var(--crm-surface-2, #f1f5f9)", padding: "12px 12px 12px 28px", borderRadius: 8 }}>
+                    <li style={{ color: "#059669", fontWeight: 600 }}>{importadas} leads importados.</li>
+                    <li style={{ marginTop: 4 }}>{jaCadastradas} ignorados (já existiam no CRM).</li>
+                    <li style={{ marginTop: 4 }}>{repetidas.length} ignorados (repetidos na própria planilha).</li>
+                    <li style={{ color: erros.length ? "#dc2626" : undefined, marginTop: 4 }}>
+                        {erros.length} com erro.
+                    </li>
+                </ul>
+                {erros.length ? (
+                    <div style={{ maxHeight: 180, overflowY: "auto", fontSize: 12.5 }}>
+                        {erros.slice(0, 50).map((erro) => (
+                            <div key={`${erro.linha}-${erro.motivo}`}>
+                                Linha {erro.linha}: {erro.motivo}
+                            </div>
+                        ))}
+                        {erros.length > 50 ? <div>… e mais {erros.length - 50} linhas com erro.</div> : null}
+                    </div>
+                ) : null}
+            </div>
+        );
+
+        (erros.length && !importadas ? Modal.error : erros.length ? Modal.warning : Modal.success)({
+            title: importadas ? "Importação concluída" : "Nenhum lead importado",
+            content: resumo,
+            okText: "Entendi",
+            width: 520,
+        });
+
+        if (importadas) {
+            void invalidate({ resource: "clientes", invalidates: ["list"] });
+            void invalidate({ resource: "vw_kanban_kpis", invalidates: ["list"] });
+        }
+    };
 
     const processFile = (file: File) => {
         setIsImporting(true);
-        
-        // PapaParse lê o CSV e transforma as colunas em um Array de Objetos JSON
-        Papa.parse(file, {
+
+        // PapaParse detecta o separador (vírgula ou ponto e vírgula do Excel BR).
+        Papa.parse<Record<string, unknown>>(file, {
             header: true,
-            skipEmptyLines: true,
+            skipEmptyLines: "greedy",
             complete: async (results) => {
                 try {
-                    const rows = results.data as any[];
-                    if (rows.length === 0) {
+                    if (results.data.length === 0) {
                         message.warning("A planilha está vazia.");
-                        setIsImporting(false);
                         return;
                     }
-
-                    message.loading({ content: "Analisando planilha e checando duplicatas...", key: "import-status" });
-
-                    // Etapas do funil, para converter o texto do status em
-                    // stage_id. Sem isso o lead importado nasce sem etapa e não
-                    // aparece em nenhuma coluna do Kanban (que filtram por
-                    // stage_id) — cai apenas na coluna "Outros".
-                    const { data: etapas } = await supabaseClient
-                        .from("pipeline_stages")
-                        .select("id,nome,ordem,pipeline_id")
-                        .order("ordem", { ascending: true });
-
-                    const listaEtapas = (etapas || []) as Array<{
-                        id: string | number;
-                        nome?: string | null;
-                        pipeline_id?: string | null;
-                    }>;
-
-                    const normalizar = (v: unknown) =>
-                        String(v ?? "").trim().toLowerCase();
-
-                    const etapaPorNome = new Map(
-                        listaEtapas
-                            .filter((e) => e.nome)
-                            .map((e) => [normalizar(e.nome), e]),
-                    );
-                    const etapaPadrao = listaEtapas[0];
-
-                    const resolverEtapa = (statusTexto: string) =>
-                        etapaPorNome.get(normalizar(statusTexto)) || etapaPadrao;
-
-                    // 1. Mapear e higienizar os dados do CSV
-                    const mappedLeads = rows.map((item) => {
-                        const statusTexto =
-                            item.Status || item.status || item.Etapa || "Novo Lead";
-                        const etapa = resolverEtapa(statusTexto);
-                        return {
-                        tenant_id: tenantId || undefined,
-                        nome: item.Nome || item.nome || item.Name || "Lead Sem Nome",
-                        email: (item.Email || item.email || "").trim() || null,
-                        telefone: String(item.Telefone || item.telefone || item.Phone || "").trim(),
-                        cpf_cnpj: (item.cpf_cnpj || item.cpf || item.cnpj || item.CPF || item.CNPJ || "").trim() || null,
-                        responsavel: item.Responsavel || item.responsavel || item.Responsável || ownerDisplayName,
-                        conta_energia_media: Number(item.conta_energia_media || item.Conta_Energia || 0) || 0,
-                        valor: Number(item.valor || item.Valor || 0) || 0,
-                        // Usa o nome da etapa encontrada para o status ficar
-                        // consistente com o funil, não com o texto da planilha
-                        status: etapa?.nome || statusTexto,
-                        stage_id: etapa?.id ?? null,
-                        ...(etapa?.pipeline_id ? { pipeline_id: etapa.pipeline_id } : {}),
-                        temperatura: item.Temperatura || item.temperatura || null,
-                        };
-                    });
-
-                    // 2. Extrair valores válidos para a "Malha Fina" tripla
-                    const telefonesParaChecar = mappedLeads
-                        .map(l => l.telefone)
-                        .filter(tel => tel.length > 0);
-
-                    const emailsParaChecar = mappedLeads
-                        .map(l => l.email)
-                        .filter((e): e is string => typeof e === "string" && e.length > 0);
-
-                    const cpfsParaChecar = mappedLeads
-                        .map(l => l.cpf_cnpj)
-                        .filter((c): c is string => typeof c === "string" && c.length > 0);
-
-                    // 3. Buscar no Supabase QUAIS já existem (3 consultas em paralelo)
-                    const telefonesExistentes = new Set<string>();
-                    const emailsExistentes = new Set<string>();
-                    const cpfsExistentes = new Set<string>();
-
-                    const buscas: PromiseLike<void>[] = [];
-
-                    if (telefonesParaChecar.length > 0) {
-                        buscas.push(
-                            supabaseClient
-                                .from("clientes")
-                                .select("telefone")
-                                .in("telefone", telefonesParaChecar)
-                                .not("telefone", "is", null)
-                                .then(({ data, error }) => {
-                                    if (!error && data) data.forEach((l: any) => telefonesExistentes.add(l.telefone));
-                                }),
-                        );
-                    }
-
-                    if (emailsParaChecar.length > 0) {
-                        buscas.push(
-                            supabaseClient
-                                .from("clientes")
-                                .select("email")
-                                .in("email", emailsParaChecar)
-                                .not("email", "is", null)
-                                .then(({ data, error }) => {
-                                    if (!error && data) data.forEach((l: any) => emailsExistentes.add(l.email));
-                                }),
-                        );
-                    }
-
-                    if (cpfsParaChecar.length > 0) {
-                        buscas.push(
-                            supabaseClient
-                                .from("clientes")
-                                .select("cpf_cnpj")
-                                .in("cpf_cnpj", cpfsParaChecar)
-                                .not("cpf_cnpj", "is", null)
-                                .then(({ data, error }) => {
-                                    if (!error && data) data.forEach((l: any) => cpfsExistentes.add(l.cpf_cnpj));
-                                }),
-                        );
-                    }
-
-                    await Promise.all(buscas);
-
-                    // 4. Separar quem entra e quem é barrado (checagem tripla)
-                    const leadsParaInserir: typeof mappedLeads = [];
-                    let ignoradosCount = 0;
-
-                    for (const lead of mappedLeads) {
-                        const telefoneJaExiste = lead.telefone && telefonesExistentes.has(lead.telefone);
-                        const emailJaExiste = lead.email && emailsExistentes.has(lead.email);
-                        const cpfJaExiste = lead.cpf_cnpj && cpfsExistentes.has(lead.cpf_cnpj);
-
-                        if (telefoneJaExiste || emailJaExiste || cpfJaExiste) {
-                            ignoradosCount++;
-                            continue;
-                        }
-                        leadsParaInserir.push(lead);
-                    }
-
-                    // 5. Inserir apenas os novos em lote (Batch Insert)
-                    if (leadsParaInserir.length > 0) {
-                        const { error: insertError } = await supabaseClient
-                            .from("clientes")
-                            .insert(leadsParaInserir);
-
-                        if (insertError) throw insertError;
-                    }
-
-                    // 6. Notificação amigável e transparente pro usuário
-                    message.destroy("import-status");
-                    Modal.success({
-                        title: "Importação Concluída!",
-                        content: (
-                            <div style={{ marginTop: 16 }}>
-                                <p>Sua planilha foi processada com sucesso. Aqui está o resumo:</p>
-                                <ul style={{ background: "#f1f5f9", padding: "12px 12px 12px 28px", borderRadius: 8 }}>
-                                    <li style={{ color: "#10b981", fontWeight: 600 }}>
-                                        {leadsParaInserir.length} leads novos importados.
-                                    </li>
-                                    <li style={{ color: "#ef4444", fontWeight: 600, marginTop: 4 }}>
-                                        {ignoradosCount} leads ignorados (já existiam).
-                                    </li>
-                                </ul>
-                            </div>
-                        ),
-                        okText: "Entendi",
-                    });
-
-                    // 7. Força a tela de lista a atualizar com os novos dados
-                    invalidate({
-                        resource: "clientes",
-                        invalidates: ["list"],
-                    });
-
-                } catch (error: any) {
-                    console.error("Erro na importação:", error);
+                    await importar(results.data);
+                } catch (error: unknown) {
                     message.destroy("import-status");
                     Modal.error({
                         title: "Erro na importação",
-                        content: error.message || "Ocorreu um erro ao salvar os dados no banco.",
+                        content: error instanceof Error ? error.message : "Ocorreu um erro ao salvar os dados no banco.",
                     });
                 } finally {
                     setIsImporting(false);
-                    // Reseta o input de arquivo (se o usuário quiser subir a mesma planilha editada de novo)
-                    const input = document.getElementById("csv-upload-input") as HTMLInputElement;
-                    if (input) input.value = '';
+                    // Permite reenviar a mesma planilha depois de corrigida.
+                    if (inputRef.current) inputRef.current.value = "";
                 }
             },
-            error: (_err) => {
+            error: () => {
                 message.error("Erro ao ler o arquivo CSV. Verifique o formato.");
                 setIsImporting(false);
-            }
+            },
         });
     };
 
     return (
         <>
             <input
+                ref={inputRef}
                 type="file"
-                id="csv-upload-input"
-                accept=".csv"
+                accept=".csv,text/csv"
                 style={{ display: "none" }}
+                aria-label="Arquivo CSV de leads"
                 onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                        processFile(e.target.files[0]);
-                    }
+                    const arquivo = e.target.files?.[0];
+                    if (arquivo) processFile(arquivo);
                 }}
             />
-            
+
             <Button
                 icon={<UploadOutlined />}
                 loading={isImporting}
-                onClick={() => document.getElementById("csv-upload-input")?.click()}
+                onClick={() => inputRef.current?.click()}
                 style={{ borderRadius: 8, height: 40, fontWeight: 600 }}
+                title="Colunas aceitas: nome, telefone, e-mail, CPF/CNPJ, responsável, valor, conta de luz, status/etapa, temperatura"
             >
                 Importar CSV
             </Button>
