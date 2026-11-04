@@ -600,7 +600,12 @@ begin
             select 1 from pg_publication_tables
             where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
         ) then
-            execute format('alter publication supabase_realtime add table public.%I', t);
+            begin
+                execute format('alter publication supabase_realtime add table public.%I', t);
+            exception when others then
+                -- realtime é conveniência: nunca derruba a migration
+                raise warning 'Realtime não habilitado para % (%): ative em Database > Replication.', t, sqlerrm;
+            end;
         end if;
     end loop;
 end $$;
