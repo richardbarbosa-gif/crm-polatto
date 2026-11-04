@@ -581,3 +581,26 @@ begin
         raise warning 'AÇÃO MANUAL: a empresa % (%) não tem gerente. Defina: update utilizadores_empresas set role = ''gerente'' where empresa_id = ''%'' and auth_uid = ''<uuid>'';', r.nome, r.id, r.id;
     end loop;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- 8. REALTIME — agenda e funil atualizam ao vivo
+-- A Agenda usa liveMode em tarefas e o Kanban recarrega etapas; sem a
+-- tabela na publicação os eventos simplesmente não chegam. (negocios já
+-- entra pela migration 01.) Só onde a publicação existe (Supabase).
+-- ---------------------------------------------------------------------
+do $$
+declare
+    t text;
+begin
+    if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+        return;
+    end if;
+    foreach t in array array['tarefas', 'pipeline_stages'] loop
+        if to_regclass('public.' || t) is not null and not exists (
+            select 1 from pg_publication_tables
+            where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+        ) then
+            execute format('alter publication supabase_realtime add table public.%I', t);
+        end if;
+    end loop;
+end $$;
