@@ -457,6 +457,36 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------
+-- T4 — membro da equipe SEM login (cadastro antigo) ganha acesso
+-- ---------------------------------------------------------------------
+do $$
+declare
+    v_user_a uuid := (select valor from crm_teste.ctx where chave = 'user_a');
+    v_tenant_a uuid := (select valor from crm_teste.ctx where chave = 'tenant_a');
+    v_func uuid := gen_random_uuid();
+    r jsonb;
+    r_de_novo jsonb;
+begin
+    insert into public.funcionarios (id, nome, email, cargo, ativo, tenant_id)
+    values (v_func, 'Diego Sem Login', 'diego.semlogin@teste.com', 'Representante', true, v_tenant_a);
+
+    perform public.login_como(v_user_a, 'vendedor.a@teste.com');
+    r := public.criar_usuario_equipe('diego.semlogin@teste.com', 'senhaforte123', 'Diego Sem Login', 'Representante', 'vendedor');
+    r_de_novo := public.criar_usuario_equipe('diego.semlogin@teste.com', 'senhaforte123', 'Diego 2', 'x', 'vendedor');
+    perform public.login_admin();
+
+    perform public.assert((r ->> 'success')::boolean and (r ->> 'user_id')::uuid = v_func,
+        'T4b: funcionário antigo sem login ganha acesso na MESMA linha (histórico preservado)');
+    perform public.assert(
+        exists (select 1 from public.funcionarios f
+                join public.utilizadores_empresas ue on ue.auth_uid = f.user_id and ue.empresa_id = v_tenant_a
+                where f.id = v_func and f.user_id is not null),
+        'T4b: login ligado ao funcionário e à empresa'
+    );
+    perform public.assert(not (r_de_novo ->> 'success')::boolean, 'T4a: quem já tem login não ganha um segundo');
+end $$;
+
+-- ---------------------------------------------------------------------
 -- F1 — check_feature lê só a empresa ativa
 -- ---------------------------------------------------------------------
 do $$

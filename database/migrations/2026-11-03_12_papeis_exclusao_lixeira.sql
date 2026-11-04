@@ -331,8 +331,10 @@ begin
         return jsonb_build_object('success', false, 'error', 'Este e-mail já possui conta.');
     end if;
 
-    -- Funcionário removido antes desta empresa com o mesmo e-mail: reativa
-    -- a mesma linha (mantém o histórico); em outra empresa, recusa.
+    -- Funcionário desta empresa com o mesmo e-mail que ainda não tem login
+    -- (cadastrado só como membro da equipe) ou que foi removido: o login é
+    -- ligado à MESMA linha (mantém histórico, metas e relatórios). Se já
+    -- tem login, ou é de outra empresa, recusa.
     select f.id into v_func_antigo
     from public.funcionarios f
     where lower(f.email) = v_email
@@ -340,7 +342,8 @@ begin
 
     if v_func_antigo is not null and not exists (
         select 1 from public.funcionarios f
-        where f.id = v_func_antigo and f.tenant_id = v_tenant and f.deleted_at is not null
+        where f.id = v_func_antigo and f.tenant_id = v_tenant
+          and (f.deleted_at is not null or f.user_id is null)
     ) then
         return jsonb_build_object('success', false, 'error', 'Este e-mail já está cadastrado na equipe.');
     end if;
