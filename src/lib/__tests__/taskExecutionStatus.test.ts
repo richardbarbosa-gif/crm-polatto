@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../utility", () => ({ supabaseClient: {} }));
 
+import dayjs from "dayjs";
+import { getTaskSituation } from "../insights";
 import { hasTaskExecutionAction, resolveTaskExecutionStatus } from "../taskExecutionStatus";
 
 describe("resolveTaskExecutionStatus", () => {
@@ -43,6 +45,19 @@ describe("resolveTaskExecutionStatus", () => {
 
     it("status desconhecido cai em pendente", () => {
         expect(resolveTaskExecutionStatus({ execucao_status: "qualquer_coisa" })).toBe("pendente");
+    });
+
+    it("REGRESSÃO: tarefa concluída na agenda deixa de contar como atrasada", () => {
+        const passado = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        expect(resolveTaskExecutionStatus({ concluido: true, data_vencimento: passado })).toBe("resolvido");
+        expect(
+            getTaskSituation(passado, dayjs(), resolveTaskExecutionStatus({ concluido: true, data_vencimento: passado })),
+        ).toBe("tratada");
+    });
+
+    it("tarefa concluída antes do vencimento também é resolvida", () => {
+        const futuro = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+        expect(resolveTaskExecutionStatus({ concluido: true, data_vencimento: futuro })).toBe("resolvido");
     });
 });
 

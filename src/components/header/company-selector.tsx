@@ -1,54 +1,32 @@
 import { SwapOutlined, ShopOutlined } from "@ant-design/icons";
-import { Select, Typography, Tooltip, Spin } from "antd";
-import { useCallback, useEffect, useState } from "react";
-import { supabaseClient } from "../../utility";
+import { Select, Spin, Typography, Tooltip } from "antd";
+import { useState } from "react";
 import { useTenant } from "../../contexts/tenant";
 
 const { Text } = Typography;
 
-type EmpresaOption = {
-    empresa_id: string;
-    nome: string;
-    segmento: string;
-    logo_url: string | null;
-    cor_primaria: string | null;
-};
-
+/**
+ * Seletor de empresa do topo.
+ *
+ * A lista vem do TenantProvider, que já carregou os vínculos do usuário.
+ * Antes vinha da RPC listar_empresas_usuario, que não existe no schema —
+ * a chamada falhava, a lista ficava vazia e o topo exibia sempre a palavra
+ * genérica "Empresa", mesmo para quem tem acesso a várias.
+ */
 export const CompanySelector = () => {
-    const { tenantId, refresh, isSystemAdmin } = useTenant();
-    const [empresas, setEmpresas] = useState<EmpresaOption[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const { tenantId, refresh, empresas, isLoading } = useTenant();
     const [isSwitching, setIsSwitching] = useState(false);
-
-    const loadEmpresas = useCallback(async () => {
-        setIsLoading(true);
-        try {
-            const { data, error } = await supabaseClient.rpc("listar_empresas_usuario");
-            if (error) {
-                console.warn("Erro ao listar empresas:", error.message);
-                setEmpresas([]);
-                return;
-            }
-            setEmpresas((data || []) as EmpresaOption[]);
-        } catch {
-            setEmpresas([]);
-        } finally {
-            setIsLoading(false);
-        }
-    }, []);
-
-    useEffect(() => {
-        loadEmpresas();
-    }, [loadEmpresas]);
 
     const handleChange = async (empresaId: string) => {
         if (empresaId === tenantId) return;
 
         setIsSwitching(true);
         try {
+            // O TenantProvider respeita esta escolha na próxima carga, e o
+            // banco valida contra os vínculos reais antes de aplicá-la.
             window.localStorage.setItem("crm_tenant_id", empresaId);
             await refresh();
-            // Força reload para limpar caches do Refine
+            // Reload para limpar os caches de query do Refine
             window.location.reload();
         } catch {
             setIsSwitching(false);
@@ -106,16 +84,11 @@ export const CompanySelector = () => {
             popupMatchSelectWidth={260}
             dropdownStyle={{ borderRadius: 10 }}
             options={empresas.map((e) => ({
-                value: e.empresa_id,
+                value: e.id,
                 label: (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <ShopOutlined style={{ color: e.cor_primaria || "#3b82f6", fontSize: 13 }} />
+                        <ShopOutlined style={{ color: "#3b82f6", fontSize: 13 }} />
                         <span>{e.nome}</span>
-                        {e.segmento && e.segmento !== "energia_solar" && (
-                            <span style={{ fontSize: 10, color: "#94a3b8", marginLeft: "auto" }}>
-                                {e.segmento}
-                            </span>
-                        )}
                     </div>
                 ),
             }))}

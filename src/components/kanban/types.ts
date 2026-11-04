@@ -12,6 +12,28 @@ export type Stage = {
     perdido?: boolean;
 };
 
+/** Negócio como chega da view/tabela `clientes` (campos usados pelo board). */
+export type KanbanLead = {
+    id: string | number;
+    nome?: string | null;
+    titulo?: string | null;
+    telefone?: string | null;
+    ddi?: string | null;
+    email?: string | null;
+    responsavel?: string | null;
+    status?: string | null;
+    stage_id?: string | number | null;
+    stageId?: string | number | null;
+    pipeline_id?: string | null;
+    temperatura?: string | null;
+    valor?: number | string | null;
+    conta_energia_media?: number | string | null;
+    motivo_perda?: string | null;
+    created_at?: string | null;
+    endereco_instalacao?: string | null;
+    [key: string]: unknown;
+};
+
 export const DEFAULT_STAGES: Stage[] = [
     { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
     { id: "negociacao", nome: "Em Negociação", cor: "#3182ce", ordem: 2 },
@@ -49,8 +71,8 @@ export const getStatusTone = (
 
 export const DRAG_ACTIVATION_DISTANCE = 5;
 
-// 🔥 MÁGICA 1: Reduzimos o atraso de 250ms para 0! O cartão "cola" no rato instantaneamente.
-export const DRAG_ACTIVATION_DELAY_MS = 0; 
+// Sem atraso: o card acompanha o ponteiro assim que o arraste começa.
+export const DRAG_ACTIVATION_DELAY_MS = 0;
 
 export const KANBAN_PAGE_SIZE = 20;
 export const SEARCH_DEBOUNCE_MS = 400;

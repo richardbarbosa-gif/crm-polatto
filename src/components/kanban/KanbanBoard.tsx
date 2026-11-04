@@ -2,7 +2,7 @@ import React from "react";
 import type { CrudFilter } from "@refinedev/core";
 import { EmptyState } from "../ui";
 import { getStatusAccent } from "./types";
-import type { LeadNextTask, Stage } from "./types";
+import type { KanbanLead, LeadNextTask, Stage } from "./types";
 import { KanbanColumn } from "./KanbanColumn";
 
 export interface KanbanBoardProps {
@@ -18,21 +18,23 @@ export interface KanbanBoardProps {
     onBoardMouseUp: () => void;
     onDragOverColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
     onDropColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
-    onDragStartLead: (e: React.DragEvent<HTMLDivElement>, lead: any) => void;
+    onDragStartLead: (e: React.DragEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onDragEndLead: (e: React.DragEvent<HTMLDivElement>) => void;
     onLeadPointerDown: (e: React.PointerEvent<HTMLDivElement>, leadId: string) => void;
     onLeadPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
-    onLeadPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: any) => void;
+    onLeadPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onLeadPointerCancel: () => void;
-    openLeadDrawer: (lead: any) => void;
+    openLeadDrawer: (lead: KanbanLead) => void;
     openLeadEdit: (leadId: string | number) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
-    kpiError: any;
+    kpiError: unknown;
     hasKpiPolicyRecursion: boolean;
     kpiErrorMessage: string | null;
-    totalLeads: number;
-    isKpiLoading: boolean;
+    /** Total e valor por etapa vindos da view agregada (undefined com busca ativa). */
+    valoresPorEtapa?: Map<string, { total: number; valor: number }>;
     tasksByLead?: Map<string, LeadNextTask>;
+    stageMoveOptions?: { value: string; label: string }[];
+    onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -58,11 +60,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     openLeadEdit,
     stopActionPropagation,
     kpiError,
+    valoresPorEtapa,
     tasksByLead,
+    stageMoveOptions,
+    onMoveLeadToStage,
     hasKpiPolicyRecursion,
     kpiErrorMessage,
-    totalLeads,
-    isKpiLoading,
 }) => {
     if (kpiError) {
         return (
@@ -70,33 +73,25 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                 <EmptyState
                     title={
                         hasKpiPolicyRecursion
-                            ? "Falha de policy RLS no Supabase"
+                            ? "Falha de permissão no banco de dados"
                             : "Não foi possível carregar os leads"
                     }
                     description={
                         hasKpiPolicyRecursion
-                            ? "O erro indica recursão infinita em policy. O acesso foi bloqueado."
-                            : kpiErrorMessage || "Revise as policies RLS."
+                            ? "Uma regra de acesso (RLS) do banco entrou em recursão. Avise o administrador."
+                            : kpiErrorMessage || "Tente recarregar a página."
                     }
                 />
             </div>
         );
     }
 
-    if (!isKpiLoading && totalLeads === 0) {
-        return (
-            <div style={{ padding: 20 }}>
-                <EmptyState
-                    title="Nenhum lead para os filtros aplicados"
-                    description="Ajuste busca, responsável ou temperatura."
-                />
-            </div>
-        );
-    }
-
+    // As colunas aparecem mesmo sem nenhum negócio: antes o board inteiro
+    // era trocado por "Nenhum lead para os filtros aplicados", e uma empresa
+    // recém-criada não via nem as etapas do próprio funil.
     return (
         <div style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}>
-            {/* 🔥 MÁGICA 2: A classe 'is-dragging-board' é adicionada quando você segura num card */}
+            {/* A classe 'is-dragging-board' é aplicada enquanto um card é arrastado */}
             <div
                 ref={boardRef}
                 className={`crm-kanban-scroll crm-kanban-board ${isDragging ? "is-dragging-board" : ""}`}
@@ -111,7 +106,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             >
                 {stagesVisiveis.map((estagio) => {
                     const stageColumnId = String(estagio.id ?? estagio.nome);
-                    const isOthers = estagio.nome === "Outros";
+                    const isOthers = estagio.id === "outros";
                     const accentColor = estagio.cor || getStatusAccent(estagio.nome);
 
                     return (
@@ -135,7 +130,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             openLeadDrawer={openLeadDrawer}
                             openLeadEdit={openLeadEdit}
                             stopActionPropagation={stopActionPropagation}
+                            valorDaEtapa={valoresPorEtapa?.get(isOthers ? "outros" : stageColumnId)?.valor}
+                            usarValorAgregado={Boolean(valoresPorEtapa)}
                             tasksByLead={tasksByLead}
+                            stageMoveOptions={stageMoveOptions}
+                            onMoveLeadToStage={onMoveLeadToStage}
                         />
                     );
                 })}

@@ -5,6 +5,7 @@ export type LeadStage = {
     nome: string;
     cor: string;
     ordem: number;
+    pipeline_id?: string | null;
 };
 
 type LeadStatusOption = {
@@ -19,6 +20,7 @@ export type LeadStageOption = {
 
 type StageRecord = {
     id?: string | number | null;
+    pipeline_id?: string | null;
     nome?: string | null;
     name?: string | null;
     title?: string | null;
@@ -96,12 +98,43 @@ export const buildLeadStatusOptions = (
     return dedupedNames.map((nome) => ({ value: nome, label: nome }));
 };
 
-export const buildLeadStageOptions = (stagesData?: StageRecord[] | null): LeadStageOption[] => {
+type PipelineRecord = { id?: string | number | null; nome?: string | null };
+
+/**
+ * Opções de etapa para os formulários de negócio.
+ *
+ * Com mais de um funil, etapas homônimas ("Novo Lead" no funil Vendas e no
+ * funil Pós-venda) são etapas DIFERENTES. A deduplicação por nome escondia
+ * as do segundo funil; agora cada opção leva o nome do funil no rótulo.
+ */
+export const buildLeadStageOptions = (
+    stagesData?: StageRecord[] | null,
+    pipelines?: PipelineRecord[] | null,
+): LeadStageOption[] => {
     const stages = buildLeadStages(stagesData);
-    return stages.map((stage) => ({
-        value: String(stage.id),
-        label: stage.nome,
-    }));
+    const nomesDosFunis = new Map(
+        (pipelines ?? [])
+            .filter((p) => p?.id !== undefined && p?.id !== null)
+            .map((p) => [String(p.id), (p.nome || "").trim()]),
+    );
+    const funisUsados = new Set(stages.map((stage) => stage.pipeline_id ?? ""));
+    const variosFunis = funisUsados.size > 1;
+    const posicaoDoFunil = new Map(Array.from(nomesDosFunis.keys()).map((id, i) => [id, i]));
+    const ordenadas = variosFunis
+        ? [...stages].sort((a, b) => {
+              const fa = posicaoDoFunil.get(String(a.pipeline_id ?? "")) ?? Number.MAX_SAFE_INTEGER;
+              const fb = posicaoDoFunil.get(String(b.pipeline_id ?? "")) ?? Number.MAX_SAFE_INTEGER;
+              return fa - fb || a.ordem - b.ordem;
+          })
+        : stages;
+
+    return ordenadas.map((stage) => {
+        const nomeFunil = stage.pipeline_id ? nomesDosFunis.get(String(stage.pipeline_id)) : "";
+        return {
+            value: String(stage.id),
+            label: variosFunis && nomeFunil ? `${nomeFunil} · ${stage.nome}` : stage.nome,
+        };
+    });
 };
 
 export const buildLeadStages = (stagesData?: StageRecord[] | null): LeadStage[] => {
@@ -123,12 +156,14 @@ export const buildLeadStages = (stagesData?: StageRecord[] | null): LeadStage[] 
             }
 
             const fallback = fallbackByOrder.get(ordem);
-            return {
+            const stageResult: LeadStage = {
                 id: String(stage.id ?? nome),
                 nome,
                 cor: readStageColor(stage, fallback?.cor || "#94a3b8"),
                 ordem,
-            } satisfies LeadStage;
+                pipeline_id: stage.pipeline_id ?? null,
+            };
+            return stageResult;
         })
         .filter((stage): stage is LeadStage => Boolean(stage))
         .sort((first, second) => first.ordem - second.ordem);
@@ -137,17 +172,25 @@ export const buildLeadStages = (stagesData?: StageRecord[] | null): LeadStage[] 
         return DEFAULT_LEAD_STAGES;
     }
 
+    // Deduplica por nome DENTRO do mesmo funil (etapas legadas compartilhadas
+    // + cópia do tenant). Etapas homônimas de funis diferentes são mantidas.
     const deduped = new Map<string, LeadStage>();
     normalized.forEach((stage) => {
-        const key = normalizeText(stage.nome);
-        if (!key || deduped.has(key)) {
-            return;
-        }
+        const nome = normalizeText(stage.nome);
+        if (!nome) return;
+        const key = `${stage.pipeline_id ?? ""}::${nome}`;
+        if (deduped.has(key)) return;
         deduped.set(key, stage);
     });
 
     return Array.from(deduped.values());
 };
+
+/** Funil da etapa escolhida no formulário (para carimbar pipeline_id). */
+export const pipelineDaEtapa = (
+    stages: LeadStage[],
+    stageId: string | number | null | undefined,
+): string | null => findLeadStageById(stages, stageId)?.pipeline_id ?? null;
 
 export const coerceLeadStatusValue = (
     value: string | null | undefined,

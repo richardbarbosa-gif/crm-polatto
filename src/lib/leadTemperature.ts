@@ -62,11 +62,17 @@ export const updateLeadTemperature = async (
 };
 
 export const getLeadTemperatureFromRecord = (
-    record: Record<string, any> | undefined | null,
+    registro: object | undefined | null,
 ): LeadTemperatureTag | undefined => {
-    if (!record) {
+    if (!registro) {
         return undefined;
     }
+    const record = registro as {
+        temperature?: unknown;
+        temperatura?: unknown;
+        metadata?: { temperature?: unknown } | null;
+        extra?: { temperature?: unknown } | null;
+    };
 
     const directValue = record.temperature ?? record.temperatura;
     if (isLeadTemperatureTag(directValue)) {
@@ -101,14 +107,15 @@ export const resolveAutomaticLeadTemperature = (
 };
 
 export const resolveLeadTemperature = (
-    record: Record<string, any> | undefined | null,
+    registro: object | undefined | null,
 ): LeadTemperatureTag | undefined => {
-    const automatic = resolveAutomaticLeadTemperature(record?.status);
+    const status = (registro as { status?: unknown } | null | undefined)?.status;
+    const automatic = resolveAutomaticLeadTemperature(typeof status === "string" ? status : null);
     if (automatic) {
         return automatic;
     }
 
-    const fromRecord = getLeadTemperatureFromRecord(record);
+    const fromRecord = getLeadTemperatureFromRecord(registro);
     if (fromRecord) {
         return fromRecord;
     }
@@ -117,8 +124,8 @@ export const resolveLeadTemperature = (
 };
 
 export const resolveEditableLeadTemperature = (
-    record: Record<string, any> | undefined | null,
+    registro: object | undefined | null,
 ): LeadTemperature | undefined => {
-    const resolved = resolveLeadTemperature(record);
+    const resolved = resolveLeadTemperature(registro);
     return isLeadTemperature(resolved) ? resolved : undefined;
 };

@@ -3,9 +3,10 @@ import { Modal, Select, Space, Table, Typography, message } from "antd";
 import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { useDelete, useUpdate } from "@refinedev/core";
 import { Badge, Button, EmptyState, TemperatureBadge } from "../ui";
-import { getStatusTone } from "./types";
+import { getStatusTone, type KanbanLead } from "./types";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
+import { valorDoLead } from "../../lib/pipelineMetrics";
 import { supabaseClient } from "../../utility";
 
 const { Text } = Typography;
@@ -13,20 +14,22 @@ const { Text } = Typography;
 export interface ListViewStageOption {
     id?: string | number;
     nome: string;
+    pipeline_id?: string | null;
 }
 
 export interface ListViewProps {
-    listData: any[];
+    listData: KanbanLead[];
     listTotal: number;
     listPage: number;
     isLoading: boolean;
-    listError: any;
+    listError: unknown;
     listErrorMessage: string | null;
     onPageChange: (page: number) => void;
-    resolveLeadStageName: (record: any) => string;
-    onView: (lead: any) => void;
+    resolveLeadStageName: (record: KanbanLead) => string;
+    onView: (lead: KanbanLead) => void;
     onEdit: (leadId: string | number) => void;
-    canDeleteRecords?: boolean;
+    /** Gerente exclui qualquer lead; vendedor só os seus (regra garantida no banco). */
+    podeExcluir?: (lead: KanbanLead) => boolean;
     stages?: ListViewStageOption[];
     onRefresh?: () => void;
 }
@@ -42,7 +45,7 @@ export const ListView: React.FC<ListViewProps> = ({
     resolveLeadStageName,
     onView,
     onEdit,
-    canDeleteRecords = false,
+    podeExcluir = () => false,
     stages,
     onRefresh,
 }) => {
@@ -73,7 +76,7 @@ export const ListView: React.FC<ListViewProps> = ({
                     return;
                 }
                 setFallbackStages(
-                    data.filter((s: any) => s && s.nome) as ListViewStageOption[],
+                    (data as ListViewStageOption[]).filter((s) => s && s.nome),
                 );
             } catch {
                 return;
@@ -99,6 +102,10 @@ export const ListView: React.FC<ListViewProps> = ({
     }, [hasStagesProp, stages, fallbackStages]);
 
     const selectedCount = selectedRowKeys.length;
+    const podeExcluirAlgum = useMemo(
+        () => listData.some((lead) => selectedRowKeys.includes(lead.id as React.Key) && podeExcluir(lead)),
+        [listData, podeExcluir, selectedRowKeys],
+    );
 
     const finishBulk = (successText: string) => {
         setSelectedRowKeys([]);
@@ -132,6 +139,8 @@ export const ListView: React.FC<ListViewProps> = ({
                     values: {
                         stage_id: option.stage.id ?? null,
                         status: option.stage.nome,
+                        // Mesmo critério do arraste: o negócio passa ao funil da etapa.
+                        ...(option.stage.pipeline_id ? { pipeline_id: option.stage.pipeline_id } : {}),
                     },
                     successNotification: false,
                     errorNotification: false,
@@ -159,11 +168,20 @@ export const ListView: React.FC<ListViewProps> = ({
             return;
         }
 
-        const ids = [...selectedRowKeys];
+        const selecionados = listData.filter((lead) => selectedRowKeys.includes(lead.id as React.Key));
+        const ids = selecionados.filter((lead) => podeExcluir(lead)).map((lead) => lead.id as React.Key);
+        const deOutros = selectedRowKeys.length - ids.length;
+
+        if (ids.length === 0) {
+            message.warning("Você só pode excluir os seus leads. Peça ao gerente para excluir os de outros vendedores.");
+            return;
+        }
 
         Modal.confirm({
-            title: `Excluir ${ids.length} lead(s) selecionado(s)?`,
-            content: "Esta ação é permanente e não pode ser desfeita.",
+            title: `Excluir ${ids.length} lead(s)?`,
+            content:
+                "Os negócios saem do funil e dos relatórios e vão para a Lixeira, de onde podem ser restaurados." +
+                (deOutros > 0 ? ` ${deOutros} lead(s) de outros vendedores ficam de fora: só o gerente exclui.` : ""),
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
@@ -239,7 +257,7 @@ export const ListView: React.FC<ListViewProps> = ({
                                 onChange={handleBulkMove}
                                 disabled={isBulkWorking || stageOptions.length === 0}
                             />
-                            {canDeleteRecords && (
+                            {podeExcluirAlgum && (
                                 <Button
                                     size="small"
                                     danger
@@ -289,7 +307,7 @@ export const ListView: React.FC<ListViewProps> = ({
                             {
                                 title: "Etapa",
                                 key: "stage_id",
-                                render: (_, record: any) => {
+                                render: (_, record: KanbanLead) => {
                                     const stageName = resolveLeadStageName(record);
                                     return <Badge tone={getStatusTone(stageName)}>{stageName}</Badge>;
                                 },
@@ -297,7 +315,7 @@ export const ListView: React.FC<ListViewProps> = ({
                             {
                                 title: "Temperatura",
                                 key: "temperature",
-                                render: (_, record: any) => (
+                                render: (_, record: KanbanLead) => (
                                     <TemperatureBadge value={resolveLeadTemperature(record)} />
                                 ),
                             },
@@ -308,13 +326,14 @@ export const ListView: React.FC<ListViewProps> = ({
                             },
                             {
                                 title: "Valor",
-                                dataIndex: "conta_energia_media",
-                                render: (v) => formatCurrencyBRL(v, "R$ 0,00"),
+                                key: "valor",
+                                render: (_, record: KanbanLead) =>
+                                    formatCurrencyBRL(valorDoLead(record), "R$ 0,00"),
                             },
                             { title: "Telefone", dataIndex: "telefone" },
                             {
                                 title: "",
-                                render: (_, record: any) => (
+                                render: (_, record: KanbanLead) => (
                                     <Space>
                                         <Button
                                             size="small"

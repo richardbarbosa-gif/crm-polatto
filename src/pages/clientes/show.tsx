@@ -1,46 +1,27 @@
 import { Show } from "@refinedev/antd";
 import { useShow } from "@refinedev/core";
-import { Alert } from "antd";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { TaskFormModal } from "../../components/modal/agenda";
-import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
-import { LeadDetails } from "./lead-details";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { LeadDetails, type LeadDetalhe } from "./lead-details";
 
 export const ClienteShow = () => {
-    const showResult = useShow() as any;
-    const { data, isLoading } = showResult.query || showResult;
-    const record = data?.data;
-    const { canDeleteRecords, canViewAllLeads, ownerCandidatesNormalized, ownerDisplayName } =
-        useCrmAccess();
+    const { query } = useShow<LeadDetalhe & { id: string | number }>();
+    const isLoading = query.isLoading;
+    const record = query.data?.data;
+    // Todo vendedor vê os leads da empresa; excluir (lixeira) é do gerente ou
+    // do dono do lead — a mesma regra que o banco garante (migration 12).
+    const { podeExcluir, ownerDisplayName } = useCrmAccess();
     const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const canAccessLead = useMemo(() => {
-        if (!record) {
-            return true;
-        }
-        if (canViewAllLeads) {
-            return true;
-        }
-        return matchesLeadOwner(record.responsavel, ownerCandidatesNormalized);
-    }, [canViewAllLeads, ownerCandidatesNormalized, record]);
-
     return (
-        <Show canDelete={canDeleteRecords} isLoading={isLoading} title="Detalhes do Cliente">
-            {!isLoading && !canAccessLead ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Acesso restrito"
-                    description="Este lead nao esta vinculado ao seu usuario."
-                />
-            ) : (
-                <LeadDetails
-                    record={record}
-                    isLoading={isLoading}
-                    currentUserLabel={ownerDisplayName}
-                    onScheduleVisit={() => setIsModalOpen(true)}
-                />
-            )}
+        <Show canDelete={Boolean(record) && podeExcluir(record)} isLoading={isLoading} title="Detalhes do Cliente">
+            <LeadDetails
+                record={record}
+                isLoading={isLoading}
+                currentUserLabel={ownerDisplayName}
+                onScheduleVisit={() => setIsModalOpen(true)}
+            />
 
             {record?.id ? (
                 <TaskFormModal

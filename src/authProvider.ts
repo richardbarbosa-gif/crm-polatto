@@ -1,6 +1,21 @@
 import { AuthProvider } from "@refinedev/core";
 import { supabaseClient } from "./utility";
 
+/**
+ * Estado do app no navegador que não pode passar de um usuário para o
+ * próximo no mesmo computador: empresa ativa e leads recém-criados.
+ * (Preferências neutras, como o tema, ficam.)
+ */
+const CHAVES_DA_SESSAO = ["crm_tenant_id", "crm-polatto:recent-created-leads:v1"];
+
+const limparEstadoDaSessao = () => {
+  try {
+    CHAVES_DA_SESSAO.forEach((chave) => window.localStorage.removeItem(chave));
+  } catch {
+    // storage indisponível (modo privado restrito): nada a limpar
+  }
+};
+
 const authProvider: AuthProvider = {
   login: async ({ email, password, providerName }) => {
     // sign in with oauth
@@ -44,10 +59,10 @@ const authProvider: AuthProvider = {
           redirectTo: "/",
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error,
+        error: error as Error,
       };
     }
 
@@ -79,10 +94,10 @@ const authProvider: AuthProvider = {
           redirectTo: "/",
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error,
+        error: error as Error,
       };
     }
 
@@ -115,10 +130,10 @@ const authProvider: AuthProvider = {
           success: true,
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error,
+        error: error as Error,
       };
     }
 
@@ -149,10 +164,10 @@ const authProvider: AuthProvider = {
           redirectTo: "/",
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         success: false,
-        error,
+        error: error as Error,
       };
     }
     return {
@@ -169,13 +184,20 @@ const authProvider: AuthProvider = {
     if (error) {
       return {
         success: false,
-        error,
+        error: error as Error,
       };
     }
 
+    // SEGURANÇA: o cache do Refine/react-query fica em memória e não é
+    // limpo no logout — quem entrasse em seguida na mesma aba via, por um
+    // instante, as listas do usuário anterior (outra empresa, inclusive).
+    // Limpa o estado local e recarrega a página do zero.
+    limparEstadoDaSessao();
+    window.location.assign("/login");
+
     return {
       success: true,
-      redirectTo: "/",
+      redirectTo: "/login",
     };
   },
   onError: async (error) => {
@@ -198,10 +220,10 @@ const authProvider: AuthProvider = {
           redirectTo: "/login",
         };
       }
-    } catch (error: any) {
+    } catch (error) {
       return {
         authenticated: false,
-        error: error || {
+        error: (error as Error) || {
           message: "Check failed",
           name: "Not authenticated",
         },

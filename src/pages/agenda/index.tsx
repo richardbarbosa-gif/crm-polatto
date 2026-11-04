@@ -1,11 +1,14 @@
 import {
     CalendarOutlined,
+    CheckOutlined,
+    DeleteOutlined,
     EditOutlined,
     EyeOutlined,
     ReloadOutlined,
+    UndoOutlined,
     UserOutlined,
 } from "@ant-design/icons";
-import { useList, useInvalidate } from "@refinedev/core"; // <-- Adicionado useInvalidate
+import { useList, useInvalidate, useUpdate } from "@refinedev/core";
 import {
     Alert,
     Badge,
@@ -27,6 +30,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { TaskFormModal, type TaskContextData, type TarefaRecord } from "../../components/modal/agenda";
 import { getTaskSituation, type TaskSituation, isTaskOverdue } from "../../lib/insights";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import {
     resolveTaskExecutionStatus,
     updateTaskExecutionStatus,
@@ -35,12 +39,14 @@ import {
     type TaskExecutionStatus,
 } from "../../lib/taskExecutionStatus";
 import { supabaseClient } from "../../utility";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 const TIPO_LABELS: Record<string, string> = {
     visita: "Visita",
-    ligacao: "Ligacao",
+    ligacao: "Ligação",
     whatsapp: "WhatsApp",
-    email: "Email",
+    email: "E-mail",
 };
 
 const getTipoLabel = (tipo?: string | null) => {
@@ -50,7 +56,7 @@ const getTipoLabel = (tipo?: string | null) => {
 };
 
 const getClienteFallbackLabel = (clienteId?: string | number | null) => {
-    if (!clienteId) return "Cliente nao informado";
+    if (!clienteId) return "Cliente não informado";
     return `Cliente #${clienteId}`;
 };
 
@@ -65,7 +71,7 @@ const getSituationBadgeStatus = (situation: TaskSituation) => {
 const getSituationLabel = (situation: TaskSituation) => {
     if (situation === "atrasada") return "Atrasada";
     if (situation === "hoje") return "Hoje";
-    if (situation === "proxima") return "Proxima";
+    if (situation === "proxima") return "Próxima";
     if (situation === "tratada") return "Tratada";
     return "Agendada";
 };
@@ -77,13 +83,62 @@ const TASK_EXECUTION_STATUS_COLORS: Record<TaskExecutionStatus, string> = {
     voltar_outro_dia: "gold",
 };
 
-type ClienteAgendaRecord = {
-    id: string | number;
-    nome?: string | null;
-};
-
 export const AgendaPage = () => {
-    const invalidate = useInvalidate(); // <-- Inicializando o invalidate do Refine
+    const invalidate = useInvalidate();
+    const { mutateAsync: atualizarTarefa } = useUpdate();
+    const { podeExcluir } = useCrmAccess();
+
+    /**
+     * Concluir/reabrir agendamento.
+     *
+     * Não existia nenhuma forma de fechar uma tarefa: elas se acumulavam
+     * para sempre, o sino de notificações só crescia e a "próxima
+     * atividade" do card do Kanban nunca mudava.
+     */
+    const alternarConclusao = async (tarefa: TarefaRecord) => {
+        const concluir = !tarefa.concluido;
+        try {
+            await atualizarTarefa({
+                resource: "tarefas",
+                id: tarefa.id,
+                values: { concluido: concluir },
+                successNotification: () => ({
+                    message: concluir ? "Agendamento concluído" : "Agendamento reaberto",
+                    type: "success",
+                }),
+            });
+            invalidate({ resource: "tarefas", invalidates: ["list"] });
+        } catch {
+            // notificação de erro é tratada pelo Refine
+        }
+    };
+
+    // Excluir manda para a LIXEIRA (deleted_at), de onde dá para restaurar.
+    // Vendedor só exclui os próprios agendamentos; o banco garante (migration 12).
+    const removerTarefa = (tarefa: TarefaRecord) => {
+        Modal.confirm({
+            title: "Excluir agendamento?",
+            content: `${tarefa.titulo || "Este agendamento"} vai para a Lixeira e pode ser restaurado por lá.`,
+            okText: "Excluir",
+            okButtonProps: { danger: true },
+            cancelText: "Cancelar",
+            onOk: async () => {
+                try {
+                    await atualizarTarefa({
+                        resource: "tarefas",
+                        id: tarefa.id,
+                        values: { deleted_at: new Date().toISOString() },
+                        successNotification: () => ({ message: "Agendamento enviado para a Lixeira", type: "success" }),
+                        errorNotification: false,
+                    });
+                    invalidate({ resource: "tarefas", invalidates: ["list"] });
+                    setIsDrawerOpen(false);
+                } catch (error) {
+                    message.error(getSupabaseErrorMessage(error) || "Não foi possível excluir o agendamento.");
+                }
+            },
+        });
+    };
 
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
@@ -106,12 +161,13 @@ export const AgendaPage = () => {
         [visibleDate]
     );
 
-    const listResult = useList<TarefaRecord>({
+    const { query } = useList<TarefaRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
         liveMode: "auto",
         filters: [
+            { field: "deleted_at", operator: "null", value: true },
             {
                 field: "data_vencimento",
                 operator: "gte",
@@ -123,11 +179,11 @@ export const AgendaPage = () => {
                 value: rangeEnd.toISOString(),
             },
         ],
-    }) as any;
+    });
 
-    const query = listResult.query || listResult;
+
     const { data, isLoading, isError, error, refetch } = query;
-    const tarefas: TarefaRecord[] = data?.data || [];
+    const tarefas = useMemo<TarefaRecord[]>(() => data?.data ?? [], [data?.data]);
 
     useEffect(() => {
         const channel = supabaseClient
@@ -138,7 +194,7 @@ export const AgendaPage = () => {
                 (payload) => {
                     const titulo = (payload.new as Record<string, unknown>)?.titulo;
                     message.info(
-                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem titulo"}`,
+                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem título"}`,
                     );
                     refetch?.();
                 },
@@ -150,31 +206,20 @@ export const AgendaPage = () => {
         };
     }, [refetch]);
 
-    const clientesResult = useList<ClienteAgendaRecord>({
-        resource: "clientes",
-        pagination: { mode: "off" },
-        sorters: [{ field: "nome", order: "asc" }],
-    }) as any;
-
-    const clientesQuery = clientesResult.query || clientesResult;
-    const clientes: ClienteAgendaRecord[] = clientesQuery?.data?.data || [];
-
-    const clientesById = useMemo(() => {
-        const map = new Map<string, ClienteAgendaRecord>();
-        clientes.forEach((cliente) => map.set(String(cliente.id), cliente));
-        return map;
-    }, [clientes]);
+    // Só os nomes dos clientes que aparecem na agenda (antes: a base inteira).
+    const idsDosClientes = useMemo(() => tarefas.map((tarefa) => tarefa.cliente_id), [tarefas]);
+    const nomesDosClientes = useNomesDeClientes(idsDosClientes);
 
     const getClienteLabel = (
         clienteId?: string | number | null,
         fallbackName?: string | null,
     ) => {
         if (!clienteId) {
-            return "Cliente nao informado";
+            return "Cliente não informado";
         }
 
         const nome =
-            clientesById.get(String(clienteId))?.nome?.trim() ||
+            nomesDosClientes.get(String(clienteId)) ||
             fallbackName?.trim() ||
             "";
 
@@ -186,7 +231,7 @@ export const AgendaPage = () => {
     };
 
     const getExecutionStatus = (tarefa?: TarefaRecord | null): TaskExecutionStatus => {
-        return resolveTaskExecutionStatus(tarefa as Record<string, any>);
+        return resolveTaskExecutionStatus(tarefa);
     };
 
     const getTaskStatusTag = (tarefa: TarefaRecord) => {
@@ -311,7 +356,7 @@ export const AgendaPage = () => {
                                                 abrirDrawerTarefa(tarefa);
                                             }}
                                         >
-                                            <span>{tarefa.titulo || "Sem titulo"}</span>
+                                            <span>{tarefa.titulo || "Sem título"}</span>
                                             <Typography.Text
                                                 type="secondary"
                                                 style={{ fontSize: 11 }}
@@ -364,7 +409,7 @@ export const AgendaPage = () => {
                 <Alert
                     type="error"
                     showIcon
-                    message="Nao foi possivel carregar sua agenda."
+                    message="Não foi possível carregar sua agenda."
                     description={error?.message || "Tente novamente em alguns instantes."}
                     action={
                         <Button
@@ -388,7 +433,7 @@ export const AgendaPage = () => {
                         Agenda
                     </Typography.Title>
                     <Typography.Text className="crm-page-header-subtitle">
-                        Organize visitas, contatos e pendencias com visao diaria e mensal.
+                        Organize visitas, contatos e pendências com visão diária e mensal.
                     </Typography.Text>
                 </div>
                 <Button
@@ -450,6 +495,18 @@ export const AgendaPage = () => {
                                     onClick={() => abrirDrawerTarefa(tarefa)}
                                     actions={[
                                         <Button
+                                            key={`concluir-${tarefa.id}`}
+                                            size="small"
+                                            type={tarefa.concluido ? "default" : "primary"}
+                                            icon={tarefa.concluido ? <UndoOutlined /> : <CheckOutlined />}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                void alternarConclusao(tarefa);
+                                            }}
+                                        >
+                                            {tarefa.concluido ? "Reabrir" : "Concluir"}
+                                        </Button>,
+                                        <Button
                                             key={`view-${tarefa.id}`}
                                             size="small"
                                             icon={<EyeOutlined />}
@@ -460,6 +517,21 @@ export const AgendaPage = () => {
                                         >
                                             Ver
                                         </Button>,
+                                        ...(podeExcluir(tarefa)
+                                            ? [
+                                                  <Button
+                                                      key={`excluir-${tarefa.id}`}
+                                                      size="small"
+                                                      danger
+                                                      icon={<DeleteOutlined />}
+                                                      aria-label="Excluir agendamento"
+                                                      onClick={(event) => {
+                                                          event.stopPropagation();
+                                                          removerTarefa(tarefa);
+                                                      }}
+                                                  />,
+                                              ]
+                                            : []),
                                     ]}
                                 >
                                     <div style={{ width: "100%" }}>
@@ -473,7 +545,7 @@ export const AgendaPage = () => {
                                             }}
                                         >
                                             <Typography.Text strong>
-                                                {tarefa.titulo || "Sem titulo"}
+                                                {tarefa.titulo || "Sem título"}
                                             </Typography.Text>
                                             <Typography.Text type="secondary">
                                                 {tarefa.data_vencimento
@@ -498,7 +570,7 @@ export const AgendaPage = () => {
                                         </div>
 
                                         <Typography.Paragraph style={{ margin: 0 }}>
-                                            {tarefa.descricao?.trim() || "Sem observacoes."}
+                                            {tarefa.descricao?.trim() || "Sem observações."}
                                         </Typography.Paragraph>
                                     </div>
                                 </List.Item>
@@ -509,7 +581,7 @@ export const AgendaPage = () => {
             </Modal>
 
             <Drawer
-                title="Visualizacao rapida"
+                title="Visualização rápida"
                 open={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
                 width={420}
@@ -542,7 +614,7 @@ export const AgendaPage = () => {
                             return (
                                 <>
                                     <Typography.Title level={5} style={{ margin: 0 }}>
-                                        {tarefaEmFoco.titulo || "Sem titulo"}
+                                        {tarefaEmFoco.titulo || "Sem título"}
                                     </Typography.Title>
 
                                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -606,7 +678,7 @@ export const AgendaPage = () => {
                                         <Alert
                                             type="info"
                                             showIcon
-                                            message="Tratativa habilita apenas apos o vencimento da atividade."
+                                            message="A tratativa fica disponível após o vencimento da atividade."
                                         />
                                     )}
                                 </>
@@ -619,9 +691,9 @@ export const AgendaPage = () => {
                                 : "-"}
                         </Typography.Text>
 
-                        <Typography.Text type="secondary">Observacoes</Typography.Text>
+                        <Typography.Text type="secondary">Observações</Typography.Text>
                         <Typography.Paragraph style={{ marginBottom: 0 }}>
-                            {tarefaEmFoco.descricao?.trim() || "Sem observacoes."}
+                            {tarefaEmFoco.descricao?.trim() || "Sem observações."}
                         </Typography.Paragraph>
                     </div>
                 )}

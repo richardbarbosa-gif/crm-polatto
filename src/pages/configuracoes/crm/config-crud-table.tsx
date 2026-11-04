@@ -2,7 +2,7 @@ import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { useCreate, useDelete, useList, useUpdate } from "@refinedev/core";
 import { Alert, Form, type FormInstance, Modal, Popconfirm, Skeleton, Space, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { type ReactNode, useMemo, useState } from "react";
+import { type ReactNode, useMemo, useRef, useState } from "react";
 import { Button, EmptyState } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
 import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
@@ -41,6 +41,8 @@ export function ConfigCrudTable<T extends ConfigRecord>({
     const { tenantId } = useTenant();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editando, setEditando] = useState<T | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
+    const salvandoRef = useRef(false);
 
     const { query } = useList<T>({
         resource,
@@ -72,7 +74,11 @@ export function ConfigCrudTable<T extends ConfigRecord>({
     };
 
     const salvar = async () => {
+        // Trava contra duplo clique: o Modal do antd não desabilita o OK sozinho.
+        if (salvandoRef.current) return;
         const values = (await form.validateFields()) as Record<string, unknown>;
+        salvandoRef.current = true;
+        setIsSaving(true);
         const payload = {
             ...(fromFormValues ? fromFormValues(values, editando) : values),
             tenant_id: tenantId || undefined,
@@ -93,6 +99,9 @@ export function ConfigCrudTable<T extends ConfigRecord>({
                     ? String((error as { message?: unknown }).message)
                     : "Erro desconhecido";
             message.error(`Não foi possível salvar: ${detalhe}`);
+        } finally {
+            salvandoRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -126,7 +135,7 @@ export function ConfigCrudTable<T extends ConfigRecord>({
                 <Alert
                     type="info"
                     showIcon
-                    message="Somente administradores podem alterar configurações do CRM."
+                    message="Somente o gerente pode alterar as configurações do CRM."
                     style={{ marginBottom: 16 }}
                 />
             ) : (
@@ -184,6 +193,7 @@ export function ConfigCrudTable<T extends ConfigRecord>({
                 onOk={salvar}
                 onCancel={() => setIsModalOpen(false)}
                 okText="Salvar"
+                confirmLoading={isSaving}
                 cancelText="Cancelar"
                 destroyOnHidden
             >

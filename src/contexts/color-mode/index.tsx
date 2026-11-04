@@ -1,5 +1,6 @@
 import { RefineThemes } from "@refinedev/antd";
 import { ConfigProvider, theme } from "antd";
+import ptBR from "antd/locale/pt_BR";
 import {
   type PropsWithChildren,
   createContext,
@@ -139,7 +140,7 @@ export const ColorModeContextProvider: React.FC<PropsWithChildren> = ({
         mode,
       }}
     >
-      <ConfigProvider theme={mergedTheme}>
+      <ConfigProvider theme={mergedTheme} locale={ptBR}>
         {children}
       </ConfigProvider>
     </ColorModeContext.Provider>

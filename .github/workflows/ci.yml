@@ -5,6 +5,10 @@ on:
     branches: ["**"]
   pull_request:
 
+# O CI só lê o repositório: nenhum job precisa de escrita no GitHub.
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -18,17 +22,62 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20 saiu de suporte em 04/2026; 22 é a mesma major do Dockerfile
+          node-version: 22
           cache: npm
 
       - name: Instalar dependências
         run: npm ci
 
+      - name: Auditoria de dependências de produção (falha em alta/crítica)
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Type-check
         run: npm run typecheck
+
+      # Falha em erro (any, variável sem uso etc.); avisos não bloqueiam.
+      - name: Lint
+        run: npm run lint
 
       - name: Testes
         run: npm test
 
       - name: Build de produção
         run: npx tsc && npx vite build
+
+  # Sobe um Postgres 16 limpo e roda TODAS as migrations duas vezes
+  # (idempotência) + as suítes SQL de isolamento multi-tenant, virada,
+  # correções e endurecimento de segurança (database/tests).
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          # Senha descartável de um banco efêmero do CI — não é segredo.
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cliente psql
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update && sudo apt-get install -y postgresql-client
+          fi
+          psql --version
+
+      - name: Migrations + suítes SQL
+        run: bash database/tests/run-migrations-test.sh

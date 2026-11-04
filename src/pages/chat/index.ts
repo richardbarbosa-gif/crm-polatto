@@ -1,1 +1,0 @@
-export { ChatPlaceholderPage } from "./page";

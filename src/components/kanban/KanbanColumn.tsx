@@ -2,9 +2,10 @@ import React, { useEffect, useMemo, useRef } from "react";
 import { useInfiniteList, type CrudFilter } from "@refinedev/core";
 import { Spin, Typography } from "antd";
 import { KANBAN_PAGE_SIZE } from "./types";
-import type { LeadNextTask, Stage } from "./types";
+import type { KanbanLead, LeadNextTask, Stage } from "./types";
 import { LeadCard } from "./LeadCard";
 import { formatCurrencyBRL } from "../../lib/formatters";
+import { valorDoLead } from "../../lib/pipelineMetrics";
 
 const { Text } = Typography;
 
@@ -18,16 +19,22 @@ export interface KanbanColumnProps {
     activeDropColumn: string | null;
     onDragOverColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
     onDropColumn: (e: React.DragEvent<HTMLDivElement>, stageId: string) => void;
-    onDragStartLead: (e: React.DragEvent<HTMLDivElement>, lead: any) => void;
+    onDragStartLead: (e: React.DragEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onDragEndLead: (e: React.DragEvent<HTMLDivElement>) => void;
     onLeadPointerDown: (e: React.PointerEvent<HTMLDivElement>, leadId: string) => void;
     onLeadPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void;
-    onLeadPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: any) => void;
+    onLeadPointerUp: (e: React.PointerEvent<HTMLDivElement>, lead: KanbanLead) => void;
     onLeadPointerCancel: () => void;
-    openLeadDrawer: (lead: any) => void;
+    openLeadDrawer: (lead: KanbanLead) => void;
     openLeadEdit: (leadId: string | number) => void;
     stopActionPropagation: (e: React.SyntheticEvent<HTMLElement>) => void;
+    /** Valor total da etapa calculado no banco (vw_kanban_kpis). */
+    valorDaEtapa?: number;
+    /** Usar o valor agregado (falso com busca por texto ativa). */
+    usarValorAgregado?: boolean;
     tasksByLead?: Map<string, LeadNextTask>;
+    stageMoveOptions?: { value: string; label: string }[];
+    onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -49,7 +56,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     openLeadDrawer,
     openLeadEdit,
     stopActionPropagation,
+    valorDaEtapa,
+    usarValorAgregado = false,
     tasksByLead,
+    stageMoveOptions,
+    onMoveLeadToStage,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,11 +74,16 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         return base;
     }, [serverFilters, stageColumnId, isOthersColumn]);
 
-    const { query: colQuery, result: colResult } = useInfiniteList({
+    // Etapas de exemplo (ainda não gravadas, ids como "novo") não têm o que
+    // consultar: stage_id é bigint e a requisição só devolveria erro.
+    const consultaHabilitada = Boolean(isOthersColumn || stage.persisted);
+
+    const { query: colQuery, result: colResult } = useInfiniteList<KanbanLead>({
         resource: "clientes",
         pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
         filters: columnFilters,
         liveMode: "auto",
+        queryOptions: { enabled: consultaHabilitada },
     });
 
     const leads = useMemo(
@@ -75,29 +91,35 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         [colResult.data],
     );
     const total = colResult.data?.pages[0]?.total ?? 0;
-    const isColLoading = colQuery.isLoading;
+    const isColLoading = consultaHabilitada && colQuery.isLoading;
     const isFetchingMore = colQuery.isFetchingNextPage;
+    const temMais = Boolean(colResult.hasNextPage);
+    const { fetchNextPage } = colQuery;
 
-    // IntersectionObserver para infinite scroll automatico
+    // IntersectionObserver para rolagem infinita
     useEffect(() => {
         const sentinel = sentinelRef.current;
         if (!sentinel) return;
         const observer = new IntersectionObserver(
             (entries) => {
-                if (entries[0]?.isIntersecting && colResult.hasNextPage && !isFetchingMore) {
-                    colQuery.fetchNextPage();
+                if (entries[0]?.isIntersecting && temMais && !isFetchingMore) {
+                    void fetchNextPage();
                 }
             },
             { rootMargin: "200px" },
         );
         observer.observe(sentinel);
         return () => observer.disconnect();
-    }, [colResult.hasNextPage, isFetchingMore, colQuery.fetchNextPage]);
+    }, [temMais, isFetchingMore, fetchNextPage]);
 
-    const totalColuna = useMemo(
-        () => leads.reduce((acc: number, c: any) => acc + Number(c.conta_energia_media || 0), 0),
+    // Valor da coluna: o agregado do banco quando disponível; senão a soma
+    // dos cards carregados, marcada com "+" se ainda houver cards a carregar.
+    const somaCarregados = useMemo(
+        () => leads.reduce((acc, lead) => acc + valorDoLead(lead), 0),
         [leads],
     );
+    const valorColuna = usarValorAgregado ? valorDaEtapa ?? 0 : somaCarregados;
+    const valorParcial = !usarValorAgregado && temMais;
 
     const isDroppable = !isOthersColumn;
     const isDropActive = isDroppable && isDragging && activeDropColumn === stageColumnId;
@@ -108,14 +130,18 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
             onDrop={isDroppable ? (e) => onDropColumn(e, stageColumnId) : undefined}
             className={`crm-kanban-column ${isDropActive ? "crm-kanban-column-drop-active" : ""}`}
             style={{ backgroundColor: isDropActive ? "rgba(37, 99, 235, 0.08)" : undefined }}
+            aria-label={`Etapa ${stage.nome}`}
         >
             <div className="crm-kanban-column-head">
                 <Text strong className="crm-kanban-column-title">{stage.nome}</Text>
                 <div className="crm-kanban-column-stats">
-                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>{total} leads</Text>
+                    <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>
+                        {total} {total === 1 ? "lead" : "leads"}
+                    </Text>
                     <span style={{ color: "var(--crm-ink-300)" }}>·</span>
                     <Text style={{ fontSize: 11, color: "var(--crm-ink-500)", fontWeight: 500 }}>
-                        {formatCurrencyBRL(totalColuna, "R$ 0,00")}
+                        {formatCurrencyBRL(valorColuna, "R$ 0,00")}
+                        {valorParcial ? "+" : ""}
                     </Text>
                 </div>
                 <div
@@ -135,15 +161,19 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     <div style={{ display: "flex", justifyContent: "center", padding: 20 }}>
                         <Spin size="small" />
                     </div>
+                ) : colQuery.isError ? (
+                    <div className="crm-kanban-empty" role="alert">
+                        Não foi possível carregar esta etapa.
+                    </div>
                 ) : leads.length === 0 ? (
                     <div className="crm-kanban-empty">
                         {isDropActive ? "Solte o lead aqui" : "Sem leads nesta etapa"}
                     </div>
                 ) : (
                     <>
-                        {leads.map((cliente: any) => (
+                        {leads.map((cliente) => (
                             <LeadCard
-                                key={cliente.id}
+                                key={String(cliente.id)}
                                 lead={cliente}
                                 accentColor={accentColor}
                                 onPointerDown={onLeadPointerDown}
@@ -156,6 +186,8 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                 onView={openLeadDrawer}
                                 stopActionPropagation={stopActionPropagation}
                                 nextTask={tasksByLead?.get(String(cliente.id))}
+                                stageMoveOptions={stageMoveOptions}
+                                onMoveToStage={onMoveLeadToStage}
                             />
                         ))}
                         <div ref={sentinelRef} style={{ height: 1 }} />

@@ -15,11 +15,12 @@ import {
     Typography,
     message,
 } from "antd";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button, EmptyState } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
 import { useCrmAccess } from "../../../hooks/useCrmAccess";
 import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
+import { supabaseClient } from "../../../utility";
 import type { PipelineRecord, PipelineStageRecord } from "../../../types/db";
 
 const { Text } = Typography;
@@ -56,6 +57,8 @@ export const PipelinesConfig = () => {
     }>({ open: false, pipelineId: null, editando: null });
 
     const [pipelineForm] = Form.useForm<PipelineFormValues>();
+    const [isSaving, setIsSaving] = useState(false);
+    const salvandoRef = useRef(false);
     const [stageForm] = Form.useForm<StageFormValues>();
 
     const { query: pipelinesQuery } = useList<PipelineRecord>({
@@ -91,7 +94,10 @@ export const PipelinesConfig = () => {
         );
 
     const salvarPipeline = async () => {
+        if (salvandoRef.current) return;
         const values = await pipelineForm.validateFields();
+        salvandoRef.current = true;
+        setIsSaving(true);
         try {
             if (pipelineModal.editando) {
                 await updateRecord({
@@ -115,16 +121,22 @@ export const PipelinesConfig = () => {
                     ? String((error as { message?: unknown }).message)
                     : "Erro desconhecido";
             message.error(`Não foi possível salvar o funil: ${detalhe}`);
+        } finally {
+            salvandoRef.current = false;
+            setIsSaving(false);
         }
     };
 
     const salvarStage = async () => {
+        if (salvandoRef.current) return;
         const values = await stageForm.validateFields();
         const payload = {
             ...values,
             pipeline_id: stageModal.pipelineId || undefined,
             tenant_id: tenantId || undefined,
         };
+        salvandoRef.current = true;
+        setIsSaving(true);
         try {
             if (stageModal.editando) {
                 await updateRecord({
@@ -145,6 +157,9 @@ export const PipelinesConfig = () => {
                     ? String((error as { message?: unknown }).message)
                     : "Erro desconhecido";
             message.error(`Não foi possível salvar a etapa: ${detalhe}`);
+        } finally {
+            salvandoRef.current = false;
+            setIsSaving(false);
         }
     };
 
@@ -159,6 +174,20 @@ export const PipelinesConfig = () => {
     };
 
     const excluirStage = async (stage: StageRow) => {
+        // A FK de negocios.stage_id é "on delete set null": apagar etapa com
+        // negócios não dá erro — os negócios simplesmente perdem a etapa e
+        // vão para "Outros". Aqui bloqueia e orienta a mover antes (o
+        // gerenciador de colunas do Kanban faz a exclusão com destino).
+        const { count, error: erroContagem } = await supabaseClient
+            .from("clientes")
+            .select("id", { count: "exact", head: true })
+            .eq("stage_id", String(stage.id));
+        if (!erroContagem && (count ?? 0) > 0) {
+            message.warning(
+                `A etapa "${stage.nome}" tem ${count} negócio(s). Mova-os antes de excluir (Kanban > Gerenciar colunas).`,
+            );
+            return;
+        }
         try {
             await deleteRecord({ resource: "pipeline_stages", id: stage.id });
             message.success("Etapa removida.");
@@ -188,7 +217,7 @@ export const PipelinesConfig = () => {
                 <Alert
                     type="info"
                     showIcon
-                    message="Somente administradores podem alterar funis e etapas."
+                    message="Somente o gerente pode alterar funis e etapas."
                     style={{ marginBottom: 16 }}
                 />
             ) : (
@@ -389,6 +418,7 @@ export const PipelinesConfig = () => {
                 onCancel={() => setPipelineModal({ open: false, editando: null })}
                 okText="Salvar"
                 cancelText="Cancelar"
+                confirmLoading={isSaving}
                 destroyOnHidden
             >
                 <Form form={pipelineForm} layout="vertical">
@@ -415,6 +445,7 @@ export const PipelinesConfig = () => {
                 onCancel={() => setStageModal({ open: false, pipelineId: null, editando: null })}
                 okText="Salvar"
                 cancelText="Cancelar"
+                confirmLoading={isSaving}
                 destroyOnHidden
             >
                 <Form form={stageForm} layout="vertical">
