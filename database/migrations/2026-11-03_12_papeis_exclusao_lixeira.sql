@@ -609,3 +609,58 @@ begin
         end if;
     end loop;
 end $$;
+
+-- ---------------------------------------------------------------------
+-- 9. HIGIENE APONTADA PELO LINTER DO SUPABASE (produção, 2026-11-04)
+-- a) Funções de TRIGGER não são chamáveis pela API (PostgREST recusa),
+--    e o disparo do trigger não depende de EXECUTE do usuário: tira o
+--    EXECUTE de anon/authenticated/PUBLIC sem efeito colateral.
+-- b) Auxiliares das policies (current_tenant_id, is_system_admin,
+--    tenant_filter): só authenticated/service_role; anon nunca precisa.
+-- c) search_path fixo nas funções que ainda não tinham.
+-- ---------------------------------------------------------------------
+do $$
+declare
+    r record;
+    v_anon boolean := exists (select 1 from pg_roles where rolname = 'anon');
+    v_auth boolean := exists (select 1 from pg_roles where rolname = 'authenticated');
+    v_service boolean := exists (select 1 from pg_roles where rolname = 'service_role');
+begin
+    for r in
+        select p.oid::regprocedure as fn,
+               p.prorettype = 'pg_catalog.trigger'::regtype as eh_trigger
+        from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+        where ns.nspname = 'public'
+          and (p.prorettype = 'pg_catalog.trigger'::regtype
+               or p.proname in ('current_tenant_id', 'is_system_admin', 'tenant_filter', 'membro_do_tenant'))
+    loop
+        execute format('revoke execute on function %s from public', r.fn);
+        if v_anon then
+            execute format('revoke execute on function %s from anon', r.fn);
+        end if;
+        if r.eh_trigger then
+            if v_auth then
+                execute format('revoke execute on function %s from authenticated', r.fn);
+            end if;
+        else
+            if v_auth then
+                execute format('grant execute on function %s to authenticated', r.fn);
+            end if;
+            if v_service then
+                execute format('grant execute on function %s to service_role', r.fn);
+            end if;
+        end if;
+    end loop;
+
+    for r in
+        select p.oid::regprocedure as fn
+        from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
+        where ns.nspname = 'public'
+          and p.proname in ('tenant_solicitado', 'tem_coluna', 'to_numeric_seguro', 'crm_set_updated_at', 'normalizar_papel')
+          and not exists (
+              select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%'
+          )
+    loop
+        execute format('alter function %s set search_path = public, pg_temp', r.fn);
+    end loop;
+end $$;
