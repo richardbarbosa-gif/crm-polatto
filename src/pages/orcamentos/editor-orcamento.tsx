@@ -1,4 +1,4 @@
-import { ArrowDownOutlined, ArrowUpOutlined, DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { ArrowDownOutlined, ArrowUpOutlined, BranchesOutlined, DeleteOutlined, LockOutlined, PlusOutlined } from "@ant-design/icons";
 import { useGetIdentity } from "@refinedev/core";
 import {
     Alert,
@@ -23,11 +23,19 @@ import { propsMoeda } from "../../lib/moedaInput";
 import {
     buscarIdentidade,
     buscarOrcamentoCompleto,
+    criarNovaVersao,
     listarProdutosAtivos,
     salvarOrcamento,
 } from "../../lib/orcamentos/api";
 import { calcularOrcamento, type TipoDesconto } from "../../lib/orcamentos/calculo";
 import { ROTULO_STATUS, hojeEmBrasilia, somarDias } from "../../lib/orcamentos/formato";
+import {
+    MENSAGEM_PROPOSTA_TRAVADA,
+    efeitoDaNovaVersao,
+    orcamentoEditavel,
+    podeCriarNovaVersao,
+    rotuloRevisao,
+} from "../../lib/orcamentos/regras";
 import type { EmpresaIdentidade, OrcamentoCompleto, OrcamentoItem, Produto } from "../../lib/orcamentos/tipos";
 import "./orcamentos.css";
 
@@ -75,6 +83,8 @@ type Props = {
     clienteNome?: string | null;
     onFechar: () => void;
     onSalvo: (id: string) => void;
+    /** Chamado com o id da revisão criada pelo botão "Nova versão" (modo somente leitura). */
+    onNovaVersao?: (id: string) => void;
 };
 
 const reais = (valor: number) => valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -127,13 +137,14 @@ const valoresIniciais = (
     };
 };
 
-export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar, onSalvo }: Props) => {
+export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar, onSalvo, onNovaVersao }: Props) => {
     const { message, modal } = App.useApp();
     const { tenantId } = useTenant();
     const { data: usuario } = useGetIdentity<IdentidadeUsuario>();
     const [form] = Form.useForm<ValoresForm>();
     const [carga, setCarga] = useState<Carga>({ estado: "carregando" });
     const [salvando, setSalvando] = useState(false);
+    const [criandoVersao, setCriandoVersao] = useState(false);
     const salvandoRef = useRef(false);
 
     const emailUsuario = usuario?.email ?? null;
@@ -176,6 +187,9 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
 
     const produtos = carga.estado === "pronto" ? carga.produtos : [];
     const orcamento = carga.estado === "pronto" ? carga.orcamento : null;
+    // Só rascunho é editável (migration 14): o resto abre somente leitura.
+    const somenteLeitura = Boolean(orcamento && !orcamentoEditavel(orcamento.status));
+    const revisao = orcamento ? rotuloRevisao(orcamento.revisao, orcamento.numero_original) : null;
 
     // Produto que saiu do catálogo ativo (inativado ou apagado) continua
     // legível no item já gravado, em vez de aparecer o id cru no select.
@@ -202,7 +216,7 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
     };
 
     const fechar = () => {
-        if (!form.isFieldsTouched() || salvando) {
+        if (somenteLeitura || !form.isFieldsTouched() || salvando) {
             onFechar();
             return;
         }
@@ -216,8 +230,22 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
         });
     };
 
+    const novaVersao = async () => {
+        if (!orcamento || criandoVersao) return;
+        setCriandoVersao(true);
+        try {
+            const id = await criarNovaVersao(orcamento.id);
+            message.success(`Revisão ${orcamento.revisao + 1} criada como rascunho, com número novo.`);
+            onNovaVersao?.(id);
+        } catch (erro: unknown) {
+            message.error(erro instanceof Error ? erro.message : "Não foi possível criar a nova versão.");
+        } finally {
+            setCriandoVersao(false);
+        }
+    };
+
     const salvar = async () => {
-        if (salvandoRef.current) return;
+        if (salvandoRef.current || somenteLeitura) return;
         let valores: ValoresForm;
         try {
             valores = await form.validateFields();
@@ -267,9 +295,20 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
         }
     };
 
-    const titulo = orcamento
-        ? `Editar orçamento ${orcamento.numero}`
-        : `Novo orçamento${clienteNome ? ` — ${clienteNome}` : ""}`;
+    const titulo = orcamento ? (
+        <span>
+            {somenteLeitura ? `Orçamento ${orcamento.numero}` : `Editar orçamento ${orcamento.numero}`}
+            {revisao ? (
+                <Text type="secondary" style={{ display: "block", fontSize: 13, fontWeight: 400 }}>
+                    {revisao}
+                </Text>
+            ) : null}
+        </span>
+    ) : (
+        `Novo orçamento${clienteNome ? ` — ${clienteNome}` : ""}`
+    );
+    const mostrarNovaVersao = Boolean(orcamento && somenteLeitura && podeCriarNovaVersao(orcamento.status) && onNovaVersao);
+    const totalExibido = somenteLeitura && orcamento ? orcamento.total : totais.total;
 
     return (
         <Drawer
@@ -284,22 +323,56 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
                     <div style={{ fontVariantNumeric: "tabular-nums" }}>
                         <Text type="secondary">Total </Text>
                         <Text strong style={{ fontSize: 18 }}>
-                            {reais(totais.total)}
+                            {reais(totalExibido)}
                         </Text>
                     </div>
-                    <Space>
-                        <Button onClick={fechar} disabled={salvando}>
-                            Cancelar
-                        </Button>
-                        <Button type="primary" onClick={salvar} loading={salvando} disabled={carga.estado !== "pronto"}>
-                            Salvar orçamento
-                        </Button>
-                    </Space>
+                    {somenteLeitura ? (
+                        <Space>
+                            <Button onClick={fechar}>Fechar</Button>
+                            {mostrarNovaVersao ? (
+                                <Button type="primary" icon={<BranchesOutlined />} onClick={novaVersao} loading={criandoVersao}>
+                                    Nova versão
+                                </Button>
+                            ) : null}
+                        </Space>
+                    ) : (
+                        <Space>
+                            <Button onClick={fechar} disabled={salvando}>
+                                Cancelar
+                            </Button>
+                            <Button type="primary" onClick={salvar} loading={salvando} disabled={carga.estado !== "pronto"}>
+                                Salvar orçamento
+                            </Button>
+                        </Space>
+                    )}
                 </div>
             }
         >
             {carga.estado === "carregando" ? <Skeleton active paragraph={{ rows: 10 }} /> : null}
             {carga.estado === "erro" ? <Alert type="error" showIcon message={carga.mensagem} /> : null}
+
+            {/* Fora do <Form disabled>: o botão "Nova versão" precisa continuar clicável. */}
+            {orcamento && somenteLeitura ? (
+                <Alert
+                    type="info"
+                    showIcon
+                    icon={<LockOutlined />}
+                    style={{ marginBottom: 16 }}
+                    message={`Somente leitura: proposta com status "${ROTULO_STATUS[orcamento.status]}"`}
+                    description={
+                        orcamento.status === "substituido"
+                            ? "Esta proposta foi substituída por uma revisão mais nova e fica guardada exatamente como o cliente a recebeu."
+                            : `${MENSAGEM_PROPOSTA_TRAVADA} O que o cliente recebeu fica registrado como foi enviado; a nova versão nasce como rascunho, com número novo. ${efeitoDaNovaVersao(orcamento.status)}`
+                    }
+                    action={
+                        mostrarNovaVersao ? (
+                            <Button size="small" type="primary" icon={<BranchesOutlined />} onClick={novaVersao} loading={criandoVersao}>
+                                Nova versão
+                            </Button>
+                        ) : undefined
+                    }
+                />
+            ) : null}
 
             <Form<ValoresForm>
                 form={form}
@@ -307,16 +380,8 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
                 requiredMark="optional"
                 style={{ display: carga.estado === "pronto" ? "block" : "none" }}
                 initialValues={{ desconto_tipo: "valor", desconto_valor: 0, itens: [] }}
+                disabled={somenteLeitura}
             >
-                {orcamento && orcamento.status !== "rascunho" ? (
-                    <Alert
-                        type="warning"
-                        showIcon
-                        style={{ marginBottom: 16 }}
-                        message={`Esta proposta está como "${ROTULO_STATUS[orcamento.status]}".`}
-                        description="O cliente pode já ter recebido o PDF. Para manter o histórico, prefira Duplicar e editar a cópia."
-                    />
-                ) : null}
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0 16px" }}>
                     <Form.Item label="Título da proposta" name="titulo" rules={[{ max: 200, message: "Até 200 caracteres." }]} style={{ gridColumn: "1 / -1" }}>
@@ -370,30 +435,34 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
                                             <Text strong>Item {indice + 1}</Text>
                                             <Space size={2} wrap>
                                                 <Text className="orc-item-total">{reais(totais.itens[indice]?.total ?? 0)}</Text>
-                                                <Button
-                                                    size="small"
-                                                    type="text"
-                                                    icon={<ArrowUpOutlined />}
-                                                    disabled={indice === 0}
-                                                    onClick={() => move(indice, indice - 1)}
-                                                    aria-label={`Mover item ${indice + 1} para cima`}
-                                                />
-                                                <Button
-                                                    size="small"
-                                                    type="text"
-                                                    icon={<ArrowDownOutlined />}
-                                                    disabled={indice === campos.length - 1}
-                                                    onClick={() => move(indice, indice + 1)}
-                                                    aria-label={`Mover item ${indice + 1} para baixo`}
-                                                />
-                                                <Button
-                                                    size="small"
-                                                    type="text"
-                                                    danger
-                                                    icon={<DeleteOutlined />}
-                                                    onClick={() => remove(campo.name)}
-                                                    aria-label={`Remover item ${indice + 1}`}
-                                                />
+                                                {somenteLeitura ? null : (
+                                                    <>
+                                                        <Button
+                                                            size="small"
+                                                            type="text"
+                                                            icon={<ArrowUpOutlined />}
+                                                            disabled={indice === 0}
+                                                            onClick={() => move(indice, indice - 1)}
+                                                            aria-label={`Mover item ${indice + 1} para cima`}
+                                                        />
+                                                        <Button
+                                                            size="small"
+                                                            type="text"
+                                                            icon={<ArrowDownOutlined />}
+                                                            disabled={indice === campos.length - 1}
+                                                            onClick={() => move(indice, indice + 1)}
+                                                            aria-label={`Mover item ${indice + 1} para baixo`}
+                                                        />
+                                                        <Button
+                                                            size="small"
+                                                            type="text"
+                                                            danger
+                                                            icon={<DeleteOutlined />}
+                                                            onClick={() => remove(campo.name)}
+                                                            aria-label={`Remover item ${indice + 1}`}
+                                                        />
+                                                    </>
+                                                )}
                                             </Space>
                                         </div>
                                         <div className="orc-item-grade">
@@ -483,9 +552,11 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
                                 );
                             })}
                             <Form.ErrorList errors={errors} />
-                            <Button icon={<PlusOutlined />} onClick={() => add({ ...ITEM_VAZIO })} style={{ alignSelf: "flex-start" }}>
-                                Adicionar item
-                            </Button>
+                            {somenteLeitura ? null : (
+                                <Button icon={<PlusOutlined />} onClick={() => add({ ...ITEM_VAZIO })} style={{ alignSelf: "flex-start" }}>
+                                    Adicionar item
+                                </Button>
+                            )}
                         </div>
                     )}
                 </Form.List>

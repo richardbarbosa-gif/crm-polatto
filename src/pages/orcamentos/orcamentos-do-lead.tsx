@@ -7,6 +7,7 @@ import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { ehIdDoModeloNovo } from "../../lib/leadTimeline";
 import { formatarDataIso } from "../../lib/orcamentos/formato";
+import { rotuloRevisao } from "../../lib/orcamentos/regras";
 import { enderecoDoLead, paraOrcamento, type ClienteDoNegocio } from "../../lib/orcamentos/tipos";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { AcoesOrcamento } from "./acoes-orcamento";
@@ -130,41 +131,55 @@ export const OrcamentosDoLead = ({ lead, onDocumentoSalvo }: Props) => {
                 />
             ) : (
                 <div className="orc-lista-lead">
-                    {orcamentos.map((orcamento) => (
-                        <div className="orc-linha" key={orcamento.id}>
-                            <div className="orc-linha-info">
-                                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                                    <span className="orc-linha-numero">Nº {orcamento.numero}</span>
-                                    <StatusOrcamentoTag status={orcamento.status} validoAte={orcamento.valido_ate} />
+                    {orcamentos.map((orcamento) => {
+                        const revisao = rotuloRevisao(orcamento.revisao, orcamento.numero_original);
+                        return (
+                            <div className="orc-linha" key={orcamento.id}>
+                                <div className="orc-linha-info">
+                                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                                        <span className="orc-linha-numero">Nº {orcamento.numero}</span>
+                                        {revisao ? (
+                                            <Text type="secondary" style={{ fontSize: 12 }}>
+                                                {revisao}
+                                            </Text>
+                                        ) : null}
+                                        <StatusOrcamentoTag status={orcamento.status} validoAte={orcamento.valido_ate} />
+                                    </div>
+                                    {orcamento.titulo ? <Text style={{ display: "block" }}>{orcamento.titulo}</Text> : null}
+                                    <Text type="secondary" style={{ fontSize: 12 }}>
+                                        Emitido em {formatarDataIso(orcamento.data_emissao)} · válido até {formatarDataIso(orcamento.valido_ate)}
+                                        {orcamento.responsavel_nome ? ` · ${orcamento.responsavel_nome}` : ""}
+                                    </Text>
                                 </div>
-                                {orcamento.titulo ? <Text style={{ display: "block" }}>{orcamento.titulo}</Text> : null}
-                                <Text type="secondary" style={{ fontSize: 12 }}>
-                                    Emitido em {formatarDataIso(orcamento.data_emissao)} · válido até {formatarDataIso(orcamento.valido_ate)}
-                                    {orcamento.responsavel_nome ? ` · ${orcamento.responsavel_nome}` : ""}
-                                </Text>
+                                <span className="orc-linha-total">{reais(orcamento.total)}</span>
+                                <AcoesOrcamento
+                                    orcamento={orcamento}
+                                    cliente={cliente}
+                                    podeExcluir={ehAdmin || orcamento.created_by === identityUserId}
+                                    onAbrir={() => setEditor({ orcamentoId: orcamento.id })}
+                                    onNovaVersao={(id) => setEditor({ orcamentoId: id })}
+                                    onAlterado={recarregar}
+                                    onArquivoSalvo={onDocumentoSalvo}
+                                />
                             </div>
-                            <span className="orc-linha-total">{reais(orcamento.total)}</span>
-                            <AcoesOrcamento
-                                orcamento={orcamento}
-                                cliente={cliente}
-                                podeExcluir={ehAdmin || orcamento.created_by === identityUserId}
-                                onEditar={() => setEditor({ orcamentoId: orcamento.id })}
-                                onAlterado={recarregar}
-                                onArquivoSalvo={onDocumentoSalvo}
-                            />
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
             {editor ? (
                 <EditorOrcamento
+                    key={editor.orcamentoId ?? "novo"}
                     negocioId={negocioId}
                     orcamentoId={editor.orcamentoId}
                     clienteNome={lead.nome}
                     onFechar={() => setEditor(null)}
                     onSalvo={() => {
                         setEditor(null);
+                        recarregar();
+                    }}
+                    onNovaVersao={(id) => {
+                        setEditor({ orcamentoId: id });
                         recarregar();
                     }}
                 />

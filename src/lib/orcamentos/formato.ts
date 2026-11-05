@@ -4,7 +4,7 @@
  * Tudo puro e testado em __tests__/orcamentos.test.ts.
  */
 
-export const STATUS_ORCAMENTO = ["rascunho", "enviado", "aceito", "recusado", "expirado"] as const;
+export const STATUS_ORCAMENTO = ["rascunho", "enviado", "aceito", "recusado", "expirado", "substituido"] as const;
 export type StatusOrcamento = (typeof STATUS_ORCAMENTO)[number];
 
 export const ROTULO_STATUS: Record<StatusOrcamento, string> = {
@@ -13,6 +13,7 @@ export const ROTULO_STATUS: Record<StatusOrcamento, string> = {
     aceito: "Aceito",
     recusado: "Recusado",
     expirado: "Expirado",
+    substituido: "Substituído",
 };
 
 /** Cor do Tag do antd para cada status. */
@@ -22,6 +23,7 @@ export const COR_STATUS: Record<StatusOrcamento, string> = {
     aceito: "success",
     recusado: "error",
     expirado: "warning",
+    substituido: "purple",
 };
 
 export const ehStatusOrcamento = (valor: unknown): valor is StatusOrcamento =>
@@ -63,18 +65,20 @@ export const estaVencido = (
 const semAcentos = (texto: string): string => texto.normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /**
- * Nome do arquivo: Proposta-<numero>-<cliente>.pdf, só com [A-Za-z0-9-].
+ * Nome do arquivo: Proposta-<numero>[-RevN]-<cliente>.pdf, só com [A-Za-z0-9-].
  * Nada de barra, ponto, aspas ou caractere de controle vindo do nome do
  * cliente (path traversal no storage, nome quebrado no Windows/WhatsApp).
+ * A partir da revisão 2 o nome leva "-RevN": o cliente distingue as versões.
  */
-export const nomeArquivoProposta = (numero: string, cliente?: string | null): string => {
+export const nomeArquivoProposta = (numero: string, cliente?: string | null, revisao?: number | null): string => {
     const limpar = (texto: string) =>
         semAcentos(texto)
             .replace(/[^A-Za-z0-9]+/g, "-")
             .replace(/^-+|-+$/g, "");
     const parteNumero = limpar(numero || "").slice(0, 20) || "sem-numero";
     const parteCliente = limpar(cliente || "").slice(0, 60).replace(/-+$/g, "") || "cliente";
-    return `Proposta-${parteNumero}-${parteCliente}.pdf`;
+    const parteRevisao = revisao && Number.isInteger(revisao) && revisao > 1 ? `-Rev${revisao}` : "";
+    return `Proposta-${parteNumero}${parteRevisao}-${parteCliente}.pdf`;
 };
 
 /**

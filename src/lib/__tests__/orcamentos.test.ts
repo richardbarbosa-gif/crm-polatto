@@ -194,6 +194,14 @@ describe("gerarPropostaPdf", () => {
         expect(await paginas(blob)).toBe(1);
     });
 
+    it("revisão sai com \"Rev. N\" ao lado do número (título do documento e corpo)", async () => {
+        const blob = await gerarPropostaPdf({ ...dados, orcamento: { ...dados.orcamento, numero: "2026-0005", revisao: 2 } });
+        expect(await paginas(blob)).toBe(1);
+        const bruto = Buffer.from(await blob.arrayBuffer()).toString("latin1");
+        // metadado /Title do PDF (parênteses escapados pela sintaxe do PDF)
+        expect(bruto).toContain("/Title (Proposta 2026-0005 \\(Rev. 2\\)");
+    });
+
     it("quebra em várias páginas sem perder itens e sem logo", async () => {
         const itens = Array.from({ length: 60 }, (_, i) => ({
             descricao: `Item ${i + 1} com descrição longa o bastante para quebrar em duas linhas na coluna`,

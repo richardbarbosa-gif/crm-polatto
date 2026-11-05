@@ -1,10 +1,12 @@
 import {
+    BranchesOutlined,
     CheckCircleOutlined,
     CloudUploadOutlined,
     CopyOutlined,
     DeleteOutlined,
     DownloadOutlined,
     EditOutlined,
+    EyeOutlined,
     FilePdfOutlined,
     MailOutlined,
     MoreOutlined,
@@ -22,13 +24,13 @@ import {
     atualizarValorNegocio,
     baixarArquivo,
     buscarOrcamentoCompleto,
+    criarNovaVersao,
     duplicarOrcamento,
     excluirOrcamento,
     salvarPdfNoLead,
 } from "../../lib/orcamentos/api";
 import {
     ROTULO_STATUS,
-    STATUS_ORCAMENTO,
     assuntoProposta,
     hojeEmBrasilia,
     linkEmail,
@@ -37,23 +39,40 @@ import {
     type StatusOrcamento,
 } from "../../lib/orcamentos/formato";
 import { gerarPropostaDoOrcamento, type PropostaGerada } from "../../lib/orcamentos/proposta";
+import {
+    efeitoDaNovaVersao,
+    orcamentoEditavel,
+    podeCriarNovaVersao,
+    transicoesDisponiveis,
+} from "../../lib/orcamentos/regras";
 import type { ClienteDoNegocio, Orcamento } from "../../lib/orcamentos/tipos";
 
 const { Paragraph, Text } = Typography;
 
-type Ocupado = null | "pdf" | "lead" | "status" | "duplicar" | "excluir";
+type Ocupado = null | "pdf" | "lead" | "status" | "duplicar" | "versao" | "excluir";
 type Canal = "whatsapp" | "email";
 
 type Props = {
     orcamento: Orcamento;
     cliente: ClienteDoNegocio | null;
     podeExcluir: boolean;
-    onEditar: () => void;
+    /** Abre o editor: edição no rascunho, somente leitura nos demais status. */
+    onAbrir: () => void;
+    /** Chamado com o id da revisão criada por "Nova versão" (abre o editor nela). */
+    onNovaVersao: (id: string) => void;
     onAlterado: () => void;
     onArquivoSalvo?: () => void;
 };
 
-export const AcoesOrcamento = ({ orcamento, cliente, podeExcluir, onEditar, onAlterado, onArquivoSalvo }: Props) => {
+export const AcoesOrcamento = ({
+    orcamento,
+    cliente,
+    podeExcluir,
+    onAbrir,
+    onNovaVersao,
+    onAlterado,
+    onArquivoSalvo,
+}: Props) => {
     const { message, modal } = App.useApp();
     const { tenantId, identityEmail } = useTenant();
     const invalidate = useInvalidate();
@@ -168,6 +187,34 @@ export const AcoesOrcamento = ({ orcamento, cliente, podeExcluir, onEditar, onAl
         }
     };
 
+    const novaVersao = () => {
+        if (ocupado) return;
+        modal.confirm({
+            title: `Criar nova versão da proposta ${orcamento.numero}?`,
+            content: (
+                <span>
+                    A revisão {orcamento.revisao + 1} nasce como <strong>rascunho</strong>, com número novo e o mesmo
+                    conteúdo, para você ajustar. {efeitoDaNovaVersao(orcamento.status)}
+                </span>
+            ),
+            okText: "Criar nova versão",
+            cancelText: "Cancelar",
+            onOk: async () => {
+                setOcupado("versao");
+                try {
+                    const id = await criarNovaVersao(orcamento.id);
+                    message.success("Nova versão pronta para editar.");
+                    onAlterado();
+                    onNovaVersao(id);
+                } catch (e) {
+                    erro(e, "Não foi possível criar a nova versão.");
+                } finally {
+                    setOcupado(null);
+                }
+            },
+        });
+    };
+
     const excluir = () => {
         modal.confirm({
             title: `Excluir o orçamento ${orcamento.numero}?`,
@@ -200,37 +247,56 @@ export const AcoesOrcamento = ({ orcamento, cliente, podeExcluir, onEditar, onAl
     const linkZap = linkWhatsApp(cliente?.telefone, mensagem, cliente?.ddi);
     const linkMail = linkEmail(cliente?.email, assuntoProposta(orcamento.numero), mensagem);
 
+    // Menu espelha o banco (migration 14): só rascunho se edita; o status só
+    // oferece as transições que o banco aceita.
+    const editavel = orcamentoEditavel(orcamento.status);
+    const transicoes = transicoesDisponiveis(orcamento.status);
+
     const itensMenu: MenuProps["items"] = [
-        { key: "editar", icon: <EditOutlined />, label: "Editar", onClick: onEditar },
+        editavel
+            ? { key: "editar", icon: <EditOutlined />, label: "Editar", onClick: onAbrir }
+            : { key: "ver", icon: <EyeOutlined />, label: "Ver", onClick: onAbrir },
+        ...(podeCriarNovaVersao(orcamento.status)
+            ? [{ key: "nova-versao", icon: <BranchesOutlined />, label: "Nova versão", onClick: novaVersao }]
+            : []),
+        { key: "baixar", icon: <DownloadOutlined />, label: "Baixar PDF", onClick: baixar },
         { key: "lead", icon: <CloudUploadOutlined />, label: "Salvar PDF no lead", onClick: salvarNoLead },
         { type: "divider" },
-        {
-            key: "whatsapp",
-            icon: <WhatsAppOutlined />,
-            label: linkZap ? "Enviar pelo WhatsApp" : "WhatsApp (lead sem celular válido)",
-            disabled: !linkZap,
-            onClick: () => setCompartilhar("whatsapp"),
-        },
-        {
-            key: "email",
-            icon: <MailOutlined />,
-            label: linkMail ? "Enviar por e-mail" : "E-mail (lead sem e-mail válido)",
-            disabled: !linkMail,
-            onClick: () => setCompartilhar("email"),
-        },
+        // Proposta substituída não vai mais para o cliente: o que vale é a revisão.
+        ...(orcamento.status === "substituido"
+            ? []
+            : [
+                  {
+                      key: "whatsapp",
+                      icon: <WhatsAppOutlined />,
+                      label: linkZap ? "Enviar pelo WhatsApp" : "WhatsApp (lead sem celular válido)",
+                      disabled: !linkZap,
+                      onClick: () => setCompartilhar("whatsapp"),
+                  },
+                  {
+                      key: "email",
+                      icon: <MailOutlined />,
+                      label: linkMail ? "Enviar por e-mail" : "E-mail (lead sem e-mail válido)",
+                      disabled: !linkMail,
+                      onClick: () => setCompartilhar("email"),
+                  },
+              ]),
         ...(orcamento.status === "rascunho"
             ? [{ key: "enviado", icon: <SendOutlined />, label: "Marcar como enviado", onClick: () => mudarStatus("enviado") }]
-            : []),
-        {
-            key: "status",
-            icon: <CheckCircleOutlined />,
-            label: "Mudar status",
-            children: STATUS_ORCAMENTO.filter((s) => s !== orcamento.status).map((s) => ({
-                key: `status-${s}`,
-                label: ROTULO_STATUS[s],
-                onClick: () => mudarStatus(s),
-            })),
-        },
+            : transicoes.length
+              ? [
+                    {
+                        key: "status",
+                        icon: <CheckCircleOutlined />,
+                        label: "Mudar status",
+                        children: transicoes.map((s) => ({
+                            key: `status-${s}`,
+                            label: ROTULO_STATUS[s],
+                            onClick: () => mudarStatus(s),
+                        })),
+                    },
+                ]
+              : []),
         { type: "divider" },
         { key: "duplicar", icon: <CopyOutlined />, label: "Duplicar", onClick: duplicar },
         ...(podeExcluir
@@ -251,6 +317,7 @@ export const AcoesOrcamento = ({ orcamento, cliente, podeExcluir, onEditar, onAl
                 >
                     PDF
                 </Button>
+
                 <Dropdown menu={{ items: itensMenu }} trigger={["click"]} disabled={Boolean(ocupado)}>
                     <Button
                         icon={<MoreOutlined />}

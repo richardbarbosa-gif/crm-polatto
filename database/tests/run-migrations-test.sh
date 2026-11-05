@@ -109,6 +109,44 @@ begin
 end \$\$;
 SQL
 
+echo "==> Suíte 9: proposta travada depois de enviada + nova versão (migration 14) — ataque falha, uso legítimo segue"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/09_teste_orcamento_travado.sql"
+
+echo "==> Suíte 9b: item gravado no mesmo instante em que outra conexão envia a proposta"
+# A conexão 1 marca o rascunho como enviado e segura a transação aberta;
+# a conexão 2 tenta incluir um item nesse meio-tempo. Esperado: a 2 espera
+# a 1 confirmar e é recusada (sem o lock do trigger, o item entraria
+# depois do envio, porque a leitura veria o rascunho antigo).
+ORC_CORRIDA="$(ctx trv_corrida)"; V1_TRV="$(ctx trv_v1)"
+psql -v ON_ERROR_STOP=1 -q >/dev/null <<SQL &
+select public.login_como('$V1_TRV');
+begin;
+update public.orcamentos set status = 'enviado' where id = '$ORC_CORRIDA';
+select pg_sleep(1.5);
+commit;
+SQL
+pid_envio=$!
+sleep 0.5
+resultado_corrida="$(psql -tAq <<SQL | tail -n 1
+select public.login_como('$V1_TRV');
+select crm_teste.erro_de(\$q\$insert into public.orcamento_itens (orcamento_id, descricao, quantidade, valor_unitario) values ('$ORC_CORRIDA', 'Na corrida', 1, 1)\$q\$);
+SQL
+)"
+wait "$pid_envio" || { echo "FALHOU: conexão que envia a proposta abortou"; exit 1; }
+case "$resultado_corrida" in
+    "42501 Proposta já enviada"*) echo "  ok — item na corrida recusado: $resultado_corrida" ;;
+    *) echo "FALHOU: item gravado durante o envio deveria ser recusado, veio: $resultado_corrida"; exit 1 ;;
+esac
+psql -v ON_ERROR_STOP=1 -q <<SQL
+do \$\$
+begin
+    perform public.assert(
+        (select status from public.orcamentos where id = '$ORC_CORRIDA') = 'enviado'
+        and not exists (select 1 from public.orcamento_itens where orcamento_id = '$ORC_CORRIDA' and descricao = 'Na corrida'),
+        'T11: proposta enviada sem o item da corrida (lock no trigger dos itens)');
+end \$\$;
+SQL
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

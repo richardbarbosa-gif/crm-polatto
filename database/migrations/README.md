@@ -18,6 +18,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
 | `2026-11-03_12_papeis_exclusao_lixeira.sql` | **Papéis e lixeira**: gerente faz tudo; vendedor vê os leads de todos, mas só exclui/restaura os seus (trigger `guarda_exclusao`, vale também para a API direta); DELETE físico só gerente; configuração, metas e equipe só gerente; `created_by`/`deleted_by`; `criar_usuario_equipe`, `excluir_usuario_equipe`, `alterar_papel_membro` e `check_feature` versionadas e seguras (antes só existiam em produção, abertas para a chave pública) |
 | `2026-11-03_13_orcamentos.sql` | **Orçamentos / propostas em PDF**: `empresa_identidade` (logo, dados, cores e textos padrão por tenant; escrita só gerente/admin), `produtos` (catálogo), `orcamentos` + `orcamento_itens` ligados a `negocios`, numeração por tenant e ano (`2026-0001`, contador travado por linha: sem buraco nem duplicata), totais recalculados no banco, `salvar_orcamento()` (cabeçalho + itens numa transação, SECURITY INVOKER), soft delete só pelo criador ou gerente/admin (DELETE físico só gerente/admin), FKs compostas `(tenant_id, id)` contra referência cruzada entre tenants, bucket privado `empresa-assets` (PNG/JPEG/WEBP, 2 MB, sem SVG). Rodar depois da 10. |
+| `2026-11-04_14_orcamento_travado.sql` | **Proposta travada depois de enviada + nova versão**: só rascunho é editável — fora dele cabeçalho e itens recusam com `42501` "Proposta já enviada não pode ser alterada. Use “Nova versão” para revisar." (vale para API direta, `salvar_orcamento` e gerente; soft delete/restauração, colunas técnicas e DELETE em cascata do gerente seguem liberados); transições válidas no banco (rascunho→enviado; enviado→aceito/recusado/expirado; finais não mudam); `versao_de` (FK composta, mesmo tenant) + `revisao` + `numero_original`; RPC `nova_versao_orcamento()` (SECURITY INVOKER: rascunho com número novo da sequência, cópia de cabeçalho e itens, clique duplo devolve o mesmo rascunho, uma revisão ativa por proposta); status `substituido`, definido pelo banco quando a revisão é **enviada** (só a partir de enviado/expirado). Contexto administrativo isento. Rodar depois da 13. |
 
 ## Testes automatizados
 
@@ -35,9 +36,12 @@ O runner: recria o banco, carrega `database/tests/00_harness_supabase.sql`
 (simula schemas `auth`/`storage`, roles e as tabelas legadas), executa as
 migrations em ordem, **repete a execução para provar idempotência** e roda as
 suítes de asserção (01 isolamento, 02 virada, 03 correções do PR #1, 04
-endurecimento, 05 religar referências, 07 orçamentos). A Suíte 7b abre várias
+endurecimento, 05 religar referências, 07 orçamentos, 09 proposta travada e
+nova versão). A Suíte 7b abre várias
 conexões em paralelo (inclusive transações que desistem com ROLLBACK) e prova
-que a numeração de orçamentos sai sem buraco e sem duplicata. A suíte 04 recria o estado "produção suja" (policies dos
+que a numeração de orçamentos sai sem buraco e sem duplicata. A Suíte 9b
+grava um item no exato instante em que outra conexão envia a proposta e
+prova que ele é recusado (o item não entra depois do envio). A suíte 04 recria o estado "produção suja" (policies dos
 scripts avulsos, view sem `security_invoker`, bucket público), reaplica a
 migration 10 por cima e prova, para cada correção, que o ataque falha **e**
 que o fluxo legítimo do app continua igual. Qualquer falha aborta com a

@@ -10,6 +10,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
 import { buscarClientesDosNegocios } from "../../lib/orcamentos/api";
 import { ROTULO_STATUS, STATUS_ORCAMENTO, formatarDataIso, type StatusOrcamento } from "../../lib/orcamentos/formato";
+import { rotuloRevisao } from "../../lib/orcamentos/regras";
 import { paraOrcamento, type ClienteDoNegocio, type Orcamento } from "../../lib/orcamentos/tipos";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { AcoesOrcamento } from "./acoes-orcamento";
@@ -50,7 +51,7 @@ export const OrcamentosPage = () => {
     const [busca, setBusca] = useState("");
     const [status, setStatus] = useState<StatusOrcamento[]>([]);
     const [responsavel, setResponsavel] = useState<string | undefined>(undefined);
-    const [editando, setEditando] = useState<Orcamento | null>(null);
+    const [editando, setEditando] = useState<{ id: string; negocioId: string } | null>(null);
 
     const { query } = useList({
         resource: "orcamentos",
@@ -88,7 +89,9 @@ export const OrcamentosPage = () => {
     }, [busca, clientes, responsavel, status, visiveis]);
 
     const resumo = useMemo(() => {
-        const abertos = visiveis.filter((o) => o.status === "rascunho" || o.status === "enviado");
+        // Proposta com revisão em andamento conta uma vez só (pela revisão).
+        const revisadas = new Set(visiveis.map((o) => o.versao_de).filter(Boolean));
+        const abertos = visiveis.filter((o) => (o.status === "rascunho" || o.status === "enviado") && !revisadas.has(o.id));
         const aceitos = visiveis.filter((o) => o.status === "aceito");
         const decididos = visiveis.filter((o) => o.status === "aceito" || o.status === "recusado").length;
         return {
@@ -104,8 +107,22 @@ export const OrcamentosPage = () => {
         {
             title: "Número",
             dataIndex: "numero",
-            width: 110,
-            render: (numero: string) => <Text strong style={{ fontVariantNumeric: "tabular-nums" }}>{numero}</Text>,
+            width: 130,
+            render: (numero: string, o) => {
+                const revisao = rotuloRevisao(o.revisao, o.numero_original);
+                return (
+                    <div>
+                        <Text strong style={{ fontVariantNumeric: "tabular-nums" }}>
+                            {numero}
+                        </Text>
+                        {revisao ? (
+                            <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
+                                {revisao}
+                            </Text>
+                        ) : null}
+                    </div>
+                );
+            },
         },
         {
             title: "Cliente",
@@ -161,7 +178,8 @@ export const OrcamentosPage = () => {
                     orcamento={o}
                     cliente={clientes.get(o.negocio_id) ?? null}
                     podeExcluir={ehAdmin || o.created_by === identityUserId}
-                    onEditar={() => setEditando(o)}
+                    onAbrir={() => setEditando({ id: o.id, negocioId: o.negocio_id })}
+                    onNovaVersao={(id) => setEditando({ id, negocioId: o.negocio_id })}
                     onAlterado={() => void query.refetch()}
                 />
             ),
@@ -280,12 +298,17 @@ export const OrcamentosPage = () => {
 
             {editando ? (
                 <EditorOrcamento
-                    negocioId={editando.negocio_id}
+                    key={editando.id}
+                    negocioId={editando.negocioId}
                     orcamentoId={editando.id}
-                    clienteNome={clientes.get(editando.negocio_id)?.nome}
+                    clienteNome={clientes.get(editando.negocioId)?.nome}
                     onFechar={() => setEditando(null)}
                     onSalvo={() => {
                         setEditando(null);
+                        void query.refetch();
+                    }}
+                    onNovaVersao={(id) => {
+                        setEditando({ id, negocioId: editando.negocioId });
                         void query.refetch();
                     }}
                 />

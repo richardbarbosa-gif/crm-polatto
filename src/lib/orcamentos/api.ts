@@ -1,6 +1,6 @@
 /**
  * Acesso ao Supabase do módulo de orçamentos. Toda regra de segurança está
- * no banco (migration 13): aqui só se monta a chamada e se traduz o erro.
+ * no banco (migrations 13 e 14): aqui só se monta a chamada e se traduz o erro.
  */
 import { supabaseClient } from "../../utility";
 import { addLeadActivity, uploadNewLeadDocument } from "../leadTimeline";
@@ -27,7 +27,8 @@ export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const COLUNAS_ORCAMENTO =
     "id,tenant_id,negocio_id,numero,titulo,status,data_emissao,valido_ate,desconto_tipo,desconto_valor," +
     "subtotal,desconto_total,total,condicoes_pagamento,observacoes,responsavel_id,responsavel_nome," +
-    "responsavel_email,responsavel_telefone,created_by,created_at,updated_at,deleted_at";
+    "responsavel_email,responsavel_telefone,created_by,created_at,updated_at,deleted_at," +
+    "versao_de,revisao,numero_original";
 const COLUNAS_ITEM =
     "id,produto_id,descricao,detalhes,unidade,quantidade,valor_unitario,desconto_tipo,desconto_valor,total,ordem";
 const COLUNAS_IDENTIDADE =
@@ -306,6 +307,18 @@ export const duplicarOrcamento = async (
         },
         origem.itens.map((item) => ({ ...item, id: undefined })),
     );
+
+/**
+ * Nova versão (revisão) de uma proposta já enviada: rascunho com número
+ * novo, mesmo conteúdo, ligado à original. Se já existe uma revisão em
+ * rascunho, o banco devolve ela (clique duplo não gasta número).
+ */
+export const criarNovaVersao = async (orcamentoId: string): Promise<string> => {
+    const { data, error } = await supabaseClient.rpc("nova_versao_orcamento", { p_orcamento_id: orcamentoId });
+    if (error) falhar(error, "Não foi possível criar a nova versão.");
+    if (typeof data !== "string") throw new Error("O banco não confirmou a nova versão.");
+    return data;
+};
 
 export const alterarStatus = async (id: string, status: StatusOrcamento): Promise<Orcamento> => {
     const { data, error } = await supabaseClient
