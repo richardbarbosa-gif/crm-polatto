@@ -6,7 +6,7 @@ import type { KanbanLead, LeadNextTask, Stage } from "./types";
 import { LeadCard } from "./LeadCard";
 import { formatCurrencyBRL } from "../../lib/formatters";
 import { textoIndicaGanho, textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
-import { proximaTarefaDaSaude, semProximoPasso } from "../../lib/saudeNegocio";
+import { ordenarPorTemperatura, proximaTarefaDaSaude, semProximoPasso } from "../../lib/saudeNegocio";
 
 const { Text } = Typography;
 
@@ -19,9 +19,15 @@ export type FonteKanban = {
     resource: string;
     sorters?: CrudSort[];
     filtrosExtras?: CrudFilter[];
+    /**
+     * Sem a view, o servidor não sabe ordenar por temperatura: os cards
+     * carregados são reordenados aqui (quente > morno > frio), mantendo a
+     * ordem que veio do banco como desempate.
+     */
+    ordenarNoCliente?: boolean;
 };
 
-const FONTE_PADRAO: FonteKanban = { resource: "clientes" };
+const FONTE_PADRAO: FonteKanban = { resource: "clientes", ordenarNoCliente: true };
 
 export interface KanbanColumnProps {
     stage: Stage;
@@ -105,10 +111,10 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         queryOptions: { enabled: consultaHabilitada },
     });
 
-    const leads = useMemo(
-        () => colResult.data?.pages.flatMap((p) => p.data) ?? [],
-        [colResult.data],
-    );
+    const leads = useMemo(() => {
+        const carregados = colResult.data?.pages.flatMap((p) => p.data) ?? [];
+        return fonte.ordenarNoCliente ? ordenarPorTemperatura(carregados) : carregados;
+    }, [colResult.data, fonte.ordenarNoCliente]);
     const total = colResult.data?.pages[0]?.total ?? 0;
     const isColLoading = consultaHabilitada && colQuery.isLoading;
     const isFetchingMore = colQuery.isFetchingNextPage;

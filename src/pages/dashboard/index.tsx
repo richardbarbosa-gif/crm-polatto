@@ -10,6 +10,7 @@ import dayjs from "dayjs";
 import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { ListaNegociosSaude } from "../../components/saude/lista-negocios-saude";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue } from "../../lib/formatters";
@@ -23,6 +24,12 @@ import {
     type EtapaFunil,
     type LinhaKpi,
 } from "../../lib/pipelineMetrics";
+import {
+    DIAS_QUENTE_SEM_CONTATO,
+    filtrosQuentesSemContato,
+    RECURSO_SAUDE,
+    rotuloSemContato,
+} from "../../lib/saudeNegocio";
 
 const { Title, Text } = Typography;
 
@@ -63,7 +70,7 @@ export const DashboardPage = () => {
     const { canViewAllLeads, ownerCandidates, employee, isLoadingAccess } = useCrmAccess();
 
     // Mantém o dashboard vivo depois que "clientes" vira view (ver hook)
-    useRealtimeNegocios(["clientes", "vw_kanban_kpis"]);
+    useRealtimeNegocios(["clientes", "vw_kanban_kpis", RECURSO_SAUDE]);
 
     // Mesma visão do Kanban: vendedor sem acesso total vê os próprios negócios.
     const filtrosDeVisao = useMemo<CrudFilter[]>(
@@ -344,6 +351,16 @@ export const DashboardPage = () => {
                                 })}
                             </div>
                         </Card>
+
+                        <ListaNegociosSaude
+                            titulo={`Quentes sem contato há ${DIAS_QUENTE_SEM_CONTATO}+ dias`}
+                            filtros={[...filtrosQuentesSemContato(), ...filtrosDeVisao]}
+                            sorters={[{ field: "dias_sem_contato", order: "desc" }, { field: "id", order: "asc" }]}
+                            detalhe={(linha) => rotuloSemContato(linha.dias_sem_contato)}
+                            vazio="Nenhum lead quente esperando contato."
+                            habilitado={!isLoadingAccess}
+                            corDetalhe="#dc2626"
+                        />
 
                         <Card
                             title={<Text strong style={{ fontSize: 15 }}>Meta do mês</Text>}

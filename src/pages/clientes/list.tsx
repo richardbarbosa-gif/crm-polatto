@@ -19,7 +19,7 @@ import {
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
 import { registrarMudancaDeEtapa } from "../../lib/leadTimeline";
-import { filtrosDeSaude, RECURSO_SAUDE, type FiltroSaude } from "../../lib/saudeNegocio";
+import { filtrosDeSaude, ORDENACAO_KANBAN, RECURSO_SAUDE, type FiltroSaude } from "../../lib/saudeNegocio";
 import { type LeadTemperatureTag } from "../../lib/leadTemperature";
 import {
     resumirFunil,
@@ -204,8 +204,13 @@ export const ClienteList = () => {
     const fonteKanban = useMemo<FonteKanban>(
         () =>
             saudeDisponivel
-                ? { resource: RECURSO_SAUDE, filtrosExtras: filtrosDeSaude(saudeFiltro) }
-                : { resource: "clientes" },
+                ? {
+                      resource: RECURSO_SAUDE,
+                      // quentes primeiro, depois mornos e frios (no servidor)
+                      sorters: ORDENACAO_KANBAN,
+                      filtrosExtras: filtrosDeSaude(saudeFiltro),
+                  }
+                : { resource: "clientes", ordenarNoCliente: true },
         [saudeDisponivel, saudeFiltro],
     );
 
