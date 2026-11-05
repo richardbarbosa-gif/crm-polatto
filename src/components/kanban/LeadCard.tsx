@@ -9,12 +9,14 @@ import {
     PhoneOutlined,
     PlusOutlined,
     SwapOutlined,
+    WhatsAppOutlined,
 } from "@ant-design/icons";
 import { TemperatureBadge } from "../ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
 import { valorDoLead } from "../../lib/pipelineMetrics";
 import { rotuloParado } from "../../lib/saudeNegocio";
+import { telefoneWhatsApp } from "../../lib/modelosMensagem";
 import type { KanbanLead, LeadNextTask } from "./types";
 import dayjs from "dayjs";
 
@@ -39,6 +41,8 @@ export interface LeadCardProps {
     /** Negócio aberto sem tarefa aberta: mostra o aviso e o botão Agendar. */
     semProximoPasso?: boolean;
     onAgendar?: (lead: KanbanLead) => void;
+    /** Abre a escolha de modelo de mensagem para o WhatsApp do lead. */
+    onWhatsApp?: (lead: KanbanLead) => void;
 }
 
 const getNextTaskIcon = (tipo?: string | null) => {
@@ -96,6 +100,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     onMoveToStage,
     semProximoPasso = false,
     onAgendar,
+    onWhatsApp,
 }) => {
     const temperature = resolveLeadTemperature(lead);
     const hasTemperature = Boolean(temperature);
@@ -359,6 +364,31 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                                 <SwapOutlined style={{ fontSize: 12 }} /> Mover
                             </button>
                         </Dropdown>
+                    ) : null}
+                    {onWhatsApp && telefoneWhatsApp(lead.telefone, lead.ddi) ? (
+                        <button
+                            type="button"
+                            data-no-card-open="true"
+                            aria-label={`WhatsApp para ${lead.nome || "o lead"}`}
+                            title="WhatsApp com modelo de mensagem"
+                            onPointerDown={(e) => stopActionPropagation(e)}
+                            onClick={(e) => { stopActionPropagation(e); onWhatsApp(lead); }}
+                            style={{
+                                flex: "0 0 40px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                padding: "7px 0",
+                                fontSize: 13,
+                                color: "#16a34a",
+                                background: "transparent",
+                                border: "none",
+                                borderRight: "1px solid var(--crm-border-subtle)",
+                                cursor: "pointer",
+                            }}
+                        >
+                            <WhatsAppOutlined />
+                        </button>
                     ) : null}
                     <button
                         data-no-card-open="true"

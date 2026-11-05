@@ -5,10 +5,12 @@ import {
     FilePdfOutlined,
     GoogleOutlined,
     LinkOutlined,
+    MailOutlined,
     PhoneOutlined,
     PlusOutlined,
     UploadOutlined,
     UserOutlined,
+    WhatsAppOutlined,
 } from "@ant-design/icons";
 import { DateField } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
@@ -46,6 +48,9 @@ import { canDelete } from "../../lib/permissions";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import type { PipelineStageRecord } from "../../types/db";
 import { OrcamentosDoLead } from "../orcamentos/orcamentos-do-lead";
+import { EscolherModelo } from "../../components/escolher-modelo";
+import { useRemetente } from "../../hooks/useRemetente";
+import { emailValido, montarDadosModelo, telefoneWhatsApp, type CanalModelo } from "../../lib/modelosMensagem";
 
 const { Title, Text } = Typography;
 
@@ -114,6 +119,7 @@ export const LeadDetails = ({
 }: LeadDetailsProps) => {
     const { isSystemAdmin, role, tenantId } = useTenant();
     const [temperatureTag, setTemperatureTag] = useState<LeadTemperatureTag | undefined>(undefined);
+    const [canalMensagem, setCanalMensagem] = useState<CanalModelo | null>(null);
     const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
     const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
     const [files, setFiles] = useState<LeadStoredFile[]>([]);
@@ -141,7 +147,8 @@ export const LeadDetails = ({
     const automaticTemperature = resolveAutomaticLeadTemperature(stageDisplayName);
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
     const canDeleteDocuments = canDelete(role, isSystemAdmin);
-    const { userId } = useCrmAccess();
+    const { userId, employee, ownerDisplayName } = useCrmAccess();
+    const remetente = useRemetente(employee?.nome || ownerDisplayName);
     const { isEnergiaSolar } = useTenantSegmento();
     const { campos: camposCustomizados } = useCustomFields("negocio");
 
@@ -478,6 +485,21 @@ export const LeadDetails = ({
                             <Text type="secondary" style={{ fontSize: 15 }}>
                                 <PhoneOutlined /> {record.ddi} {record.telefone}
                             </Text>
+                            {telefoneWhatsApp(record.telefone, record.ddi) ? (
+                                <Button
+                                    size="small"
+                                    icon={<WhatsAppOutlined />}
+                                    onClick={() => setCanalMensagem("whatsapp")}
+                                    style={{ color: "#15803d", borderColor: "rgba(22,163,74,0.4)" }}
+                                >
+                                    WhatsApp
+                                </Button>
+                            ) : null}
+                            {emailValido(record.email) ? (
+                                <Button size="small" icon={<MailOutlined />} onClick={() => setCanalMensagem("email")}>
+                                    E-mail
+                                </Button>
+                            ) : null}
                             {record.responsavel ? (
                                 <Badge tone="info">
                                     <UserOutlined /> {record.responsavel}
@@ -758,6 +780,19 @@ export const LeadDetails = ({
                     <ClockCircleOutlined /> Atualizado a cada mudança de etapa e atividade registrada.
                 </Text>
             </Card>
+            <EscolherModelo
+                aberto={canalMensagem !== null}
+                onFechar={() => setCanalMensagem(null)}
+                canal={canalMensagem ?? "whatsapp"}
+                destino={{ telefone: record.telefone, ddi: record.ddi, email: record.email }}
+                nomeCliente={record.nome}
+                dados={montarDadosModelo({
+                    nomeCliente: record.nome,
+                    empresa: remetente.empresa,
+                    vendedor: remetente.vendedor,
+                    valor: valorDoLead(record),
+                })}
+            />
         </div>
     );
 };

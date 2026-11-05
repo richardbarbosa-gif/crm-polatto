@@ -7,12 +7,14 @@ import {
     FunnelPlotOutlined,
     GlobalOutlined,
     IdcardOutlined,
+    MessageOutlined,
     ScheduleOutlined,
     SettingOutlined,
 } from "@ant-design/icons";
 import { Card, Divider, Select, Switch, Tabs, Typography } from "antd";
 import {
     CustomFieldsConfig,
+    ModelosMensagemConfig,
     MotivosPerdaConfig,
     PipelinesConfig,
     ProdutosConfig,
@@ -233,6 +235,26 @@ export const ConfiguracoesPage = () => {
                                         (Ligação, Reunião, Demo, Follow-up...).
                                     </Text>
                                     <TiposAtividadeConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "modelos-mensagem",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <MessageOutlined /> Modelos de mensagem
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Modelos de mensagem
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Mensagens prontas para WhatsApp e e-mail. No lead, o vendedor escolhe o
+                                        modelo, revisa o texto com os dados do cliente e abre a conversa.
+                                    </Text>
+                                    <ModelosMensagemConfig />
                                 </div>
                             ),
                         },

@@ -26,8 +26,12 @@ import {
     textoIndicaGanho,
     textoIndicaPerda,
     totaisPorEtapa,
+    valorDoLead,
 } from "../../lib/pipelineMetrics";
 import { LeadDetails, type LeadDetalhe } from "./lead-details";
+import { EscolherModelo } from "../../components/escolher-modelo";
+import { useRemetente } from "../../hooks/useRemetente";
+import { montarDadosModelo } from "../../lib/modelosMensagem";
 import type { MotivoPerdaRecord, PipelineRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 
@@ -78,7 +82,11 @@ export const ClienteList = () => {
         tenantId,
         ownerCandidates,
         ownerDisplayName,
+        employee,
     } = useCrmAccess();
+    const remetente = useRemetente(employee?.nome || ownerDisplayName);
+    // Lead cujo WhatsApp foi aberto pelo card (escolha de modelo)
+    const [leadMensagem, setLeadMensagem] = useState<KanbanLead | null>(null);
 
     // ---- UI state ----
     const [viewType, setViewType] = useState<"kanban" | "list">("kanban");
@@ -1158,6 +1166,7 @@ export const ClienteList = () => {
                         stageMoveOptions={stageMoveOptions}
                         onMoveLeadToStage={solicitarMoverLead}
                         fonte={fonteKanban}
+                        onWhatsAppLead={setLeadMensagem}
                         onAgendarLead={(lead) =>
                             openTaskModal({
                                 clienteId: lead.id,
@@ -1341,6 +1350,20 @@ export const ClienteList = () => {
                         void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
                     }
                 }}
+            />
+
+            <EscolherModelo
+                aberto={Boolean(leadMensagem)}
+                onFechar={() => setLeadMensagem(null)}
+                canal="whatsapp"
+                destino={{ telefone: leadMensagem?.telefone, ddi: leadMensagem?.ddi }}
+                nomeCliente={leadMensagem?.nome}
+                dados={montarDadosModelo({
+                    nomeCliente: leadMensagem?.nome || leadMensagem?.titulo,
+                    empresa: remetente.empresa,
+                    vendedor: remetente.vendedor,
+                    valor: leadMensagem ? valorDoLead(leadMensagem) : null,
+                })}
             />
 
             <Modal

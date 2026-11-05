@@ -57,6 +57,7 @@ export interface KanbanColumnProps {
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
     fonte?: FonteKanban;
     onAgendarLead?: (lead: KanbanLead) => void;
+    onWhatsAppLead?: (lead: KanbanLead) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -85,6 +86,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     onMoveLeadToStage,
     fonte = FONTE_PADRAO,
     onAgendarLead,
+    onWhatsAppLead,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -223,6 +225,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                                     onMoveToStage={onMoveLeadToStage}
                                     semProximoPasso={semProximoPasso(cliente, proxima, etapaFinal)}
                                     onAgendar={onAgendarLead}
+                                    onWhatsApp={onWhatsAppLead}
                                 />
                             );
                         })}
