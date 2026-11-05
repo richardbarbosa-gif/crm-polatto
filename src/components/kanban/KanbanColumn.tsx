@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { useInfiniteList, type CrudFilter } from "@refinedev/core";
+import { useInfiniteList, type CrudFilter, type CrudSort } from "@refinedev/core";
 import { Spin, Typography } from "antd";
 import { KANBAN_PAGE_SIZE } from "./types";
 import type { KanbanLead, LeadNextTask, Stage } from "./types";
@@ -8,6 +8,19 @@ import { formatCurrencyBRL } from "../../lib/formatters";
 import { valorDoLead } from "../../lib/pipelineMetrics";
 
 const { Text } = Typography;
+
+/**
+ * De onde a coluna lê os cards: a view de saúde (vw_negocios_saude, com
+ * parado/próximo passo/ordem de temperatura calculados no banco) ou, em
+ * ambiente sem a migration 15, a view clientes de sempre.
+ */
+export type FonteKanban = {
+    resource: string;
+    sorters?: CrudSort[];
+    filtrosExtras?: CrudFilter[];
+};
+
+const FONTE_PADRAO: FonteKanban = { resource: "clientes" };
 
 export interface KanbanColumnProps {
     stage: Stage;
@@ -35,6 +48,7 @@ export interface KanbanColumnProps {
     tasksByLead?: Map<string, LeadNextTask>;
     stageMoveOptions?: { value: string; label: string }[];
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
+    fonte?: FonteKanban;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -61,27 +75,29 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     tasksByLead,
     stageMoveOptions,
     onMoveLeadToStage,
+    fonte = FONTE_PADRAO,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     const columnFilters = useMemo<CrudFilter[]>(() => {
-        const base = [...serverFilters];
+        const base = [...serverFilters, ...(fonte.filtrosExtras ?? [])];
         if (isOthersColumn) {
             base.push({ field: "stage_id", operator: "null" as const, value: true });
         } else {
             base.push({ field: "stage_id", operator: "eq" as const, value: stageColumnId });
         }
         return base;
-    }, [serverFilters, stageColumnId, isOthersColumn]);
+    }, [serverFilters, fonte.filtrosExtras, stageColumnId, isOthersColumn]);
 
     // Etapas de exemplo (ainda não gravadas, ids como "novo") não têm o que
     // consultar: stage_id é bigint e a requisição só devolveria erro.
     const consultaHabilitada = Boolean(isOthersColumn || stage.persisted);
 
     const { query: colQuery, result: colResult } = useInfiniteList<KanbanLead>({
-        resource: "clientes",
+        resource: fonte.resource,
         pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
         filters: columnFilters,
+        sorters: fonte.sorters,
         liveMode: "auto",
         queryOptions: { enabled: consultaHabilitada },
     });

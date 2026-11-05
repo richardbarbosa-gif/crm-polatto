@@ -12,6 +12,7 @@ import { TemperatureBadge } from "../ui";
 import { formatCurrencyBRL, formatDateBR, normalizeText } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
 import { valorDoLead } from "../../lib/pipelineMetrics";
+import { rotuloParado } from "../../lib/saudeNegocio";
 import type { KanbanLead, LeadNextTask } from "./types";
 import dayjs from "dayjs";
 
@@ -94,7 +95,11 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     // Valor do negócio primeiro; a conta de luz é só o fallback do modelo solar.
     const valor = valorDoLead(lead);
     const hasValor = valor > 0;
-    const age = getLeadAge(lead.created_at);
+    // Com a view de saúde, "parado" é a regra do Pipedrive (sem atividade
+    // além do prazo da etapa). Sem ela, o selo antigo de idade do cadastro.
+    const temSaude = typeof lead.parado === "boolean";
+    const parado = lead.parado === true;
+    const age = temSaude ? { days: 0, label: "", isStale: false } : getLeadAge(lead.created_at);
     const nextTaskInfo = getNextTaskInfo(nextTask);
 
     return (
@@ -110,10 +115,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             style={{ cursor: "grab", touchAction: "pan-y" }}
         >
             <div
-                className="crm-lead-card"
+                className={`crm-lead-card${parado ? " crm-lead-card--parado" : ""}`}
                 style={{
                     borderRadius: 12,
-                    border: "1px solid var(--crm-border)",
+                    border: parado ? "1px solid rgba(220, 38, 38, 0.35)" : "1px solid var(--crm-border)",
                     borderLeft: `3px solid ${accentColor}`,
                     background: "var(--crm-surface-1)",
                     boxShadow: "var(--crm-shadow-xs)",
@@ -142,6 +147,28 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                         >
                             {lead.nome || "Lead sem nome"}
                         </Text>
+                        {parado && (
+                            <span
+                                title={`Sem atividade além do prazo da etapa (${lead.dias_para_parado ?? "?"} dias)`}
+                                style={{
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: 3,
+                                    fontSize: 10,
+                                    fontWeight: 600,
+                                    color: "#b91c1c",
+                                    background: "rgba(239,68,68,0.08)",
+                                    padding: "2px 6px",
+                                    borderRadius: 4,
+                                    marginLeft: 6,
+                                    flexShrink: 0,
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                <ClockCircleOutlined style={{ fontSize: 9 }} />
+                                {rotuloParado(lead.dias_sem_atividade)}
+                            </span>
+                        )}
                         {age.isStale && (
                             <span
                                 title={`Lead parado há ${age.days} dias`}

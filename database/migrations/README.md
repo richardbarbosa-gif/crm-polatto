@@ -18,6 +18,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-11-02_11_ajustes_funcionais.sql` | `religar_referencias_legadas()`: pós-virada, religa tarefas, atividades e documentos ao UUID do negócio (só operador; sem EXECUTE para a API) |
 | `2026-11-03_12_papeis_exclusao_lixeira.sql` | **Papéis e lixeira**: gerente faz tudo; vendedor vê os leads de todos, mas só exclui/restaura os seus (trigger `guarda_exclusao`, vale também para a API direta); DELETE físico só gerente; configuração, metas e equipe só gerente; `created_by`/`deleted_by`; `criar_usuario_equipe`, `excluir_usuario_equipe`, `alterar_papel_membro` e `check_feature` versionadas e seguras (antes só existiam em produção, abertas para a chave pública) |
 | `2026-11-03_13_orcamentos.sql` | **Orçamentos / propostas em PDF**: `empresa_identidade` (logo, dados, cores e textos padrão por tenant; escrita só gerente/admin), `produtos` (catálogo), `orcamentos` + `orcamento_itens` ligados a `negocios`, numeração por tenant e ano (`2026-0001`, contador travado por linha: sem buraco nem duplicata), totais recalculados no banco, `salvar_orcamento()` (cabeçalho + itens numa transação, SECURITY INVOKER), soft delete só pelo criador ou gerente/admin (DELETE físico só gerente/admin), FKs compostas `(tenant_id, id)` contra referência cruzada entre tenants, bucket privado `empresa-assets` (PNG/JPEG/WEBP, 2 MB, sem SVG). Rodar depois da 10. |
+| `2026-11-05_15_negocio_parado_modelos_mensagem.sql` | **Saúde do funil e modelos de mensagem**: `pipeline_stages.dias_para_parado` (prazo por etapa para o negócio ficar "parado"; nulo = não monitora; defaults só na primeira execução e em etapa nova, nunca sobrescreve o gerente; ganho/perda nunca ficam parados), `tarefas.concluido_em` (trigger), view `vw_negocios_saude` (`security_invoker`: última atividade, último contato, parado, sem próximo passo, próxima tarefa e ordem de temperatura, tudo calculado no banco), mudança de temperatura registrada na timeline por trigger ("Morno → Quente, por Fulano"), `modelos_mensagem` (WhatsApp/e-mail; leitura do tenant, escrita só gerente via RLS) com 3 modelos padrão por empresa semeados uma única vez (`crm_seeds_aplicados`), inclusive nas empresas existentes, e `provisionar_defaults_tenant` chamando o gancho `provisionar_defaults_pacote`. Não toca em `orcamentos`. Rodar depois da 13/14. |
 
 ## Testes automatizados
 
@@ -35,7 +36,7 @@ O runner: recria o banco, carrega `database/tests/00_harness_supabase.sql`
 (simula schemas `auth`/`storage`, roles e as tabelas legadas), executa as
 migrations em ordem, **repete a execução para provar idempotência** e roda as
 suítes de asserção (01 isolamento, 02 virada, 03 correções do PR #1, 04
-endurecimento, 05 religar referências, 07 orçamentos). A Suíte 7b abre várias
+endurecimento, 05 religar referências, 07 orçamentos, 10 saúde do funil e modelos de mensagem). A Suíte 7b abre várias
 conexões em paralelo (inclusive transações que desistem com ROLLBACK) e prova
 que a numeração de orçamentos sai sem buraco e sem duplicata. A suíte 04 recria o estado "produção suja" (policies dos
 scripts avulsos, view sem `security_invoker`, bucket público), reaplica a

@@ -3,7 +3,7 @@ import type { CrudFilter } from "@refinedev/core";
 import { EmptyState } from "../ui";
 import { getStatusAccent } from "./types";
 import type { KanbanLead, LeadNextTask, Stage } from "./types";
-import { KanbanColumn } from "./KanbanColumn";
+import { KanbanColumn, type FonteKanban } from "./KanbanColumn";
 
 export interface KanbanBoardProps {
     stagesVisiveis: Stage[];
@@ -35,6 +35,7 @@ export interface KanbanBoardProps {
     tasksByLead?: Map<string, LeadNextTask>;
     stageMoveOptions?: { value: string; label: string }[];
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
+    fonte?: FonteKanban;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -64,6 +65,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     tasksByLead,
     stageMoveOptions,
     onMoveLeadToStage,
+    fonte,
     hasKpiPolicyRecursion,
     kpiErrorMessage,
 }) => {
@@ -135,6 +137,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             tasksByLead={tasksByLead}
                             stageMoveOptions={stageMoveOptions}
                             onMoveLeadToStage={onMoveLeadToStage}
+                            fonte={fonte}
                         />
                     );
                 })}

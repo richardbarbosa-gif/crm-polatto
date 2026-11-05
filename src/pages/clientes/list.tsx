@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useGo, useList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
+import { useGo, useInvalidate, useList, useUpdate, useCreate, type CrudFilter } from "@refinedev/core";
 
 import { Drawer, Input, Modal, Select, Spin, Typography, message } from "antd";
 import {
@@ -19,6 +19,7 @@ import {
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
 import { registrarMudancaDeEtapa } from "../../lib/leadTimeline";
+import { filtrosDeSaude, RECURSO_SAUDE, type FiltroSaude } from "../../lib/saudeNegocio";
 import { type LeadTemperatureTag } from "../../lib/leadTemperature";
 import {
     resumirFunil,
@@ -35,6 +36,7 @@ import {
     KanbanBoard,
     ListView,
     type Stage,
+    type FonteKanban,
     type KanbanLead,
     type LeadNextTask,
     type LeadPointerSession,
@@ -84,6 +86,7 @@ export const ClienteList = () => {
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [responsavelFiltro, setResponsavelFiltro] = useState<string | undefined>(undefined);
     const [temperaturaFiltro, setTemperaturaFiltro] = useState<"todas" | LeadTemperatureTag>("todas");
+    const [saudeFiltro, setSaudeFiltro] = useState<FiltroSaude>("todos");
     const [draggedLead, setDraggedLead] = useState<KanbanLead | null>(null);
     const [activeDropColumn, setActiveDropColumn] = useState<string | null>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -108,6 +111,7 @@ export const ClienteList = () => {
     const leadPointerSessionRef = useRef<LeadPointerSession | null>(null);
 
     const { mutateAsync: updateLead } = useUpdate();
+    const invalidate = useInvalidate();
     const { mutateAsync: createStage } = useCreate();
 
     // ---- Debounce de busca ----
@@ -170,6 +174,40 @@ export const ClienteList = () => {
         if (isSupabaseMissingRelation(motivosPerdaQuery?.error)) return [];
         return (motivosPerdaQuery?.data?.data ?? []).filter((m) => m?.nome);
     }, [motivosPerdaQuery?.data?.data, motivosPerdaQuery?.error]);
+
+    // ---- Saúde do funil (migration 15) ----
+    // A view vw_negocios_saude traz, no mesmo card, parado/próximo passo e a
+    // ordem de temperatura calculados no banco. Enquanto a migration não
+    // estiver aplicada no ambiente, o board segue lendo "clientes" como
+    // sempre (nada quebra; só os recursos novos ficam ocultos).
+    const [saudeStatus, setSaudeStatus] = useState<"verificando" | "disponivel" | "indisponivel">(
+        "verificando",
+    );
+
+    useEffect(() => {
+        let ativo = true;
+        void supabaseClient
+            .from(RECURSO_SAUDE)
+            .select("id")
+            .limit(1)
+            .then(({ error }) => {
+                if (ativo) setSaudeStatus(error ? "indisponivel" : "disponivel");
+            });
+        return () => {
+            ativo = false;
+        };
+    }, []);
+
+    const saudeDisponivel = saudeStatus === "disponivel";
+    const saudeFiltroAtivo = saudeDisponivel && saudeFiltro !== "todos";
+
+    const fonteKanban = useMemo<FonteKanban>(
+        () =>
+            saudeDisponivel
+                ? { resource: RECURSO_SAUDE, filtrosExtras: filtrosDeSaude(saudeFiltro) }
+                : { resource: "clientes" },
+        [saudeDisponivel, saudeFiltro],
+    );
 
     // ---- Próxima atividade por lead (visível no card, estilo Pipedrive) ----
     const [tasksByLead, setTasksByLead] = useState<Map<string, LeadNextTask>>(new Map());
@@ -329,7 +367,10 @@ export const ClienteList = () => {
         [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
     );
 
-    const filterKey = useMemo(() => JSON.stringify(serverFilters), [serverFilters]);
+    const filterKey = useMemo(
+        () => JSON.stringify([serverFilters, fonteKanban.resource, saudeFiltro]),
+        [serverFilters, fonteKanban.resource, saudeFiltro],
+    );
 
     useEffect(() => {
         setListPage(1);
@@ -380,8 +421,10 @@ export const ClienteList = () => {
     // que a coluna passava de 20 negócios. A busca por texto não chega à
     // view; com busca ativa a coluna soma o que carregou.
     const valoresPorEtapa = useMemo(
-        () => (debouncedSearch.trim() ? undefined : totaisPorEtapa(kpiRows)),
-        [debouncedSearch, kpiRows],
+        // Busca e filtro de saúde não chegam à view agregada: a coluna soma o
+        // que carregou.
+        () => (debouncedSearch.trim() || saudeFiltroAtivo ? undefined : totaisPorEtapa(kpiRows)),
+        [debouncedSearch, saudeFiltroAtivo, kpiRows],
     );
 
     // ---- leadCountByStageId (para o gerenciador de colunas) ----
@@ -510,7 +553,7 @@ export const ClienteList = () => {
     // Depois da virada, "clientes" é uma view e o Supabase não emite evento
     // para views — o liveMode do Refine pararia de atualizar a tela sozinho.
     // Este hook escuta a tabela real e revalida os recursos da página.
-    useRealtimeNegocios(["clientes", "vw_kanban_kpis"], (registro) => {
+    useRealtimeNegocios(["clientes", "vw_kanban_kpis", RECURSO_SAUDE], (registro) => {
         const titulo = registro?.titulo ?? registro?.nome;
         message.info(`Novo lead recebido: ${typeof titulo === "string" ? titulo : "Sem nome"}`);
     });
@@ -894,6 +937,11 @@ export const ClienteList = () => {
             if (!historicoGravado) {
                 message.warning("Etapa atualizada, mas não foi possível registrar no histórico.");
             }
+            // O update vai para "clientes"; as colunas podem estar lendo a
+            // view de saúde, que o Refine não invalida sozinho.
+            if (saudeDisponivel) {
+                void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
+            }
         } catch {
             // A notificação de erro da mudança de etapa é exibida pelo Refine.
         }
@@ -984,6 +1032,10 @@ export const ClienteList = () => {
     const closeLeadDrawer = () => {
         setIsLeadDrawerOpen(false);
         setSelectedLeadId(null);
+        // Temperatura, notas e tarefas mexidas no drawer mudam a saúde do card
+        if (saudeDisponivel) {
+            void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
+        }
     };
 
     const openTaskModal = (contextData: TaskContextData) => {
@@ -1022,7 +1074,7 @@ export const ClienteList = () => {
     }, []);
 
     // ---- Loading ----
-    const isLoading = isLoadingAccess || stagesQuery?.isLoading;
+    const isLoading = isLoadingAccess || stagesQuery?.isLoading || saudeStatus === "verificando";
 
     if (isLoading) {
         return (
@@ -1054,6 +1106,8 @@ export const ClienteList = () => {
                 pipelineOptions={pipelineOptions}
                 pipelineSelecionado={pipelineAtivo}
                 onPipelineChange={handlePipelineChange}
+                saudeFiltro={saudeDisponivel ? saudeFiltro : undefined}
+                onSaudeChange={setSaudeFiltro}
             />
             <div
                 style={{
@@ -1092,6 +1146,7 @@ export const ClienteList = () => {
                         tasksByLead={tasksByLead}
                         stageMoveOptions={stageMoveOptions}
                         onMoveLeadToStage={solicitarMoverLead}
+                        fonte={fonteKanban}
                     />
                 ) : (
                     <ListView
