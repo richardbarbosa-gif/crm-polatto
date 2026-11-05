@@ -38,6 +38,7 @@ import {
     ProfileOutlined,
     FlagOutlined,
     BranchesOutlined,
+    SunOutlined,
 } from "@ant-design/icons";
 
 import authProvider from "./authProvider";
@@ -51,7 +52,9 @@ import { comPaginacaoCompleta } from "./lib/dataProviderPaginado";
 
 // Telas carregadas sob demanda: o usuário baixa o código de uma tela só
 // quando abre aquela tela (antes, todas iam no bundle inicial).
-const DashboardPage = lazy(() => import("./pages/dashboard").then((m) => ({ default: m.DashboardPage })));
+// "/" decide: gerente vê o Dashboard; vendedor começa a sessão pelo Meu dia.
+const HomePage = lazy(() => import("./pages/meu-dia/home").then((m) => ({ default: m.HomePage })));
+const MeuDiaPage = lazy(() => import("./pages/meu-dia").then((m) => ({ default: m.MeuDiaPage })));
 const ClienteList = lazy(() => import("./pages/clientes/list").then((m) => ({ default: m.ClienteList })));
 const ClienteCreate = lazy(() => import("./pages/clientes/create").then((m) => ({ default: m.ClienteCreate })));
 const ClienteEdit = lazy(() => import("./pages/clientes/edit").then((m) => ({ default: m.ClienteEdit })));
@@ -112,6 +115,11 @@ function App() {
                             notificationProvider={useNotificationProvider}
                             i18nProvider={i18nProvider}
                             resources={[
+                                {
+                                    name: "meu_dia",
+                                    list: "/meu-dia",
+                                    meta: { label: "Meu dia", icon: <SunOutlined /> },
+                                },
                                 {
                                     name: "dashboard",
                                     list: "/",
@@ -270,7 +278,8 @@ function App() {
                                             </Authenticated>
                                         }
                                     >
-                                        <Route index element={<DashboardPage />} />
+                                        <Route index element={<HomePage />} />
+                                        <Route path="/meu-dia" element={<MeuDiaPage />} />
                                         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
 
                                         <Route path="/equipe" element={<InsightsEmployeesPage />} />
@@ -311,7 +320,7 @@ function App() {
                                     <Route
                                         element={
                                             <Authenticated key="authenticated-outer" fallback={<Outlet />}>
-                                                <NavigateToResource />
+                                                <NavigateToResource resource="dashboard" />
                                             </Authenticated>
                                         }
                                     >
