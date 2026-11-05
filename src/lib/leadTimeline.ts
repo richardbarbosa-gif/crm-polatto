@@ -7,7 +7,7 @@ export const MAX_PDF_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — limite reduzi
 
 export type LeadTimelineEntry = {
     id: string;
-    type: "nota" | "ligacao" | "status" | "upload" | "outro";
+    type: "nota" | "ligacao" | "status" | "temperatura" | "upload" | "outro";
     title: string;
     description?: string;
     createdAt?: string;
@@ -82,7 +82,7 @@ const firstString = (...values: unknown[]): string | undefined => {
     return undefined;
 };
 
-const toTimelineType = (
+export const toTimelineType = (
     rawType?: string,
     fromStatus?: string,
     toStatus?: string,
@@ -92,6 +92,8 @@ const toTimelineType = (
     }
 
     const value = (rawType || "").toLowerCase();
+    // Mudança de temperatura (trigger da migration 15: "Morno → Quente, por Fulano")
+    if (value.includes("temperatura")) return "temperatura";
     if (value.includes("liga")) return "ligacao";
     if (value.includes("status")) return "status";
     if (value.includes("upload") || value.includes("arquivo") || value.includes("pdf")) return "upload";

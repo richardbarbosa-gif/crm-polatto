@@ -1,13 +1,33 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import { useInfiniteList, type CrudFilter } from "@refinedev/core";
+import { useInfiniteList, type CrudFilter, type CrudSort } from "@refinedev/core";
 import { Spin, Typography } from "antd";
 import { KANBAN_PAGE_SIZE } from "./types";
 import type { KanbanLead, LeadNextTask, Stage } from "./types";
 import { LeadCard } from "./LeadCard";
 import { formatCurrencyBRL } from "../../lib/formatters";
-import { valorDoLead } from "../../lib/pipelineMetrics";
+import { textoIndicaGanho, textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
+import { ordenarPorTemperatura, proximaTarefaDaSaude, semProximoPasso } from "../../lib/saudeNegocio";
 
 const { Text } = Typography;
+
+/**
+ * De onde a coluna lê os cards: a view de saúde (vw_negocios_saude, com
+ * parado/próximo passo/ordem de temperatura calculados no banco) ou, em
+ * ambiente sem a migration 15, a view clientes de sempre.
+ */
+export type FonteKanban = {
+    resource: string;
+    sorters?: CrudSort[];
+    filtrosExtras?: CrudFilter[];
+    /**
+     * Sem a view, o servidor não sabe ordenar por temperatura: os cards
+     * carregados são reordenados aqui (quente > morno > frio), mantendo a
+     * ordem que veio do banco como desempate.
+     */
+    ordenarNoCliente?: boolean;
+};
+
+const FONTE_PADRAO: FonteKanban = { resource: "clientes", ordenarNoCliente: true };
 
 export interface KanbanColumnProps {
     stage: Stage;
@@ -35,6 +55,9 @@ export interface KanbanColumnProps {
     tasksByLead?: Map<string, LeadNextTask>;
     stageMoveOptions?: { value: string; label: string }[];
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
+    fonte?: FonteKanban;
+    onAgendarLead?: (lead: KanbanLead) => void;
+    onWhatsAppLead?: (lead: KanbanLead) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -61,35 +84,39 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     tasksByLead,
     stageMoveOptions,
     onMoveLeadToStage,
+    fonte = FONTE_PADRAO,
+    onAgendarLead,
+    onWhatsAppLead,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
     const columnFilters = useMemo<CrudFilter[]>(() => {
-        const base = [...serverFilters];
+        const base = [...serverFilters, ...(fonte.filtrosExtras ?? [])];
         if (isOthersColumn) {
             base.push({ field: "stage_id", operator: "null" as const, value: true });
         } else {
             base.push({ field: "stage_id", operator: "eq" as const, value: stageColumnId });
         }
         return base;
-    }, [serverFilters, stageColumnId, isOthersColumn]);
+    }, [serverFilters, fonte.filtrosExtras, stageColumnId, isOthersColumn]);
 
     // Etapas de exemplo (ainda não gravadas, ids como "novo") não têm o que
     // consultar: stage_id é bigint e a requisição só devolveria erro.
     const consultaHabilitada = Boolean(isOthersColumn || stage.persisted);
 
     const { query: colQuery, result: colResult } = useInfiniteList<KanbanLead>({
-        resource: "clientes",
+        resource: fonte.resource,
         pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
         filters: columnFilters,
+        sorters: fonte.sorters,
         liveMode: "auto",
         queryOptions: { enabled: consultaHabilitada },
     });
 
-    const leads = useMemo(
-        () => colResult.data?.pages.flatMap((p) => p.data) ?? [],
-        [colResult.data],
-    );
+    const leads = useMemo(() => {
+        const carregados = colResult.data?.pages.flatMap((p) => p.data) ?? [];
+        return fonte.ordenarNoCliente ? ordenarPorTemperatura(carregados) : carregados;
+    }, [colResult.data, fonte.ordenarNoCliente]);
     const total = colResult.data?.pages[0]?.total ?? 0;
     const isColLoading = consultaHabilitada && colQuery.isLoading;
     const isFetchingMore = colQuery.isFetchingNextPage;
@@ -171,25 +198,37 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     </div>
                 ) : (
                     <>
-                        {leads.map((cliente) => (
-                            <LeadCard
-                                key={String(cliente.id)}
-                                lead={cliente}
-                                accentColor={accentColor}
-                                onPointerDown={onLeadPointerDown}
-                                onPointerMove={onLeadPointerMove}
-                                onPointerUp={onLeadPointerUp}
-                                onPointerCancel={onLeadPointerCancel}
-                                onDragStart={onDragStartLead}
-                                onDragEnd={onDragEndLead}
-                                onEdit={openLeadEdit}
-                                onView={openLeadDrawer}
-                                stopActionPropagation={stopActionPropagation}
-                                nextTask={tasksByLead?.get(String(cliente.id))}
-                                stageMoveOptions={stageMoveOptions}
-                                onMoveToStage={onMoveLeadToStage}
-                            />
-                        ))}
+                        {leads.map((cliente) => {
+                            // Próxima atividade: da view de saúde (mesma linha do card) ou,
+                            // sem ela, da consulta de tarefas que o board já fazia.
+                            const proxima = tasksByLead?.get(String(cliente.id)) ?? proximaTarefaDaSaude(cliente);
+                            const etapaFinal =
+                                Boolean(stage.ganho || stage.perdido) ||
+                                textoIndicaGanho(cliente.status) ||
+                                textoIndicaPerda(cliente.status);
+                            return (
+                                <LeadCard
+                                    key={String(cliente.id)}
+                                    lead={cliente}
+                                    accentColor={accentColor}
+                                    onPointerDown={onLeadPointerDown}
+                                    onPointerMove={onLeadPointerMove}
+                                    onPointerUp={onLeadPointerUp}
+                                    onPointerCancel={onLeadPointerCancel}
+                                    onDragStart={onDragStartLead}
+                                    onDragEnd={onDragEndLead}
+                                    onEdit={openLeadEdit}
+                                    onView={openLeadDrawer}
+                                    stopActionPropagation={stopActionPropagation}
+                                    nextTask={proxima}
+                                    stageMoveOptions={stageMoveOptions}
+                                    onMoveToStage={onMoveLeadToStage}
+                                    semProximoPasso={semProximoPasso(cliente, proxima, etapaFinal)}
+                                    onAgendar={onAgendarLead}
+                                    onWhatsApp={onWhatsAppLead}
+                                />
+                            );
+                        })}
                         <div ref={sentinelRef} style={{ height: 1 }} />
                         {isFetchingMore && (
                             <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>

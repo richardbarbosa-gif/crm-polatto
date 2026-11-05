@@ -47,13 +47,28 @@ vi.mock("../../utility", () => ({
     },
 }));
 
-import { ehIdDoModeloNovo, fetchLeadTimeline, registrarMudancaDeEtapa } from "../leadTimeline";
+import { ehIdDoModeloNovo, fetchLeadTimeline, registrarMudancaDeEtapa, toTimelineType } from "../leadTimeline";
 
 const UUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
 beforeEach(() => {
     inserts.length = 0;
     Object.keys(linhasPorTabela).forEach((k) => delete linhasPorTabela[k]);
+});
+
+describe("toTimelineType", () => {
+    it("registro de temperatura (trigger da migration 15) vira tipo próprio", () => {
+        expect(toTimelineType("temperatura")).toBe("temperatura");
+        expect(toTimelineType("Temperatura")).toBe("temperatura");
+    });
+
+    it("tipos existentes continuam iguais", () => {
+        expect(toTimelineType("ligacao")).toBe("ligacao");
+        expect(toTimelineType("nota")).toBe("nota");
+        expect(toTimelineType("status")).toBe("status");
+        expect(toTimelineType(undefined, "Novo", "Proposta")).toBe("status");
+        expect(toTimelineType("whatsapp")).toBe("outro");
+    });
 });
 
 describe("ehIdDoModeloNovo", () => {
