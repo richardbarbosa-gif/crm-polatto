@@ -37,6 +37,7 @@ import {
     UsergroupAddOutlined,
     ProfileOutlined,
     FlagOutlined,
+    BranchesOutlined,
 } from "@ant-design/icons";
 
 import authProvider from "./authProvider";
@@ -76,6 +77,9 @@ const InsightsActivityLogPage = lazy(() =>
 );
 const InsightsEmployeesPage = lazy(() =>
     import("./pages/insights/employees").then((m) => ({ default: m.InsightsEmployeesPage })),
+);
+const InsightsOriginsPage = lazy(() =>
+    import("./pages/insights/origins").then((m) => ({ default: m.InsightsOriginsPage })),
 );
 const InsightsGoalsPage = lazy(() => import("./pages/insights/goals").then((m) => ({ default: m.InsightsGoalsPage })));
 
@@ -187,6 +191,11 @@ function App() {
                                     meta: { label: "Ganhos e perdas", parent: "insights", icon: <RiseOutlined /> },
                                 },
                                 {
+                                    name: "insights_origens",
+                                    list: "/insights/origens",
+                                    meta: { label: "Vendas por origem", parent: "insights", icon: <BranchesOutlined /> },
+                                },
+                                {
                                     name: "insights_activities",
                                     list: "/insights/activities",
                                     meta: { label: "Atividades", parent: "insights", icon: <CalendarOutlined /> },
@@ -284,6 +293,7 @@ function App() {
                                         <Route path="/insights/painel" element={<InsightsPanelPage />} />
                                         <Route path="/insights/roi" element={<InsightsROIPage />} />
                                         <Route path="/insights/gains-losses" element={<InsightsGainsLossesPage />} />
+                                        <Route path="/insights/origens" element={<InsightsOriginsPage />} />
                                         <Route path="/insights/activities" element={<InsightsActivitiesPage />} />
                                         <Route path="/insights/logs" element={<InsightsActivityLogPage />} />
                                         <Route path="*" element={<ErrorComponent />} />

@@ -160,8 +160,8 @@ create index if not exists idx_negocios_temperatura
 --   sem_proximo_passo    aberto e sem tarefa aberta (atrasada conta como
 --                        próximo passo: aparece em vermelho no card)
 -- security_invoker: a RLS de negocios/tarefas/timeline do usuário vale.
--- DROP + CREATE: a 16 acrescenta colunas; reexecutar a 15 depois da 16
--- recria esta versão e a 16 (que sempre roda depois) recria a dela.
+-- DROP + CREATE (nada depende desta view): permite acrescentar colunas
+-- no futuro sem o erro "cannot drop columns from view".
 -- ---------------------------------------------------------------------
 drop view if exists public.vw_negocios_saude;
 create view public.vw_negocios_saude

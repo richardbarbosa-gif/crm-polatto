@@ -5,3 +5,4 @@ export { InsightsGainsLossesPage } from "./gains-losses";
 export { InsightsGoalsPage } from "./goals";
 export { InsightsPanelPage } from "./panel";
 export { InsightsROIPage } from "./roi";
+export { InsightsOriginsPage } from "./origins";

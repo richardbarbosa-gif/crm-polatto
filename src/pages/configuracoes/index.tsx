@@ -2,6 +2,7 @@ import {
     AppstoreOutlined,
     BellOutlined,
     BgColorsOutlined,
+    BranchesOutlined,
     CloseCircleOutlined,
     FormOutlined,
     FunnelPlotOutlined,
@@ -13,6 +14,7 @@ import {
 } from "@ant-design/icons";
 import { Card, Divider, Select, Switch, Tabs, Typography } from "antd";
 import {
+    CanaisOrigemConfig,
     CustomFieldsConfig,
     ModelosMensagemConfig,
     MotivosPerdaConfig,
@@ -235,6 +237,26 @@ export const ConfiguracoesPage = () => {
                                         (Ligação, Reunião, Demo, Follow-up...).
                                     </Text>
                                     <TiposAtividadeConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "origens",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <BranchesOutlined /> Origens do lead
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Origens do lead
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Por onde os clientes chegam. O relatório Vendas por origem mostra quanto
+                                        cada canal traz de leads, vendas e receita.
+                                    </Text>
+                                    <CanaisOrigemConfig />
                                 </div>
                             ),
                         },

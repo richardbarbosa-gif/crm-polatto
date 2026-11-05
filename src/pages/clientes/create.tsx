@@ -45,6 +45,9 @@ import type { PipelineRecord, PipelineStageRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 import { CustomFieldsForm } from "../../components/custom-fields";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
+import { CampoOrigem } from "../../components/origem/campo-origem";
+import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
+import { origemParaDadosExtras } from "../../lib/origemLead";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -61,6 +64,8 @@ type ClienteCreateFormValues = {
     responsavel_id?: string;
     stage_id: string;
     temperature?: LeadTemperature;
+    /** Canal de origem (vai para dados_extras, não é coluna da view) */
+    origem_id?: string;
     /** Valores dos campos customizados do tenant (jsonb) */
     dados_extras?: Record<string, unknown>;
 };
@@ -107,6 +112,7 @@ export const ClienteCreate = () => {
     const { ownerDisplayName, employee } = useCrmAccess();
     const { isEnergiaSolar } = useTenantSegmento();
     const { campos: camposCustomizados } = useCustomFields("negocio");
+    const { canais: canaisOrigem } = useCanaisOrigem();
 
     const pendingFilesRef = useRef<{
         propostaFile: File | null;
@@ -400,7 +406,7 @@ export const ClienteCreate = () => {
             const prosseguir = await confirmarSeDuplicado(values);
             if (!prosseguir) return;
 
-            const { temperature, responsavel_id, ...payload } = values;
+            const { temperature, responsavel_id, origem_id, ...payload } = values;
             const nextStageId = coerceLeadStageIdValue(values.stage_id, leadStages);
             const nextStage = findLeadStageById(leadStages, nextStageId);
             const automaticFromStatus = resolveAutomaticLeadTemperature(nextStage?.nome);
@@ -417,7 +423,10 @@ export const ClienteCreate = () => {
             const pipelineDaStage = pipelineDaEtapa(leadStages, nextStageId);
 
             // Campos customizados do tenant viajam em dados_extras (jsonb).
-            const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados);
+            const dadosExtras = {
+                ...extrairDadosExtras(values as Record<string, unknown>, camposCustomizados),
+                ...origemParaDadosExtras(origem_id, canaisOrigem, "criar"),
+            };
             const { dados_extras: _descartado, ...payloadLimpo } = payload;
             void _descartado;
 
@@ -573,6 +582,11 @@ export const ClienteCreate = () => {
                             <Select size="large" options={stageOptions} showSearch optionFilterProp="label" />
                         </Form.Item>
                     </Col>
+                    {canaisOrigem.length > 0 ? (
+                        <Col xs={24} lg={6}>
+                            <CampoOrigem canais={canaisOrigem} />
+                        </Col>
+                    ) : null}
                     <Col xs={24} lg={6}>
                         <Form.Item
                             label="Temperatura"

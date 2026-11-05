@@ -51,6 +51,7 @@ import { OrcamentosDoLead } from "../orcamentos/orcamentos-do-lead";
 import { EscolherModelo } from "../../components/escolher-modelo";
 import { useRemetente } from "../../hooks/useRemetente";
 import { emailValido, montarDadosModelo, telefoneWhatsApp, type CanalModelo } from "../../lib/modelosMensagem";
+import { origemDoLead } from "../../lib/origemLead";
 
 const { Title, Text } = Typography;
 
@@ -504,6 +505,9 @@ export const LeadDetails = ({
                                 <Badge tone="info">
                                     <UserOutlined /> {record.responsavel}
                                 </Badge>
+                            ) : null}
+                            {origemDoLead(record.dados_extras).nome ? (
+                                <Badge tone="neutral">Origem: {origemDoLead(record.dados_extras).nome}</Badge>
                             ) : null}
                         </Space>
                     </div>

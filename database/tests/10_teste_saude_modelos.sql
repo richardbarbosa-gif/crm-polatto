@@ -33,6 +33,8 @@ begin
 end $$;
 
 \ir ../migrations/2026-11-05_15_negocio_parado_modelos_mensagem.sql
+-- a 15 redefine o gancho de provisionamento; a 16 (sempre depois) o estende de novo
+\ir ../migrations/2026-11-05_16_origem_primeiro_acesso_perfil.sql
 
 do $$
 declare

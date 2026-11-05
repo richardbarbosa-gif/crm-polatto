@@ -112,6 +112,9 @@ SQL
 echo "==> Suíte 10: saúde do funil, temperatura e modelos de mensagem (migration 15)"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/10_teste_saude_modelos.sql"
 
+echo "==> Suíte 11: origem do lead, primeiro acesso e meu perfil (migration 16)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/11_teste_origem_perfil.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.
