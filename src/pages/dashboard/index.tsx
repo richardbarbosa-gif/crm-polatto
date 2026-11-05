@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { ListaNegociosSaude } from "../../components/saude/lista-negocios-saude";
+import { PrimeiroAcesso } from "../../components/primeiro-acesso";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
 import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue } from "../../lib/formatters";
@@ -67,7 +68,7 @@ const temperatureColors: Record<"quente" | "morno" | "frio", { bg: string; text:
  */
 export const DashboardPage = () => {
     const navigate = useNavigate();
-    const { canViewAllLeads, ownerCandidates, employee, isLoadingAccess } = useCrmAccess();
+    const { canViewAllLeads, ownerCandidates, employee, isLoadingAccess, isGerente, tenantId } = useCrmAccess();
 
     // Mantém o dashboard vivo depois que "clientes" vira view (ver hook)
     useRealtimeNegocios(["clientes", "vw_kanban_kpis", RECURSO_SAUDE]);
@@ -183,6 +184,8 @@ export const DashboardPage = () => {
                     <Button type="primary" onClick={() => navigate("/metas")}>Metas do mês</Button>
                 </Space>
             </div>
+
+            <PrimeiroAcesso isGerente={isGerente} tenantId={tenantId} />
 
             {kpiQuery?.isError ? (
                 <Alert

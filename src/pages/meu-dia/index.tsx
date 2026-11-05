@@ -11,6 +11,7 @@ import dayjs from "dayjs";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ListaNegociosSaude } from "../../components/saude/lista-negocios-saude";
+import { PrimeiroAcesso } from "../../components/primeiro-acesso";
 import { Button, Card } from "../../components/ui";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { normalizeText } from "../../lib/formatters";
@@ -93,7 +94,7 @@ const LinhaTarefa = ({ tarefa, atrasada, concluindo, mostrarResponsavel, onConcl
 export const MeuDiaPage = () => {
     const navigate = useNavigate();
     const invalidate = useInvalidate();
-    const { isGerente, ownerCandidates, isLoadingAccess, ownerDisplayName } = useCrmAccess();
+    const { isGerente, ownerCandidates, isLoadingAccess, ownerDisplayName, tenantId } = useCrmAccess();
     const [verEquipe, setVerEquipe] = useState(false);
     const [concluindoId, setConcluindoId] = useState<string | number | null>(null);
     const { mutateAsync: atualizar } = useUpdate();
@@ -170,6 +171,8 @@ export const MeuDiaPage = () => {
                     </Space>
                 ) : null}
             </div>
+
+            <PrimeiroAcesso isGerente={isGerente} tenantId={tenantId} />
 
             <Row gutter={[14, 14]}>
                 <Col xs={24} lg={12}>
