@@ -155,6 +155,7 @@ type Identidade = {
 
 export const Header = () => {
     const { data } = useGetIdentity<Identidade>();
+    const navigate = useNavigate();
     const { mode, setMode } = useContext(ColorModeContext);
     const [buscaAberta, setBuscaAberta] = useState(false);
 
@@ -194,7 +195,14 @@ export const Header = () => {
 
                     <div className="crm-topbar-divider" />
 
-                    <div className="crm-topbar-user-profile">
+                    <button
+                        type="button"
+                        className="crm-topbar-user-profile"
+                        onClick={() => navigate("/perfil")}
+                        aria-label="Abrir meu perfil"
+                        title="Meu perfil"
+                        style={{ background: "transparent", border: "none", padding: 0, cursor: "pointer", font: "inherit", color: "inherit", textAlign: "inherit" }}
+                    >
                         <div className="crm-topbar-user-info">
                             <Text className="crm-topbar-user-name">{userName}</Text>
                             <Text className="crm-topbar-user-email">{userEmail}</Text>
@@ -207,7 +215,7 @@ export const Header = () => {
                         >
                             {!data?.avatar && userName.charAt(0).toUpperCase()}
                         </Avatar>
-                    </div>
+                    </button>
                 </div>
             </div>
         </AntdLayout.Header>

@@ -55,6 +55,7 @@ import { comPaginacaoCompleta } from "./lib/dataProviderPaginado";
 // "/" decide: gerente vê o Dashboard; vendedor começa a sessão pelo Meu dia.
 const HomePage = lazy(() => import("./pages/meu-dia/home").then((m) => ({ default: m.HomePage })));
 const MeuDiaPage = lazy(() => import("./pages/meu-dia").then((m) => ({ default: m.MeuDiaPage })));
+const PerfilPage = lazy(() => import("./pages/perfil").then((m) => ({ default: m.PerfilPage })));
 const ClienteList = lazy(() => import("./pages/clientes/list").then((m) => ({ default: m.ClienteList })));
 const ClienteCreate = lazy(() => import("./pages/clientes/create").then((m) => ({ default: m.ClienteCreate })));
 const ClienteEdit = lazy(() => import("./pages/clientes/edit").then((m) => ({ default: m.ClienteEdit })));
@@ -280,6 +281,7 @@ function App() {
                                     >
                                         <Route index element={<HomePage />} />
                                         <Route path="/meu-dia" element={<MeuDiaPage />} />
+                                        <Route path="/perfil" element={<PerfilPage />} />
                                         <Route path="/configuracoes" element={<ConfiguracoesPage />} />
 
                                         <Route path="/equipe" element={<InsightsEmployeesPage />} />
