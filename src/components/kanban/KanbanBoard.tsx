@@ -36,6 +36,7 @@ export interface KanbanBoardProps {
     stageMoveOptions?: { value: string; label: string }[];
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
     fonte?: FonteKanban;
+    onAgendarLead?: (lead: KanbanLead) => void;
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
@@ -66,6 +67,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     stageMoveOptions,
     onMoveLeadToStage,
     fonte,
+    onAgendarLead,
     hasKpiPolicyRecursion,
     kpiErrorMessage,
 }) => {
@@ -138,6 +140,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
                             stageMoveOptions={stageMoveOptions}
                             onMoveLeadToStage={onMoveLeadToStage}
                             fonte={fonte}
+                            onAgendarLead={onAgendarLead}
                         />
                     );
                 })}

@@ -4,8 +4,10 @@ import {
     ClockCircleOutlined,
     EditOutlined,
     EnvironmentOutlined,
+    ExclamationCircleOutlined,
     EyeOutlined,
     PhoneOutlined,
+    PlusOutlined,
     SwapOutlined,
 } from "@ant-design/icons";
 import { TemperatureBadge } from "../ui";
@@ -34,6 +36,9 @@ export interface LeadCardProps {
     /** Etapas para a ação "Mover" (alternativa por toque ao arraste) */
     stageMoveOptions?: { value: string; label: string }[];
     onMoveToStage?: (lead: KanbanLead, stageId: string) => void;
+    /** Negócio aberto sem tarefa aberta: mostra o aviso e o botão Agendar. */
+    semProximoPasso?: boolean;
+    onAgendar?: (lead: KanbanLead) => void;
 }
 
 const getNextTaskIcon = (tipo?: string | null) => {
@@ -89,6 +94,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
     nextTask,
     stageMoveOptions,
     onMoveToStage,
+    semProximoPasso = false,
+    onAgendar,
 }) => {
     const temperature = resolveLeadTemperature(lead);
     const hasTemperature = Boolean(temperature);
@@ -253,6 +260,44 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                                 >
                                     {nextTaskInfo.texto}
                                 </Text>
+                            </>
+                        ) : semProximoPasso ? (
+                            <>
+                                <span style={{ color: "#b45309", display: "inline-flex", flexShrink: 0 }}>
+                                    <ExclamationCircleOutlined style={{ fontSize: 11 }} />
+                                </span>
+                                <Text style={{ fontSize: 11, color: "#b45309", fontWeight: 600, flex: 1, whiteSpace: "nowrap" }}>
+                                    Sem próximo passo
+                                </Text>
+                                {onAgendar ? (
+                                    <button
+                                        type="button"
+                                        data-no-card-open="true"
+                                        aria-label={`Agendar próximo passo para ${lead.nome || "o lead"}`}
+                                        onPointerDown={(e) => stopActionPropagation(e)}
+                                        onClick={(e) => {
+                                            stopActionPropagation(e);
+                                            onAgendar(lead);
+                                        }}
+                                        style={{
+                                            pointerEvents: "auto",
+                                            display: "inline-flex",
+                                            alignItems: "center",
+                                            gap: 3,
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            color: "#b45309",
+                                            background: "rgba(245,158,11,0.10)",
+                                            border: "1px solid rgba(245,158,11,0.35)",
+                                            borderRadius: 6,
+                                            padding: "2px 8px",
+                                            cursor: "pointer",
+                                            flexShrink: 0,
+                                        }}
+                                    >
+                                        <PlusOutlined style={{ fontSize: 10 }} /> Agendar
+                                    </button>
+                                ) : null}
                             </>
                         ) : (
                             <Text

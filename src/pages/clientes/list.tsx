@@ -213,6 +213,12 @@ export const ClienteList = () => {
     const [tasksByLead, setTasksByLead] = useState<Map<string, LeadNextTask>>(new Map());
 
     useEffect(() => {
+        // Com a view de saúde, a próxima tarefa já vem na linha do card:
+        // nada de segunda consulta (nem do teto de 1000 tarefas).
+        if (saudeStatus !== "indisponivel") {
+            setTasksByLead(new Map());
+            return;
+        }
         let active = true;
 
         const fetchNextTasks = async () => {
@@ -252,7 +258,7 @@ export const ClienteList = () => {
             active = false;
             window.clearInterval(timer);
         };
-    }, []);
+    }, [saudeStatus]);
 
     const [pendingLossDrop, setPendingLossDrop] = useState<{
         lead: KanbanLead;
@@ -1147,6 +1153,13 @@ export const ClienteList = () => {
                         stageMoveOptions={stageMoveOptions}
                         onMoveLeadToStage={solicitarMoverLead}
                         fonte={fonteKanban}
+                        onAgendarLead={(lead) =>
+                            openTaskModal({
+                                clienteId: lead.id,
+                                clienteNome: lead.nome || lead.titulo || undefined,
+                                clienteEndereco: lead.endereco_instalacao || undefined,
+                            })
+                        }
                     />
                 ) : (
                     <ListView
@@ -1318,6 +1331,11 @@ export const ClienteList = () => {
                 open={isTaskModalOpen}
                 onClose={closeTaskModal}
                 contextData={taskContextData}
+                onSuccess={() => {
+                    if (saudeDisponivel) {
+                        void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
+                    }
+                }}
             />
 
             <Modal

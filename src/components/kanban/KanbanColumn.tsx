@@ -5,7 +5,8 @@ import { KANBAN_PAGE_SIZE } from "./types";
 import type { KanbanLead, LeadNextTask, Stage } from "./types";
 import { LeadCard } from "./LeadCard";
 import { formatCurrencyBRL } from "../../lib/formatters";
-import { valorDoLead } from "../../lib/pipelineMetrics";
+import { textoIndicaGanho, textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
+import { proximaTarefaDaSaude, semProximoPasso } from "../../lib/saudeNegocio";
 
 const { Text } = Typography;
 
@@ -49,6 +50,7 @@ export interface KanbanColumnProps {
     stageMoveOptions?: { value: string; label: string }[];
     onMoveLeadToStage?: (lead: KanbanLead, stageId: string) => void;
     fonte?: FonteKanban;
+    onAgendarLead?: (lead: KanbanLead) => void;
 }
 
 export const KanbanColumn: React.FC<KanbanColumnProps> = ({
@@ -76,6 +78,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
     stageMoveOptions,
     onMoveLeadToStage,
     fonte = FONTE_PADRAO,
+    onAgendarLead,
 }) => {
     const sentinelRef = useRef<HTMLDivElement | null>(null);
 
@@ -187,25 +190,36 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
                     </div>
                 ) : (
                     <>
-                        {leads.map((cliente) => (
-                            <LeadCard
-                                key={String(cliente.id)}
-                                lead={cliente}
-                                accentColor={accentColor}
-                                onPointerDown={onLeadPointerDown}
-                                onPointerMove={onLeadPointerMove}
-                                onPointerUp={onLeadPointerUp}
-                                onPointerCancel={onLeadPointerCancel}
-                                onDragStart={onDragStartLead}
-                                onDragEnd={onDragEndLead}
-                                onEdit={openLeadEdit}
-                                onView={openLeadDrawer}
-                                stopActionPropagation={stopActionPropagation}
-                                nextTask={tasksByLead?.get(String(cliente.id))}
-                                stageMoveOptions={stageMoveOptions}
-                                onMoveToStage={onMoveLeadToStage}
-                            />
-                        ))}
+                        {leads.map((cliente) => {
+                            // Próxima atividade: da view de saúde (mesma linha do card) ou,
+                            // sem ela, da consulta de tarefas que o board já fazia.
+                            const proxima = tasksByLead?.get(String(cliente.id)) ?? proximaTarefaDaSaude(cliente);
+                            const etapaFinal =
+                                Boolean(stage.ganho || stage.perdido) ||
+                                textoIndicaGanho(cliente.status) ||
+                                textoIndicaPerda(cliente.status);
+                            return (
+                                <LeadCard
+                                    key={String(cliente.id)}
+                                    lead={cliente}
+                                    accentColor={accentColor}
+                                    onPointerDown={onLeadPointerDown}
+                                    onPointerMove={onLeadPointerMove}
+                                    onPointerUp={onLeadPointerUp}
+                                    onPointerCancel={onLeadPointerCancel}
+                                    onDragStart={onDragStartLead}
+                                    onDragEnd={onDragEndLead}
+                                    onEdit={openLeadEdit}
+                                    onView={openLeadDrawer}
+                                    stopActionPropagation={stopActionPropagation}
+                                    nextTask={proxima}
+                                    stageMoveOptions={stageMoveOptions}
+                                    onMoveToStage={onMoveLeadToStage}
+                                    semProximoPasso={semProximoPasso(cliente, proxima, etapaFinal)}
+                                    onAgendar={onAgendarLead}
+                                />
+                            );
+                        })}
                         <div ref={sentinelRef} style={{ height: 1 }} />
                         {isFetchingMore && (
                             <div style={{ display: "flex", justifyContent: "center", padding: 12 }}>
