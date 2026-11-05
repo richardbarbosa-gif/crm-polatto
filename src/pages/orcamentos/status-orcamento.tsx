@@ -1,5 +1,6 @@
 import { Tag, Tooltip } from "antd";
-import { COR_STATUS, ROTULO_STATUS, estaVencido, formatarDataIso, type StatusOrcamento } from "../../lib/orcamentos/formato";
+import { COR_STATUS, ROTULO_STATUS, estaVencido, type StatusOrcamento } from "../../lib/orcamentos/formato";
+import { dicaVencido } from "../../lib/orcamentos/regras";
 
 type Props = {
     status: StatusOrcamento;
@@ -12,7 +13,7 @@ export const StatusOrcamentoTag = ({ status, validoAte }: Props) => (
             {ROTULO_STATUS[status]}
         </Tag>
         {estaVencido(validoAte, status) ? (
-            <Tooltip title={`Validade terminou em ${formatarDataIso(validoAte)}. Renove a validade ou marque como expirado.`}>
+            <Tooltip title={dicaVencido(status, validoAte)}>
                 <Tag color="warning" style={{ marginInlineEnd: 0 }}>
                     Vencido
                 </Tag>

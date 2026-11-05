@@ -366,12 +366,10 @@ begin
     perform public.assert(crm_teste.sqlstate_de(format(
         $q$update public.orcamentos set valido_ate = data_emissao - 1 where id = %L$q$, v_orc.id)) = '23514',
         'O3: validade anterior à emissão recusada');
-    update public.orcamentos set status = 'enviado' where id = v_orc.id;
     perform public.login_admin();
-    perform public.assert((select enviado_em is not null from public.orcamentos where id = v_orc.id),
-        'O3: marcar como enviado registra enviado_em');
 
-    -- outro vendedor do MESMO tenant lê e edita (o orçamento é do time)
+    -- outro vendedor do MESMO tenant lê e edita (o orçamento é do time).
+    -- Edita ainda em rascunho: depois de enviado a proposta trava (migration 14).
     perform public.login_como(v_v2, 'vendedor2.orc@a.com');
     select count(*) into v_n from public.orcamento_itens where orcamento_id = v_orc.id;
     perform public.assert(v_n = 1, 'O3: outro vendedor do tenant lê os itens');
@@ -379,6 +377,12 @@ begin
         $q$update public.orcamentos set titulo = 'Sistema 8 kWp (revisado)' where id = %L$q$, v_orc.id)) = 1,
         'O3: outro vendedor do tenant edita o orçamento');
     perform public.login_admin();
+
+    perform public.login_como(v_v1, 'vendedor1.orc@a.com');
+    update public.orcamentos set status = 'enviado' where id = v_orc.id;
+    perform public.login_admin();
+    perform public.assert((select enviado_em is not null from public.orcamentos where id = v_orc.id),
+        'O3: marcar como enviado registra enviado_em');
 
     insert into crm_teste.ctx values ('orc_orc1', v_orc.id), ('orc_item1', v_item1);
 end $$;
