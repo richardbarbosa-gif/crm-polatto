@@ -27,6 +27,9 @@ import {
     resolveEditableLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
+import { CampoOrigem } from "../../components/origem/campo-origem";
+import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
+import { origemDoLead, origemParaDadosExtras } from "../../lib/origemLead";
 import type { ClienteRecord, PipelineRecord, PipelineStageRecord } from "../../types/db";
 
 type ClienteEditFormValues = {
@@ -40,6 +43,8 @@ type ClienteEditFormValues = {
     responsavel_id?: string;
     stage_id?: string;
     temperature?: LeadTemperature;
+    /** Canal de origem (vai para dados_extras, não é coluna da view) */
+    origem_id?: string;
     /** Valores dos campos customizados do tenant (jsonb) */
     dados_extras?: Record<string, unknown>;
 };
@@ -52,6 +57,7 @@ export const ClienteEdit = () => {
 
     const { formProps, saveButtonProps, form, query } = useForm<ClienteRecord, HttpError, Record<string, unknown>>({});
     const { campos: camposCustomizados } = useCustomFields("negocio");
+    const { canais: canaisOrigem } = useCanaisOrigem();
 
     const record = query?.data?.data ?? null;
     const isRecordLoading = Boolean(query?.isLoading || query?.isFetching);
@@ -159,8 +165,24 @@ export const ClienteEdit = () => {
         if (Object.keys(valores).length) form.setFieldValue("dados_extras", valores);
     }, [form, camposCustomizados, record?.dados_extras]);
 
+    // Origem gravada no lead (pode ser de um canal já desativado)
+    const origemAtual = useMemo(
+        () => origemDoLead(record?.dados_extras as Record<string, unknown> | undefined),
+        [record?.dados_extras],
+    );
+    useEffect(() => {
+        if (origemAtual.id) form.setFieldValue("origem_id", origemAtual.id);
+    }, [form, origemAtual.id]);
+    const canaisComAtual = useMemo(
+        () =>
+            origemAtual.id && !canaisOrigem.some((c) => c.id === origemAtual.id)
+                ? [...canaisOrigem, { id: origemAtual.id, nome: origemAtual.nome ?? "Canal removido" }]
+                : canaisOrigem,
+        [canaisOrigem, origemAtual.id, origemAtual.nome],
+    );
+
     const handleFinish = async (values: ClienteEditFormValues) => {
-        const { temperature, stage_id, responsavel_id, ...payload } = values;
+        const { temperature, stage_id, responsavel_id, origem_id, ...payload } = values;
         const nextStageId = coerceLeadStageIdValue(
             stage_id ?? (record?.stage_id as string | number | null | undefined) ?? record?.status,
             leadStages,
@@ -178,7 +200,11 @@ export const ClienteEdit = () => {
 
         // Campos customizados do tenant → dados_extras (jsonb). Em modo de
         // edição, campo esvaziado vai como null para ser apagado no banco.
-        const dadosExtras = extrairDadosExtras(values as Record<string, unknown>, camposCustomizados, "editar");
+        const dadosExtras = {
+            ...extrairDadosExtras(values as Record<string, unknown>, camposCustomizados, "editar"),
+            // Só mexe na origem se o campo existe na tela (canais carregados)
+            ...(canaisComAtual.length > 0 ? origemParaDadosExtras(origem_id, canaisComAtual, "editar") : {}),
+        };
         const { dados_extras: _descartado, ...payloadLimpo } = payload;
         void _descartado;
 
@@ -288,6 +314,8 @@ export const ClienteEdit = () => {
                         optionFilterProp="label"
                     />
                 </Form.Item>
+
+                <CampoOrigem canais={canaisOrigem} origemAtual={origemAtual} size="middle" />
 
                 <Form.Item label="Etapa do funil" name="stage_id" rules={[{ required: true, message: "Selecione a etapa." }]}>
                     <Select options={stageOptions} showSearch optionFilterProp="label" />

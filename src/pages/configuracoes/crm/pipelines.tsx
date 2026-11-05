@@ -20,6 +20,7 @@ import { Button, EmptyState } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
 import { useCrmAccess } from "../../../hooks/useCrmAccess";
 import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
+import { rotuloPrazoEtapa } from "../../../lib/saudeNegocio";
 import { supabaseClient } from "../../../utility";
 import type { PipelineRecord, PipelineStageRecord } from "../../../types/db";
 
@@ -30,6 +31,8 @@ type StageRow = PipelineStageRecord & {
     probabilidade?: number | null;
     ganho?: boolean | null;
     perdido?: boolean | null;
+    /** Migration 15: dias sem atividade até o negócio ficar parado (nulo = não monitora). */
+    dias_para_parado?: number | null;
 };
 
 type PipelineFormValues = { nome: string; ordem: number; ativo: boolean };
@@ -40,6 +43,7 @@ type StageFormValues = {
     probabilidade: number;
     ganho: boolean;
     perdido: boolean;
+    dias_para_parado?: number | null;
 };
 
 export const PipelinesConfig = () => {
@@ -87,6 +91,9 @@ export const PipelinesConfig = () => {
     );
 
     const tabelaPipelinesAusente = isSupabaseMissingRelation(pipelinesQuery?.error);
+    // A coluna dias_para_parado só existe com a migration 15: sem ela, o
+    // campo some e o salvamento não manda a coluna (senão daria erro).
+    const prazoParadoDisponivel = stages.some((stage) => "dias_para_parado" in stage);
 
     const stagesDoPipeline = (pipelineId: string) =>
         stages.filter(
@@ -129,9 +136,13 @@ export const PipelinesConfig = () => {
 
     const salvarStage = async () => {
         if (salvandoRef.current) return;
-        const values = await stageForm.validateFields();
+        const { dias_para_parado: diasParaParado, ...values } = await stageForm.validateFields();
+        const etapaFinal = Boolean(values.ganho || values.perdido);
         const payload = {
             ...values,
+            ...(prazoParadoDisponivel
+                ? { dias_para_parado: etapaFinal ? null : diasParaParado ?? null }
+                : {}),
             pipeline_id: stageModal.pipelineId || undefined,
             tenant_id: tenantId || undefined,
         };
@@ -357,6 +368,17 @@ export const PipelinesConfig = () => {
                                             render: (probabilidade: number | null) =>
                                                 probabilidade != null ? `${probabilidade}%` : "—",
                                         },
+                                        ...(prazoParadoDisponivel
+                                            ? [
+                                                  {
+                                                      title: "Parado após",
+                                                      dataIndex: "dias_para_parado",
+                                                      width: 130,
+                                                      render: (dias: number | null, stage: StageRow) =>
+                                                          rotuloPrazoEtapa(dias, Boolean(stage.ganho || stage.perdido)),
+                                                  },
+                                              ]
+                                            : []),
                                         ...(canDeleteRecords
                                             ? [
                                                   {
@@ -377,6 +399,7 @@ export const PipelinesConfig = () => {
                                                                           probabilidade: stage.probabilidade ?? 0,
                                                                           ganho: Boolean(stage.ganho),
                                                                           perdido: Boolean(stage.perdido),
+                                                                          dias_para_parado: stage.dias_para_parado ?? null,
                                                                       });
                                                                       setStageModal({
                                                                           open: true,
@@ -476,6 +499,35 @@ export const PipelinesConfig = () => {
                     <Form.Item label="Etapa de perda" name="perdido" valuePropName="checked" initialValue={false}>
                         <Switch />
                     </Form.Item>
+                    {prazoParadoDisponivel ? (
+                        <Form.Item noStyle shouldUpdate={(antes, depois) => antes.ganho !== depois.ganho || antes.perdido !== depois.perdido}>
+                            {({ getFieldValue }) => {
+                                const etapaFinal = Boolean(getFieldValue("ganho") || getFieldValue("perdido"));
+                                return (
+                                    <Form.Item
+                                        label="Alerta de negócio parado (dias sem atividade)"
+                                        name="dias_para_parado"
+                                        initialValue={7}
+                                        tooltip="O card fica destacado como parado no Kanban depois desse prazo sem tarefa, nota, mudança de etapa ou edição. Deixe em branco para não monitorar esta etapa."
+                                        extra={
+                                            etapaFinal
+                                                ? "Etapas de ganho e de perda nunca ficam paradas."
+                                                : "Em branco = esta etapa não é monitorada."
+                                        }
+                                    >
+                                        <InputNumber
+                                            min={1}
+                                            max={365}
+                                            precision={0}
+                                            disabled={etapaFinal}
+                                            placeholder="Não monitorar"
+                                            style={{ width: "100%" }}
+                                        />
+                                    </Form.Item>
+                                );
+                            }}
+                        </Form.Item>
+                    ) : null}
                 </Form>
             </Modal>
         </div>

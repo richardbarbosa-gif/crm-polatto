@@ -16,6 +16,7 @@ import {
     LEAD_TEMPERATURE_OPTIONS,
 } from "../../lib/leadTemperature";
 import { formatCurrencyBRL } from "../../lib/formatters";
+import { FILTRO_SAUDE_OPCOES, type FiltroSaude } from "../../lib/saudeNegocio";
 
 const { Text } = Typography;
 
@@ -37,6 +38,9 @@ export interface KanbanHeaderProps {
     pipelineOptions?: { value: string; label: string }[];
     pipelineSelecionado?: string;
     onPipelineChange?: (pipelineId: string) => void;
+    /** Filtro por saúde (parados / sem próximo passo); só com a view de saúde. */
+    saudeFiltro?: FiltroSaude;
+    onSaudeChange?: (value: FiltroSaude) => void;
 }
 
 export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
@@ -56,6 +60,8 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
     pipelineOptions,
     pipelineSelecionado,
     onPipelineChange,
+    saudeFiltro,
+    onSaudeChange,
 }) => (
     <div
         className="crm-opportunities-header"
@@ -159,6 +165,16 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                         ...LEAD_AUTOMATIC_TEMPERATURE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
                     ]}
                 />
+                {saudeFiltro && onSaudeChange ? (
+                    <Select
+                        value={saudeFiltro}
+                        onChange={(v) => onSaudeChange(v)}
+                        style={{ width: 170, height: 32 }}
+                        size="small"
+                        aria-label="Filtrar por saúde do negócio"
+                        options={FILTRO_SAUDE_OPCOES}
+                    />
+                ) : null}
             </div>
 
             {/* Centro: KPIs inline */}

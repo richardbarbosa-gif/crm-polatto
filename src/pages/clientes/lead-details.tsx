@@ -5,10 +5,12 @@ import {
     FilePdfOutlined,
     GoogleOutlined,
     LinkOutlined,
+    MailOutlined,
     PhoneOutlined,
     PlusOutlined,
     UploadOutlined,
     UserOutlined,
+    WhatsAppOutlined,
 } from "@ant-design/icons";
 import { DateField } from "@refinedev/antd";
 import { useList } from "@refinedev/core";
@@ -46,6 +48,10 @@ import { canDelete } from "../../lib/permissions";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import type { PipelineStageRecord } from "../../types/db";
 import { OrcamentosDoLead } from "../orcamentos/orcamentos-do-lead";
+import { EscolherModelo } from "../../components/escolher-modelo";
+import { useRemetente } from "../../hooks/useRemetente";
+import { emailValido, montarDadosModelo, telefoneWhatsApp, type CanalModelo } from "../../lib/modelosMensagem";
+import { origemDoLead } from "../../lib/origemLead";
 
 const { Title, Text } = Typography;
 
@@ -90,6 +96,7 @@ const getStatusTone = (status?: string | null) => {
 
 const getTimelineColor = (entry: LeadTimelineEntry): string => {
     if (entry.type === "status") return "#2563eb";
+    if (entry.type === "temperatura") return "#dc2626";
     if (entry.type === "ligacao") return "#16a34a";
     if (entry.type === "upload") return "#f59e0b";
     if (entry.type === "nota") return "#475569";
@@ -98,6 +105,7 @@ const getTimelineColor = (entry: LeadTimelineEntry): string => {
 
 const getTimelineTypeLabel = (entry: LeadTimelineEntry): string => {
     if (entry.type === "status") return "Status";
+    if (entry.type === "temperatura") return "Temperatura";
     if (entry.type === "ligacao") return "Ligação";
     if (entry.type === "upload") return "Upload";
     if (entry.type === "nota") return "Nota";
@@ -112,6 +120,7 @@ export const LeadDetails = ({
 }: LeadDetailsProps) => {
     const { isSystemAdmin, role, tenantId } = useTenant();
     const [temperatureTag, setTemperatureTag] = useState<LeadTemperatureTag | undefined>(undefined);
+    const [canalMensagem, setCanalMensagem] = useState<CanalModelo | null>(null);
     const [timeline, setTimeline] = useState<LeadTimelineEntry[]>([]);
     const [isLoadingTimeline, setIsLoadingTimeline] = useState(false);
     const [files, setFiles] = useState<LeadStoredFile[]>([]);
@@ -139,7 +148,8 @@ export const LeadDetails = ({
     const automaticTemperature = resolveAutomaticLeadTemperature(stageDisplayName);
     const isAutomaticTemperature = isAutomaticLeadTemperature(temperatureTag);
     const canDeleteDocuments = canDelete(role, isSystemAdmin);
-    const { userId } = useCrmAccess();
+    const { userId, employee, ownerDisplayName } = useCrmAccess();
+    const remetente = useRemetente(employee?.nome || ownerDisplayName);
     const { isEnergiaSolar } = useTenantSegmento();
     const { campos: camposCustomizados } = useCustomFields("negocio");
 
@@ -247,6 +257,8 @@ export const LeadDetails = ({
         if (record?.id) {
             try {
                 await updateLeadTemperature(record.id, value);
+                // O banco registra a mudança na timeline (trigger); mostra já.
+                await loadTimeline();
             } catch {
                 message.error("Falha ao salvar temperatura do lead.");
             }
@@ -474,10 +486,28 @@ export const LeadDetails = ({
                             <Text type="secondary" style={{ fontSize: 15 }}>
                                 <PhoneOutlined /> {record.ddi} {record.telefone}
                             </Text>
+                            {telefoneWhatsApp(record.telefone, record.ddi) ? (
+                                <Button
+                                    size="small"
+                                    icon={<WhatsAppOutlined />}
+                                    onClick={() => setCanalMensagem("whatsapp")}
+                                    style={{ color: "#15803d", borderColor: "rgba(22,163,74,0.4)" }}
+                                >
+                                    WhatsApp
+                                </Button>
+                            ) : null}
+                            {emailValido(record.email) ? (
+                                <Button size="small" icon={<MailOutlined />} onClick={() => setCanalMensagem("email")}>
+                                    E-mail
+                                </Button>
+                            ) : null}
                             {record.responsavel ? (
                                 <Badge tone="info">
                                     <UserOutlined /> {record.responsavel}
                                 </Badge>
+                            ) : null}
+                            {origemDoLead(record.dados_extras).nome ? (
+                                <Badge tone="neutral">Origem: {origemDoLead(record.dados_extras).nome}</Badge>
                             ) : null}
                         </Space>
                     </div>
@@ -754,6 +784,19 @@ export const LeadDetails = ({
                     <ClockCircleOutlined /> Atualizado a cada mudança de etapa e atividade registrada.
                 </Text>
             </Card>
+            <EscolherModelo
+                aberto={canalMensagem !== null}
+                onFechar={() => setCanalMensagem(null)}
+                canal={canalMensagem ?? "whatsapp"}
+                destino={{ telefone: record.telefone, ddi: record.ddi, email: record.email }}
+                nomeCliente={record.nome}
+                dados={montarDadosModelo({
+                    nomeCliente: record.nome,
+                    empresa: remetente.empresa,
+                    vendedor: remetente.vendedor,
+                    valor: valorDoLead(record),
+                })}
+            />
         </div>
     );
 };

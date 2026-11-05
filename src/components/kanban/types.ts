@@ -1,4 +1,5 @@
 import { normalizeText } from "../../lib/formatters";
+import type { SaudeDoNegocio } from "../../lib/saudeNegocio";
 
 export type Stage = {
     id?: string | number;
@@ -12,8 +13,11 @@ export type Stage = {
     perdido?: boolean;
 };
 
-/** Negócio como chega da view/tabela `clientes` (campos usados pelo board). */
-export type KanbanLead = {
+/**
+ * Negócio como chega da view `clientes` ou da `vw_negocios_saude` (campos
+ * usados pelo board). Os campos de saúde só vêm da segunda.
+ */
+export type KanbanLead = SaudeDoNegocio & {
     id: string | number;
     nome?: string | null;
     titulo?: string | null;
