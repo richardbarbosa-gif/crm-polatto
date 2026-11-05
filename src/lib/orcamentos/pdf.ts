@@ -22,6 +22,7 @@ import {
     hexParaRgb,
     type Rgb,
 } from "./formato";
+import { siglaRevisao } from "./regras";
 
 export interface EmpresaPdf {
     nomeFantasia?: string | null;
@@ -56,6 +57,8 @@ export interface ItemPdf {
 
 export interface OrcamentoPdf {
     numero: string;
+    /** Revisão da proposta (migration 14). A partir da 2 sai "Rev. N" ao lado do número. */
+    revisao?: number | null;
     titulo?: string | null;
     dataEmissao: string;
     validoAte: string;
@@ -157,10 +160,12 @@ export const gerarPropostaPdf = async (dados: DadosPropostaPdf): Promise<Blob> =
 
     const nomeEmpresa = textoPdf(empresa.nomeFantasia) || textoPdf(empresa.razaoSocial) || "Proposta comercial";
     const numero = textoPdf(orcamento.numero);
+    const revisao = siglaRevisao(orcamento.revisao);
+    const numeroComRevisao = revisao ? `${numero} (${revisao})` : numero;
 
     const doc = new jsPDF({ unit: "mm", format: "a4", compress: true });
     doc.setProperties({
-        title: `Proposta ${numero} - ${nomeEmpresa}`,
+        title: `Proposta ${numeroComRevisao} - ${nomeEmpresa}`,
         subject: textoPdf(orcamento.titulo) || "Proposta comercial",
         author: nomeEmpresa,
         creator: "CRM Polatto",
@@ -192,7 +197,7 @@ export const gerarPropostaPdf = async (dados: DadosPropostaPdf): Promise<Blob> =
         faixaTopo();
         fonte(8, "bold");
         cor(primariaTexto);
-        doc.text(`Proposta ${numero}`, MARGEM, 13);
+        doc.text(`Proposta ${numeroComRevisao}`, MARGEM, 13);
         fonte(8);
         cor(CINZA);
         doc.text(nomeEmpresa, PAGINA.largura - MARGEM, 13, { align: "right" });
@@ -254,7 +259,15 @@ export const gerarPropostaPdf = async (dados: DadosPropostaPdf): Promise<Blob> =
     doc.text("PROPOSTA COMERCIAL", MARGEM, y, { charSpace: 0.8 });
     fonte(22, "bold");
     cor(TINTA);
-    doc.text(`Nº ${numero}`, MARGEM, y + 9.5);
+    const textoNumero = `Nº ${numero}`;
+    doc.text(textoNumero, MARGEM, y + 9.5);
+    if (revisao) {
+        // "Rev. 2" ao lado do número, menor e na cor da marca.
+        const larguraNumero = doc.getTextWidth(textoNumero);
+        fonte(11, "bold");
+        cor(primariaTexto);
+        doc.text(revisao, MARGEM + larguraNumero + 3, y + 9.5);
+    }
     let yTitulo = y + 9.5;
     const titulo = textoPdf(orcamento.titulo);
     if (titulo) {
@@ -553,7 +566,7 @@ export const gerarPropostaPdf = async (dados: DadosPropostaPdf): Promise<Blob> =
     doc.line(MARGEM, y + 2, xDireita, y + 2);
     fonte(8);
     cor(CINZA);
-    doc.text(`De acordo com os termos e valores da proposta nº ${numero}.`, MARGEM, y + 6.5);
+    doc.text(`De acordo com os termos e valores da proposta nº ${numeroComRevisao}.`, MARGEM, y + 6.5);
     const yAssinatura = y + 17;
     tracar(CINZA);
     doc.setLineWidth(0.25);

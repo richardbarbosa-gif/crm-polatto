@@ -72,6 +72,12 @@ export interface Orcamento {
     created_at: string;
     updated_at: string | null;
     deleted_at: string | null;
+    /** Proposta que esta revisão substitui (migration 14). */
+    versao_de: string | null;
+    /** 1 na original; +1 a cada nova versão. */
+    revisao: number;
+    /** Número da primeira proposta da cadeia ("Revisão 3 de 2026-0003"). */
+    numero_original: string | null;
 }
 
 export interface OrcamentoCompleto extends Orcamento {
@@ -170,6 +176,9 @@ export const paraOrcamento = (linha: Linha): Orcamento => ({
     created_at: String(linha.created_at ?? ""),
     updated_at: texto(linha.updated_at),
     deleted_at: texto(linha.deleted_at),
+    versao_de: texto(linha.versao_de),
+    revisao: Math.max(1, Math.trunc(numero(linha.revisao, 1))),
+    numero_original: texto(linha.numero_original),
 });
 
 /** Endereço em uma linha a partir dos campos do lead. */

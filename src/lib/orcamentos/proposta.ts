@@ -45,6 +45,7 @@ export const montarDadosPdf = (
     },
     orcamento: {
         numero: orcamento.numero,
+        revisao: orcamento.revisao,
         titulo: orcamento.titulo,
         dataEmissao: orcamento.data_emissao,
         validoAte: orcamento.valido_ate,
@@ -81,7 +82,7 @@ export const gerarPropostaDoOrcamento = async (
     const blob = await gerarPropostaPdf({ ...montarDadosPdf(orcamento, cliente, identidade), logo });
     return {
         blob,
-        nomeArquivo: nomeArquivoProposta(orcamento.numero, cliente?.nome),
+        nomeArquivo: nomeArquivoProposta(orcamento.numero, cliente?.nome, orcamento.revisao),
         orcamento,
         identidade,
         semLogo: Boolean(identidade?.logo_path) && !logo,
