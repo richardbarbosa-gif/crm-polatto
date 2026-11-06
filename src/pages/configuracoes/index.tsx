@@ -11,8 +11,9 @@ import {
     MessageOutlined,
     ScheduleOutlined,
     SettingOutlined,
+    ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Card, Divider, Select, Switch, Tabs, Typography } from "antd";
+import { Card, Divider, Grid, Select, Switch, Tabs, Typography } from "antd";
 import {
     CanaisOrigemConfig,
     CustomFieldsConfig,
@@ -22,6 +23,7 @@ import {
     ProdutosConfig,
     TiposAtividadeConfig,
 } from "./crm";
+import { AutomacoesConfig } from "./automacoes";
 import { IdentidadePropostaConfig } from "./identidade-proposta";
 
 const { Title, Text } = Typography;
@@ -29,16 +31,18 @@ const { Title, Text } = Typography;
 const sectionTitleStyle = { margin: 0 };
 
 export const ConfiguracoesPage = () => {
+    // No celular as abas vão para o topo: na lateral, o conteúdo ficava espremido.
+    const telas = Grid.useBreakpoint();
     return (
         <div className="crm-page-shell crm-config-page">
             <div className="crm-page-header">
                 <div>
                     <Title level={2} className="crm-page-header-title">
                         <SettingOutlined style={{ marginRight: 10, color: "#64748b" }} />
-                        Configuracoes
+                        Configurações
                     </Title>
                     <Text className="crm-page-header-subtitle">
-                        Preferencias visuais e operacionais do CRM para o seu time.
+                        Preferências visuais e operacionais do CRM para o seu time.
                     </Text>
                 </div>
             </div>
@@ -46,7 +50,7 @@ export const ConfiguracoesPage = () => {
             <Card bordered={false} className="crm-card">
                 <Tabs
                     defaultActiveKey="geral"
-                    tabPosition="left"
+                    tabPosition={telas.md === false ? "top" : "left"}
                     items={[
                         {
                             key: "geral",
@@ -58,7 +62,7 @@ export const ConfiguracoesPage = () => {
                             children: (
                                 <div className="crm-form-section" style={{ marginBottom: 0 }}>
                                     <Title level={4} style={sectionTitleStyle}>
-                                        Preferencias regionais
+                                        Preferências regionais
                                     </Title>
                                     <Text className="crm-form-section-subtitle" type="secondary">
                                         Defina idioma e fuso para padronizar datas, horarios e mensagens.
@@ -94,7 +98,7 @@ export const ConfiguracoesPage = () => {
                             key: "aparencia",
                             label: (
                                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <BgColorsOutlined /> Aparencia
+                                    <BgColorsOutlined /> Aparência
                                 </span>
                             ),
                             children: (
@@ -130,7 +134,7 @@ export const ConfiguracoesPage = () => {
                             key: "notificacoes",
                             label: (
                                 <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                    <BellOutlined /> Notificacoes
+                                    <BellOutlined /> Notificações
                                 </span>
                             ),
                             children: (
@@ -257,6 +261,27 @@ export const ConfiguracoesPage = () => {
                                         cada canal traz de leads, vendas e receita.
                                     </Text>
                                     <CanaisOrigemConfig />
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "automacoes",
+                            label: (
+                                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <ThunderboltOutlined /> Automações
+                                </span>
+                            ),
+                            children: (
+                                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                                    <Title level={4} style={sectionTitleStyle}>
+                                        Automações do funil
+                                    </Title>
+                                    <Text className="crm-form-section-subtitle" type="secondary">
+                                        Quando algo acontece no funil, o CRM cria a tarefa, muda a temperatura,
+                                        distribui o lead ou avisa o gerente sozinho. Os modelos prontos vêm
+                                        desligados: revise e ligue com um clique.
+                                    </Text>
+                                    <AutomacoesConfig />
                                 </div>
                             ),
                         },
