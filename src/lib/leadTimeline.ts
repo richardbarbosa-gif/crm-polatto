@@ -7,7 +7,7 @@ export const MAX_PDF_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB — limite reduzi
 
 export type LeadTimelineEntry = {
     id: string;
-    type: "nota" | "ligacao" | "status" | "temperatura" | "upload" | "outro";
+    type: "nota" | "ligacao" | "status" | "temperatura" | "automacao" | "upload" | "outro";
     title: string;
     description?: string;
     createdAt?: string;
@@ -94,6 +94,8 @@ export const toTimelineType = (
     const value = (rawType || "").toLowerCase();
     // Mudança de temperatura (trigger da migration 15: "Morno → Quente, por Fulano")
     if (value.includes("temperatura")) return "temperatura";
+    // Ação de automação (migration 17: "Automação «nome» criou a tarefa «X»")
+    if (value.includes("automa")) return "automacao";
     if (value.includes("liga")) return "ligacao";
     if (value.includes("status")) return "status";
     if (value.includes("upload") || value.includes("arquivo") || value.includes("pdf")) return "upload";

@@ -224,6 +224,10 @@ function App() {
                                 { name: "tipos_atividade" },
                                 { name: "negocios" },
                                 { name: "tenant_features" },
+                                { name: "automacoes" },
+                                { name: "automacoes_acoes" },
+                                { name: "automacoes_execucoes" },
+                                { name: "vw_automacoes_resumo" },
                             ]}
                             // disableTelemetry: o Refine manda um beacon para telemetry.refine.dev
                             // a cada carga — a CSP de produção bloqueia (img-src) e o CRM não

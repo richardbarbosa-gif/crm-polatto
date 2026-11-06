@@ -62,6 +62,10 @@ describe("toTimelineType", () => {
         expect(toTimelineType("Temperatura")).toBe("temperatura");
     });
 
+    it("registro de automação (migration 17) vira tipo próprio", () => {
+        expect(toTimelineType("automacao")).toBe("automacao");
+    });
+
     it("tipos existentes continuam iguais", () => {
         expect(toTimelineType("ligacao")).toBe("ligacao");
         expect(toTimelineType("nota")).toBe("nota");
