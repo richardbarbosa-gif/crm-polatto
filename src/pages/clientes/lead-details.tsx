@@ -97,6 +97,7 @@ const getStatusTone = (status?: string | null) => {
 const getTimelineColor = (entry: LeadTimelineEntry): string => {
     if (entry.type === "status") return "#2563eb";
     if (entry.type === "temperatura") return "#dc2626";
+    if (entry.type === "automacao") return "#7c3aed";
     if (entry.type === "ligacao") return "#16a34a";
     if (entry.type === "upload") return "#f59e0b";
     if (entry.type === "nota") return "#475569";
@@ -106,6 +107,7 @@ const getTimelineColor = (entry: LeadTimelineEntry): string => {
 const getTimelineTypeLabel = (entry: LeadTimelineEntry): string => {
     if (entry.type === "status") return "Status";
     if (entry.type === "temperatura") return "Temperatura";
+    if (entry.type === "automacao") return "Automação";
     if (entry.type === "ligacao") return "Ligação";
     if (entry.type === "upload") return "Upload";
     if (entry.type === "nota") return "Nota";
