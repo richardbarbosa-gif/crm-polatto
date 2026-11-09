@@ -17,7 +17,7 @@ import routerProvider, {
     UnsavedChangesNotifier,
 } from "@refinedev/react-router";
 import { dataProvider, liveProvider } from "@refinedev/supabase";
-import { App as AntdApp, Button, Spin } from "antd";
+import { App as AntdApp, Menu, Spin } from "antd";
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Outlet, Route, Routes, Link } from "react-router";
 
@@ -49,6 +49,7 @@ import { ColorModeContextProvider } from "./contexts/color-mode";
 import { RequireTenant, TenantProvider } from "./contexts/tenant";
 import { supabaseClient } from "./utility";
 import { comPaginacaoCompleta } from "./lib/dataProviderPaginado";
+import { tituloDaPagina } from "./lib/tituloPagina";
 
 // Telas carregadas sob demanda: o usuário baixa o código de uma tela só
 // quando abre aquela tela (antes, todas iam no bundle inicial).
@@ -248,28 +249,22 @@ function App() {
                                                                 {...props}
                                                                 fixed
                                                                 Title={CustomTitle}
-                                                                render={({ items, logout, collapsed }) => (
-                                                                    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
-                                                                        <div className="crm-sider-nav">{items}</div>
-                                                                        <div className="crm-sider-footer">
-                                                                            <Link to="/configuracoes">
-                                                                                <Button
-                                                                                    type="text"
-                                                                                    icon={<SettingOutlined />}
-                                                                                    aria-label="Configurações"
-                                                                                    className={
-                                                                                        collapsed
-                                                                                            ? "crm-sider-settings crm-sider-settings-collapsed"
-                                                                                            : "crm-sider-settings"
-                                                                                    }
-                                                                                >
-                                                                                    {!collapsed && <span>Configurações</span>}
-                                                                                </Button>
-                                                                            </Link>
-                                                                            <div>{logout}</div>
-                                                                        </div>
-                                                                    </div>
-                                                                )}
+                                                                // Os itens PRECISAM ser filhos diretos do <Menu>: embrulhados
+                                                                // numa <div>, o antd não registrava as chaves e nenhum item
+                                                                // ficava marcado como ativo (o menu não mostrava onde o
+                                                                // usuário estava). Configurações vira item do menu, preso ao
+                                                                // rodapé pelo CSS (.crm-sider-footer-item).
+                                                                render={({ items, logout }) => [
+                                                                    ...items,
+                                                                    <Menu.Item
+                                                                        key="/configuracoes"
+                                                                        icon={<SettingOutlined />}
+                                                                        className="crm-sider-footer-item"
+                                                                    >
+                                                                        <Link to="/configuracoes">Configurações</Link>
+                                                                    </Menu.Item>,
+                                                                    logout,
+                                                                ]}
                                                             />
                                                         )}
                                                     >
@@ -337,7 +332,7 @@ function App() {
                                 </Routes>
                             </TenantProvider>
                             <UnsavedChangesNotifier />
-                            <DocumentTitleHandler />
+                            <DocumentTitleHandler handler={({ pathname }) => tituloDaPagina(pathname ?? window.location.pathname)} />
                         </Refine>
                         <DevtoolsPanel />
                     </DevtoolsProvider>

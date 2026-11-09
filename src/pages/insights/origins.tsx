@@ -1,10 +1,10 @@
-import { DownloadOutlined } from "@ant-design/icons";
+import { BranchesOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useList, type CrudFilter } from "@refinedev/core";
 import { Alert, Col, Progress, Row, Select, Skeleton, Space, Table, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL, formatPercentBR } from "../../lib/formatters";
+import { formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
 import {
     inicioDoPeriodo,
     RECURSO_VENDAS_POR_ORIGEM,
@@ -68,6 +68,7 @@ export const InsightsOriginsPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
+                icon={<BranchesOutlined />}
                 title="Vendas por origem"
                 subtitle="Quais canais trazem leads que viram venda."
                 extra={
@@ -163,17 +164,19 @@ export const InsightsOriginsPage = () => {
                                     { title: "Em aberto", dataIndex: "abertos", align: "right", width: 100 },
                                     {
                                         title: "Conversão",
+                                        className: "crm-nowrap",
                                         dataIndex: "conversao",
                                         width: 160,
                                         render: (valor: number, r) =>
                                             r.ganhos + r.perdidos === 0 ? (
                                                 <Text type="secondary">Sem encerrados</Text>
                                             ) : (
-                                                <Progress percent={Number(valor.toFixed(1))} size="small" />
+                                                <Progress format={formatoProgresso} percent={Number(valor.toFixed(1))} size="small" />
                                             ),
                                     },
                                     {
                                         title: "Valor ganho",
+                                        className: "crm-nowrap",
                                         dataIndex: "valorGanho",
                                         align: "right",
                                         width: 140,

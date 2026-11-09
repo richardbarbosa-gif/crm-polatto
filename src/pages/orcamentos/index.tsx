@@ -106,6 +106,7 @@ export const OrcamentosPage = () => {
     const colunas: ColumnsType<Orcamento> = [
         {
             title: "Número",
+            className: "crm-nowrap",
             dataIndex: "numero",
             width: 130,
             render: (numero: string, o) => {
@@ -148,6 +149,7 @@ export const OrcamentosPage = () => {
         },
         {
             title: "Total",
+            className: "crm-nowrap",
             dataIndex: "total",
             align: "right",
             width: 140,
@@ -156,6 +158,7 @@ export const OrcamentosPage = () => {
         },
         {
             title: "Validade",
+            className: "crm-nowrap",
             dataIndex: "valido_ate",
             width: 110,
             sorter: (a, b) => a.valido_ate.localeCompare(b.valido_ate),

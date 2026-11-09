@@ -85,7 +85,7 @@ export const PolattoLogo = ({
                             fontSize: isLogin ? 28 : 15,
                             fontWeight: 700,
                             letterSpacing: "0.06em",
-                            color: isSidebar ? "#f1f5f9" : "#0F172A",
+                            color: isSidebar ? "#f1f5f9" : "var(--crm-ink-950, #0F172A)", // token: legível no modo escuro
                             lineHeight: 1,
                         }}
                     >
@@ -116,7 +116,7 @@ export const PolattoLogo = ({
                             fontSize: isLogin ? 13 : 9,
                             fontWeight: 500,
                             letterSpacing: "0.12em",
-                            color: isSidebar ? "rgba(148, 163, 184, 0.6)" : "#64748B",
+                            color: isSidebar ? "rgba(148, 163, 184, 0.6)" : "var(--crm-ink-500, #64748B)",
                             lineHeight: 1,
                             marginTop: isLogin ? 4 : 2,
                         }}

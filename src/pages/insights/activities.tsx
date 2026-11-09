@@ -28,6 +28,7 @@ import {
 } from "../../lib/taskExecutionStatus";
 import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
+import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
 
 const PERIOD_OPTIONS = [
     { label: "7 dias", value: 7 },
@@ -155,7 +156,8 @@ export const InsightsActivitiesPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
-                title="Relatorio de atividades"
+                icon={<CalendarOutlined />}
+                title="Relatório de atividades"
                 subtitle="Controle produtividade, SLA e ritmo de contatos do time comercial."
                 extra={
                     <Space wrap>
@@ -194,8 +196,8 @@ export const InsightsActivitiesPage = () => {
             />
 
             <IntroCard
-                title="Producao de atividades em alta visibilidade"
-                description="Mostre rapidamente onde ha gargalo de execucao e quais contatos aceleram fechamentos."
+                title="Produção de atividades em alta visibilidade"
+                description="Veja onde há gargalo de execução e quais contatos aceleram fechamentos."
             />
 
             <Row gutter={[12, 12]}>
@@ -210,7 +212,7 @@ export const InsightsActivitiesPage = () => {
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
-                        title="Pendencias"
+                        title="Pendências"
                         value={metrics.overdue}
                         prefix={<ClockCircleOutlined style={{ color: "#ef4444" }} />}
                         accentColor="#ef4444"
@@ -233,7 +235,7 @@ export const InsightsActivitiesPage = () => {
                         value={metrics.calls + metrics.whatsapp}
                         prefix={<MessageOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
-                        subtitle={`${metrics.calls} ligacoes + ${metrics.whatsapp} WhatsApp`}
+                        subtitle={`${metrics.calls} ligações + ${metrics.whatsapp} WhatsApp`}
                     />
                 </Col>
             </Row>
@@ -253,6 +255,7 @@ export const InsightsActivitiesPage = () => {
                         columns={[
                             {
                                 title: "Data",
+                                className: "crm-nowrap",
                                 dataIndex: "data_vencimento",
                                 width: 140,
                                 render: (value?: string | null) =>
@@ -276,7 +279,7 @@ export const InsightsActivitiesPage = () => {
                                         ) : value === "whatsapp" ? (
                                             <MessageOutlined />
                                         ) : null}{" "}
-                                        {value || "tipo"}
+                                        {rotuloTipoAtividade(value)}
                                     </Tag>
                                 ),
                             },

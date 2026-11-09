@@ -1,3 +1,4 @@
+import { formatoProgresso } from "../lib/formatters";
 import { CheckCircleFilled, RocketOutlined } from "@ant-design/icons";
 import { Popconfirm, Progress, Typography, message } from "antd";
 import { useEffect, useState } from "react";
@@ -73,7 +74,7 @@ export const PrimeiroAcesso = ({ isGerente, tenantId }: { isGerente: boolean; te
             style={{ marginBottom: 14 }}
         >
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                <Progress percent={checklist.percentual} size="small" style={{ flex: 1, margin: 0 }} />
+                <Progress format={formatoProgresso} percent={checklist.percentual} size="small" style={{ flex: 1, margin: 0 }} />
                 <Text type="secondary" style={{ whiteSpace: "nowrap" }}>
                     {checklist.feitos} de {checklist.total}
                 </Text>

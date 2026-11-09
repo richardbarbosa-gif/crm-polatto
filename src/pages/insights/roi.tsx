@@ -2,6 +2,7 @@ import {
     DollarCircleOutlined,
     DownloadOutlined,
     ExperimentOutlined,
+    LineChartOutlined,
     RiseOutlined,
     WalletOutlined,
 } from "@ant-design/icons";
@@ -10,7 +11,7 @@ import { Col, InputNumber, Row, Select, Skeleton, Space, Table, Typography } fro
 import { useMemo, useState } from "react";
 import { Button, Card, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { formatCurrencyBRL, formatPercentBR } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
@@ -115,6 +116,7 @@ export const InsightsROIPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
+                icon={<LineChartOutlined />}
                 title="ROI Comercial"
                 subtitle="Modelo de retorno baseado no volume de leads e esforço operacional."
                 extra={
@@ -174,7 +176,7 @@ export const InsightsROIPage = () => {
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Investimento estimado"
-                        value={roi.investimento}
+                        value={formatCurrencyBRL(roi.investimento, "R$ 0,00")}
                         prefix={<WalletOutlined style={{ color: "#334155" }} />}
                         accentColor="#64748b"
                         valueStyle={{ color: "#334155" }}
@@ -184,7 +186,7 @@ export const InsightsROIPage = () => {
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Retorno bruto"
-                        value={roi.ganhosValor}
+                        value={formatCurrencyBRL(roi.ganhosValor, "R$ 0,00")}
                         prefix={<DollarCircleOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         valueStyle={{ color: "#166534" }}
@@ -205,11 +207,11 @@ export const InsightsROIPage = () => {
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Retorno médio por ganho"
-                        value={roi.retornoMedio}
+                        value={formatCurrencyBRL(roi.retornoMedio, "R$ 0,00")}
                         prefix={<ExperimentOutlined style={{ color: "#f97316" }} />}
                         accentColor="#f97316"
                         valueStyle={{ color: "#c2410c" }}
-                        subtitle={`Cobertura ${roi.cobertura.toFixed(1)}%`}
+                        subtitle={`Cobertura ${formatPercentBR(roi.cobertura)}%`}
                     />
                 </Col>
             </Row>
@@ -248,16 +250,19 @@ export const InsightsROIPage = () => {
                                 },
                                 {
                                     title: "Investimento",
+                                    className: "crm-nowrap",
                                     dataIndex: "investimento",
                                     render: (value: number) => formatCurrencyBRL(value, "R$ 0,00"),
                                 },
                                 {
                                     title: "Retorno",
+                                    className: "crm-nowrap",
                                     dataIndex: "retorno",
                                     render: (value: number) => formatCurrencyBRL(value, "R$ 0,00"),
                                 },
                                 {
                                     title: "ROI",
+                                    className: "crm-nowrap",
                                     dataIndex: "roi",
                                     render: (value: number) => (
                                         <Typography.Text
@@ -266,7 +271,7 @@ export const InsightsROIPage = () => {
                                                 fontWeight: 700,
                                             }}
                                         >
-                                            {value.toFixed(1)}%
+                                            {formatPercentBR(value)}%
                                         </Typography.Text>
                                     ),
                                 },

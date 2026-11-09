@@ -8,6 +8,7 @@ import {
     TeamOutlined,
     TrophyOutlined,
     UserOutlined,
+    UsergroupAddOutlined,
 } from "@ant-design/icons";
 import {
     Alert,
@@ -29,7 +30,7 @@ import {
 import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
 import { percentual } from "../../lib/pipelineMetrics";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
@@ -433,6 +434,7 @@ export const InsightsEmployeesPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
+                icon={<UsergroupAddOutlined />}
                 title="Equipe"
                 subtitle="Gerencie membros, permissões de acesso e metas do time comercial."
                 extra={
@@ -541,11 +543,13 @@ export const InsightsEmployeesPage = () => {
                             },
                             {
                                 title: "Vendido no mês",
+                                className: "crm-nowrap",
                                 width: 130,
                                 render: (_, record: EmployeeRow) => formatCurrencyBRL(record.atualValor, "R$ 0,00"),
                             },
                             {
                                 title: "Meta mensal",
+                                className: "crm-nowrap",
                                 width: 130,
                                 render: (_, record: EmployeeRow) => formatCurrencyBRL(record.monthly_goal_value, "R$ 0,00"),
                             },
@@ -553,7 +557,7 @@ export const InsightsEmployeesPage = () => {
                                 title: "Progresso",
                                 width: 180,
                                 render: (_, record: EmployeeRow) => (
-                                    <Progress
+                                    <Progress format={formatoProgresso}
                                         percent={Number(record.valueProgress?.toFixed(1) || 0)}
                                         size="small"
                                         strokeColor={record.valueProgress >= 100 ? "#16a34a" : "#2563eb"}

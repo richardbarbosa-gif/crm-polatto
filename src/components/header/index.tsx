@@ -6,6 +6,7 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { ColorModeContext } from "../../contexts/color-mode";
 import { useTenant } from "../../contexts/tenant";
+import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { supabaseClient } from "../../utility";
 import { GlobalSearch } from "../global-search";
 import { CompanySelector } from "./company-selector";
@@ -151,6 +152,7 @@ type Identidade = {
     name?: string | null;
     email?: string | null;
     avatar?: string | null;
+    user_metadata?: { full_name?: string | null; name?: string | null } | null;
 };
 
 export const Header = () => {
@@ -159,8 +161,23 @@ export const Header = () => {
     const { mode, setMode } = useContext(ColorModeContext);
     const [buscaAberta, setBuscaAberta] = useState(false);
 
-    const userName = data?.name || "Usuário";
+    const { employee } = useCrmAccess();
+
+    // O "name" da identidade do Refine é o próprio e-mail: a barra mostrava
+    // o e-mail duas vezes. O nome vem do cadastro da equipe (Meu perfil).
     const userEmail = data?.email || "";
+    const userName =
+        employee?.nome?.trim() ||
+        data?.user_metadata?.full_name?.trim() ||
+        data?.user_metadata?.name?.trim() ||
+        userEmail ||
+        "Usuário";
+    const iniciais = userName
+        .split(/[\s@.]+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((parte) => parte.charAt(0).toUpperCase())
+        .join("");
 
     return (
         <AntdLayout.Header className="crm-topbar">
@@ -210,10 +227,10 @@ export const Header = () => {
                         <Avatar
                             size={36}
                             className="crm-topbar-avatar"
-                            icon={!data?.avatar ? <UserOutlined /> : undefined}
+                            icon={!data?.avatar && !iniciais ? <UserOutlined /> : undefined}
                             src={data?.avatar}
                         >
-                            {!data?.avatar && userName.charAt(0).toUpperCase()}
+                            {!data?.avatar && iniciais}
                         </Avatar>
                     </button>
                 </div>

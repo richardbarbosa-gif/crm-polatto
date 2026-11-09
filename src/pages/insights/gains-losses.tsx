@@ -3,6 +3,7 @@ import {
     CloseCircleOutlined,
     DownloadOutlined,
     FundProjectionScreenOutlined,
+    RiseOutlined,
     WarningOutlined,
 } from "@ant-design/icons";
 import { useList } from "@refinedev/core";
@@ -11,7 +12,7 @@ import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
+import { formatCurrencyBRL, normalizeText, formatoProgresso, formatPercentBR } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
@@ -117,15 +118,24 @@ export const InsightsGainsLossesPage = () => {
     }, [decididos]);
 
     const topLossReasons = useMemo(() => {
-        const map = new Map<string, number>();
+        // Agrupa sem diferenciar maiúsculas, mas exibe o texto como o vendedor
+        // escreveu (só a primeira letra em maiúscula). O antigo
+        // text-transform: capitalize gerava "Preço Acima Do Orçamento".
+        const map = new Map<string, { reason: string; count: number }>();
 
         report.perdas.forEach((cliente) => {
-            const reason = normalizeText(cliente.motivo_perda) || "sem motivo informado";
-            map.set(reason, (map.get(reason) || 0) + 1);
+            const original = (cliente.motivo_perda ?? "").trim().replace(/\s+/g, " ");
+            const chave = normalizeText(original) || "sem motivo informado";
+            const atual = map.get(chave);
+            if (atual) {
+                atual.count += 1;
+                return;
+            }
+            const texto = original || "Sem motivo informado";
+            map.set(chave, { reason: texto.charAt(0).toUpperCase() + texto.slice(1), count: 1 });
         });
 
-        return Array.from(map.entries())
-            .map(([reason, count]) => ({ reason, count }))
+        return Array.from(map.values())
             .sort((first, second) => second.count - first.count)
             .slice(0, 6);
     }, [report.perdas]);
@@ -137,6 +147,7 @@ export const InsightsGainsLossesPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
+                icon={<RiseOutlined />}
                 title="Ganhos e perdas"
                 subtitle="Leia a saúde de fechamento por volume, valor e ritmo de conversão."
                 extra={
@@ -169,7 +180,7 @@ export const InsightsGainsLossesPage = () => {
             />
 
             <IntroCard
-                title="Entenda onde o faturamento esta escapando"
+                title="Entenda onde o faturamento está escapando"
                 description="Combine taxa de ganho, motivos de perda e desempenho por consultor para ajustar o funil."
             />
 
@@ -237,10 +248,11 @@ export const InsightsGainsLossesPage = () => {
                                 { title: "Ganhos", dataIndex: "ganhos", width: 80 },
                                 { title: "Perdas", dataIndex: "perdas", width: 80 },
                                 {
-                                    title: "Win rate",
+                                    title: "Taxa de ganho",
+                                    className: "crm-nowrap",
                                     width: 160,
                                     render: (_, record: { winRate: number }) => (
-                                        <Progress
+                                        <Progress format={formatoProgresso}
                                             percent={Number(record.winRate.toFixed(1))}
                                             size="small"
                                             strokeColor="#16a34a"
@@ -249,6 +261,7 @@ export const InsightsGainsLossesPage = () => {
                                 },
                                 {
                                     title: "Valor",
+                                    className: "crm-nowrap",
                                     dataIndex: "valor",
                                     width: 140,
                                     render: (value: number) => formatCurrencyBRL(value, "R$ 0,00"),
@@ -263,25 +276,13 @@ export const InsightsGainsLossesPage = () => {
                         {topLossReasons.length === 0 ? (
                             <EmptyState
                                 title="Sem perdas no período"
-                                description="Otimo sinal. Continue registrando os motivos para manter inteligencia de funil."
+                                description="Ótimo sinal. Continue registrando os motivos para manter a inteligência do funil."
                             />
                         ) : (
                             <Space direction="vertical" size={10} style={{ width: "100%" }}>
                                 {topLossReasons.map((item) => (
-                                    <div
-                                        key={item.reason}
-                                        style={{
-                                            display: "flex",
-                                            alignItems: "center",
-                                            justifyContent: "space-between",
-                                            border: "1px solid #e7edf5",
-                                            borderRadius: 10,
-                                            padding: "8px 10px",
-                                        }}
-                                    >
-                                        <Typography.Text style={{ textTransform: "capitalize" }}>
-                                            {item.reason}
-                                        </Typography.Text>
+                                    <div key={item.reason} className="crm-motivo-perda">
+                                        <Typography.Text>{item.reason}</Typography.Text>
                                         <Tag color="red">{item.count}</Tag>
                                     </div>
                                 ))}
@@ -291,18 +292,19 @@ export const InsightsGainsLossesPage = () => {
                 </Col>
             </Row>
 
-            <Card title="Tendencia mensal de decisoes" style={{ marginTop: 12 }}>
+            <Card title="Tendência mensal de decisões" style={{ marginTop: 12 }}>
                 <Table
                     size="small"
                     rowKey={(record) => record.key}
                     pagination={false}
                     dataSource={trend}
                     columns={[
-                        { title: "Mes", dataIndex: "month", width: 120 },
+                        { title: "Mês", dataIndex: "month", width: 120 },
                         { title: "Ganhos", dataIndex: "wins", width: 90 },
                         { title: "Perdas", dataIndex: "losses", width: 90 },
                         {
-                            title: "Win rate",
+                            title: "Taxa de ganho",
+                            className: "crm-nowrap",
                             dataIndex: "winRate",
                             render: (value: number) => (
                                 <Typography.Text
@@ -311,7 +313,7 @@ export const InsightsGainsLossesPage = () => {
                                         fontWeight: 700,
                                     }}
                                 >
-                                    {value.toFixed(1)}%
+                                    {formatPercentBR(value)}%
                                 </Typography.Text>
                             ),
                         },

@@ -369,12 +369,14 @@ export const PessoasPage = () => {
                             },
                             {
                                 title: "E-mail",
+                                className: "crm-nowrap",
                                 dataIndex: "email",
                                 responsive: ["md"],
                                 render: (value: string | null) => value || "—",
                             },
                             {
                                 title: "Telefone",
+                                className: "crm-nowrap",
                                 dataIndex: "telefone",
                                 render: (value: string | null, pessoa) =>
                                     value ? `${pessoa.ddi || "+55"} ${value}` : "—",
@@ -397,6 +399,7 @@ export const PessoasPage = () => {
                             },
                             {
                                 title: "Criado em",
+                                className: "crm-nowrap",
                                 dataIndex: "created_at",
                                 responsive: ["lg"],
                                 render: (value: string | null) => formatDateBR(value),

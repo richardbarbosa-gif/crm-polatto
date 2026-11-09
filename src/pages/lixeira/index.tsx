@@ -219,6 +219,7 @@ export const LixeiraPage = () => {
         },
         {
             title: "Excluído em",
+            className: "crm-nowrap",
             dataIndex: "deleted_at",
             width: 170,
             render: (valor: string | null) => (valor ? dayjs(valor).format("DD/MM/YYYY HH:mm") : "--"),

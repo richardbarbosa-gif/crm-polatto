@@ -275,6 +275,7 @@ export const OrganizacoesPage = () => {
                             },
                             {
                                 title: "CNPJ",
+                                className: "crm-nowrap",
                                 dataIndex: "cnpj",
                                 render: (value: string | null) => (value ? formatCpfCnpj(value) : "—"),
                             },
@@ -286,12 +287,14 @@ export const OrganizacoesPage = () => {
                             },
                             {
                                 title: "Telefone",
+                                className: "crm-nowrap",
                                 dataIndex: "telefone",
                                 responsive: ["lg"],
                                 render: (value: string | null) => value || "—",
                             },
                             {
                                 title: "Criada em",
+                                className: "crm-nowrap",
                                 dataIndex: "created_at",
                                 responsive: ["md"],
                                 render: (value: string | null) => formatDateBR(value),
