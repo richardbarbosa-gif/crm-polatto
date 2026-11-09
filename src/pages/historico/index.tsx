@@ -4,13 +4,15 @@ import { Alert, Col, Modal, Row, Segmented, Skeleton, Table, Tag, Typography, me
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
-import {
-    formatCurrencyBRL,
-    formatDateBR,
-    normalizeText,
-} from "../../lib/formatters";
+import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
-import { textoIndicaGanho, textoIndicaPerda, valorDoLead } from "../../lib/pipelineMetrics";
+import {
+    classificarDesfecho,
+    indexarEtapas,
+    textoIndicaGanho,
+    textoIndicaPerda,
+    valorDoLead,
+} from "../../lib/pipelineMetrics";
 import type { ClienteRecord, PipelineStageRecord } from "../../types/db";
 
 const { Title, Text } = Typography;
@@ -19,25 +21,22 @@ type SegmentoHistorico = "todos" | "ganhos" | "perdidos";
 
 const PAGE_SIZE = 15;
 
-const GANHO_FILTER: CrudFilter = {
-    operator: "or",
-    value: [
-        { field: "status", operator: "contains", value: "fechado" },
-        { field: "status", operator: "contains", value: "ganho" },
-    ],
-};
-
-const HISTORICO_FILTER: CrudFilter = {
-    operator: "or",
-    value: [
-        { field: "status", operator: "contains", value: "fechado" },
-        { field: "status", operator: "contains", value: "ganho" },
-        { field: "status", operator: "contains", value: "perdido" },
-    ],
-};
-
-const isPerdido = (registro: ClienteRecord): boolean =>
-    normalizeText(registro.status).includes("perdido");
+/**
+ * Filtros do histórico. Mesma regra do resto do CRM (classificarDesfecho):
+ * vale a etapa marcada como ganho/perdido na configuração do funil, e o
+ * texto do status só como reserva. Antes era só o texto — uma etapa
+ * renomeada para "Contrato assinado" contava no Dashboard e sumia daqui.
+ */
+type CondicaoOr = Extract<CrudFilter, { field: string }>;
+const condicoesGanho = (idsEtapasGanho: string[]): CondicaoOr[] => [
+    { field: "status", operator: "contains", value: "fechado" },
+    { field: "status", operator: "contains", value: "ganho" },
+    ...(idsEtapasGanho.length ? [{ field: "stage_id", operator: "in", value: idsEtapasGanho } as CondicaoOr] : []),
+];
+const condicoesPerda = (idsEtapasPerda: string[]): CondicaoOr[] => [
+    { field: "status", operator: "contains", value: "perdido" },
+    ...(idsEtapasPerda.length ? [{ field: "stage_id", operator: "in", value: idsEtapasPerda } as CondicaoOr] : []),
+];
 
 export const HistoricoPage = () => {
     const { canViewAllLeads, canDeleteRecords, isLoadingAccess, tenantId, ownerCandidates } =
@@ -55,21 +54,42 @@ export const HistoricoPage = () => {
         return [];
     }, [canViewAllLeads, ownerCandidates]);
 
+    const { query: stagesQuery } = useList<PipelineStageRecord & { ganho?: boolean | null; perdido?: boolean | null; pipeline_id?: string | null }>({
+        resource: "pipeline_stages",
+        pagination: { mode: "off" },
+        sorters: [{ field: "ordem", order: "asc" }],
+        queryOptions: { retry: false },
+    });
+    const etapas = stagesQuery?.data?.data;
+    const etapasPorId = useMemo(() => indexarEtapas(etapas), [etapas]);
+    const idsEtapasGanho = useMemo(
+        () => (etapas ?? []).filter((etapa) => etapa.ganho).map((etapa) => String(etapa.id)),
+        [etapas],
+    );
+    const idsEtapasPerda = useMemo(
+        () => (etapas ?? []).filter((etapa) => etapa.perdido).map((etapa) => String(etapa.id)),
+        [etapas],
+    );
+    // Espera as etapas para não buscar duas vezes (sem e com os ids). Se a
+    // busca das etapas falhar, segue só com o texto do status.
+    const etapasProntas = !stagesQuery?.isLoading;
+
     const serverFilters = useMemo<CrudFilter[]>(() => {
-        const filters: CrudFilter[] = [];
-        if (segmento === "ganhos") {
-            filters.push(GANHO_FILTER);
-        } else if (segmento === "perdidos") {
-            filters.push({ field: "status", operator: "contains", value: "perdido" });
-        } else {
-            filters.push(HISTORICO_FILTER);
-        }
-        return [...filters, ...visibilityFilters];
-    }, [segmento, visibilityFilters]);
+        const condicoes =
+            segmento === "ganhos"
+                ? condicoesGanho(idsEtapasGanho)
+                : segmento === "perdidos"
+                  ? condicoesPerda(idsEtapasPerda)
+                  : [...condicoesGanho(idsEtapasGanho), ...condicoesPerda(idsEtapasPerda)];
+        return [{ operator: "or", value: condicoes }, ...visibilityFilters];
+    }, [segmento, idsEtapasGanho, idsEtapasPerda, visibilityFilters]);
 
     const kpiFilters = useMemo<CrudFilter[]>(
-        () => [HISTORICO_FILTER, ...visibilityFilters],
-        [visibilityFilters],
+        () => [
+            { operator: "or", value: [...condicoesGanho(idsEtapasGanho), ...condicoesPerda(idsEtapasPerda)] },
+            ...visibilityFilters,
+        ],
+        [idsEtapasGanho, idsEtapasPerda, visibilityFilters],
     );
 
     const { query: listQuery } = useList<ClienteRecord>({
@@ -77,22 +97,17 @@ export const HistoricoPage = () => {
         pagination: { currentPage: pagina, pageSize: PAGE_SIZE },
         filters: serverFilters,
         sorters: [{ field: "created_at", order: "desc" }],
-        queryOptions: { enabled: !isLoadingAccess, retry: false },
+        queryOptions: { enabled: !isLoadingAccess && etapasProntas, retry: false },
     });
 
     const { query: kpiQuery } = useList<ClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
         filters: kpiFilters,
-        queryOptions: { enabled: !isLoadingAccess, retry: false },
+        queryOptions: { enabled: !isLoadingAccess && etapasProntas, retry: false },
     });
 
-    const { query: stagesQuery } = useList<PipelineStageRecord & { ganho?: boolean | null; perdido?: boolean | null; pipeline_id?: string | null }>({
-        resource: "pipeline_stages",
-        pagination: { mode: "off" },
-        sorters: [{ field: "ordem", order: "asc" }],
-        queryOptions: { retry: false },
-    });
+    const desfechoDe = (registro: ClienteRecord) => classificarDesfecho(registro, etapasPorId);
 
     const registros = useMemo(
         () => ((listQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean),
@@ -106,14 +121,14 @@ export const HistoricoPage = () => {
 
     const kpis = useMemo(() => {
         const rows = ((kpiQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean);
-        const ganhos = rows.filter((r) => !isPerdido(r));
-        const perdidos = rows.filter(isPerdido);
+        const ganhos = rows.filter((r) => classificarDesfecho(r, etapasPorId) === "ganho");
+        const perdidos = rows.filter((r) => classificarDesfecho(r, etapasPorId) === "perdido");
         const valorGanho = ganhos.reduce(
             (acc, r) => acc + valorDoLead(r),
             0,
         );
         return { totalGanhos: ganhos.length, totalPerdidos: perdidos.length, valorGanho };
-    }, [kpiQuery?.data?.data]);
+    }, [kpiQuery?.data?.data, etapasPorId]);
 
     /**
      * Primeira etapa em aberto do funil do negócio. Reabrir gravava
@@ -278,6 +293,7 @@ export const HistoricoPage = () => {
                             },
                             {
                                 title: "Valor",
+                                className: "crm-nowrap",
                                 key: "valor",
                                 render: (_, registro) =>
                                     formatCurrencyBRL(
@@ -295,7 +311,7 @@ export const HistoricoPage = () => {
                                 title: "Status",
                                 dataIndex: "status",
                                 render: (value: string | null, registro) => (
-                                    <Tag color={isPerdido(registro) ? "red" : "green"}>
+                                    <Tag color={desfechoDe(registro) === "perdido" ? "red" : "green"}>
                                         {value || "—"}
                                     </Tag>
                                 ),
@@ -309,6 +325,7 @@ export const HistoricoPage = () => {
                             },
                             {
                                 title: "Criado em",
+                                className: "crm-nowrap",
                                 dataIndex: "created_at",
                                 responsive: ["md"],
                                 render: (value: string | null) => formatDateBR(value),

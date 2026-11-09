@@ -340,6 +340,16 @@ export const ClienteList = () => {
         [stages],
     );
 
+    // Etapas marcadas como ganho/perdido: o filtro "Fechado"/"Perdido" acha
+    // também negócios em etapas renomeadas (não só pelo texto do status).
+    const etapasTerminais = useMemo(
+        () => ({
+            ganho: stages.filter((s) => s.persisted && s.ganho && s.id != null).map((s) => String(s.id)),
+            perdido: stages.filter((s) => s.persisted && s.perdido && s.id != null).map((s) => String(s.id)),
+        }),
+        [stages],
+    );
+
     const resolveLeadStageId = (cliente: KanbanLead): string => {
         const rawStageId = cliente?.stage_id ?? cliente?.stageId;
         if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
@@ -382,8 +392,9 @@ export const ClienteList = () => {
                 etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
+                etapasTerminais,
             }),
-        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates, etapasTerminais],
     );
 
     const filterKey = useMemo(
@@ -405,8 +416,9 @@ export const ClienteList = () => {
                 etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
+                etapasTerminais,
             }),
-        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
+        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates, etapasTerminais],
     );
 
     // ---- KPI query (View agregada – dados já somados no banco) ----

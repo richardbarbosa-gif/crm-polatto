@@ -20,7 +20,15 @@ export type LeadFilterInput = {
     canViewAllLeads?: boolean;
     /** Nomes/aliases do usuário, usados quando a visão é restrita */
     ownerCandidates?: string[];
+    /**
+     * Etapas marcadas como ganho/perdido na configuração do funil. Com elas,
+     * o filtro "Fechado"/"Perdido" acha também negócios em etapas renomeadas
+     * (ex.: "Contrato assinado" marcada como ganho), e não só pelo texto.
+     */
+    etapasTerminais?: EtapasTerminais;
 };
+
+export type EtapasTerminais = { ganho: Array<string | number>; perdido: Array<string | number> };
 
 /**
  * O provider do Refine monta o filtro `.or()` do PostgREST colocando o
@@ -30,37 +38,49 @@ export type LeadFilterInput = {
 export const sanitizarBusca = (texto?: string | null): string =>
     (texto ?? "").replace(/["\\]/g, " ").replace(/\s+/g, " ").trim();
 
+const ehIdDeEtapaGravada = (id: string | number): boolean => /^\d+$/.test(String(id));
+
 /** Filtro por estado terminal (fechado/ganho ou perdido), comum a leads e KPIs. */
 const filtroDeStatusTerminal = (
     temperatura: "todas" | LeadTemperatureTag,
+    etapasTerminais?: EtapasTerminais,
 ): CrudFilter | null => {
+    const porEtapa = (ids?: Array<string | number>) => {
+        const gravadas = (ids ?? []).filter(ehIdDeEtapaGravada).map(String);
+        return gravadas.length ? [{ field: "stage_id", operator: "in" as const, value: gravadas }] : [];
+    };
+
     if (temperatura === "fechado") {
         return {
             operator: "or",
             value: [
                 { field: "status", operator: "contains", value: "fechado" },
                 { field: "status", operator: "contains", value: "ganho" },
+                ...porEtapa(etapasTerminais?.ganho),
             ],
         };
     }
 
     if (temperatura === "perdido") {
-        return { field: "status", operator: "contains", value: "perdido" };
+        const etapas = porEtapa(etapasTerminais?.perdido);
+        const porTexto = { field: "status", operator: "contains" as const, value: "perdido" };
+        return etapas.length ? { operator: "or", value: [porTexto, ...etapas] } : porTexto;
     }
 
     return null;
 };
 
-const filtroDeTemperatura = (temperatura: "todas" | LeadTemperatureTag): CrudFilter | null => {
+const filtroDeTemperatura = (
+    temperatura: "todas" | LeadTemperatureTag,
+    etapasTerminais?: EtapasTerminais,
+): CrudFilter | null => {
     if (temperatura === "todas") return null;
-    return filtroDeStatusTerminal(temperatura) ?? {
+    return filtroDeStatusTerminal(temperatura, etapasTerminais) ?? {
         field: "temperatura",
         operator: "eq",
         value: temperatura,
     };
 };
-
-const ehIdDeEtapaGravada = (id: string | number): boolean => /^\d+$/.test(String(id));
 
 /**
  * Pertencer ao funil = pipeline_id do negócio igual ao funil, OU o negócio
@@ -101,6 +121,7 @@ export const buildLeadFilters = ({
     etapasDoFunil,
     canViewAllLeads = true,
     ownerCandidates = [],
+    etapasTerminais,
 }: LeadFilterInput): CrudFilter[] => {
     const filters: CrudFilter[] = [];
 
@@ -119,7 +140,7 @@ export const buildLeadFilters = ({
         filters.push({ field: "responsavel", operator: "eq", value: responsavel });
     }
 
-    const porTemperatura = filtroDeTemperatura(temperatura);
+    const porTemperatura = filtroDeTemperatura(temperatura, etapasTerminais);
     if (porTemperatura) filters.push(porTemperatura);
 
     if (!canViewAllLeads && ownerCandidates.length > 0) {
@@ -148,6 +169,7 @@ export const buildKpiFilters = ({
     etapasDoFunil,
     canViewAllLeads = true,
     ownerCandidates = [],
+    etapasTerminais,
 }: LeadFilterInput): CrudFilter[] => {
     const filters: CrudFilter[] = [];
 
@@ -155,7 +177,7 @@ export const buildKpiFilters = ({
         filters.push({ field: "responsavel", operator: "eq", value: responsavel });
     }
 
-    const porTemperatura = filtroDeTemperatura(temperatura);
+    const porTemperatura = filtroDeTemperatura(temperatura, etapasTerminais);
     if (porTemperatura) filters.push(porTemperatura);
 
     if (!canViewAllLeads && ownerCandidates.length > 0) {
