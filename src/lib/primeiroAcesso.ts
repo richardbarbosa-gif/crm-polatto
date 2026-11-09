@@ -13,14 +13,14 @@ export const PASSOS_PRIMEIRO_ACESSO: Array<{ chave: ChavePasso; titulo: string; 
         chave: "identidade",
         titulo: "Logo e identidade da empresa",
         descricao: "Logo, dados e cores que saem nas propostas em PDF.",
-        rota: "/configuracoes",
+        rota: "/configuracoes?aba=identidade-proposta",
         acao: "Configurar",
     },
     {
         chave: "produtos",
         titulo: "Cadastrar produtos",
         descricao: "Kits, módulos e serviços para montar orçamentos em segundos.",
-        rota: "/configuracoes",
+        rota: "/configuracoes?aba=produtos",
         acao: "Cadastrar",
     },
     {
@@ -34,7 +34,7 @@ export const PASSOS_PRIMEIRO_ACESSO: Array<{ chave: ChavePasso; titulo: string; 
         chave: "funil",
         titulo: "Revisar o funil",
         descricao: "Ajuste etapas, probabilidades e o prazo de negócio parado.",
-        rota: "/configuracoes",
+        rota: "/configuracoes?aba=funis",
         acao: "Revisar",
     },
     {

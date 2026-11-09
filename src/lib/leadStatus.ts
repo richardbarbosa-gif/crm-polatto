@@ -34,7 +34,7 @@ type StageRecord = {
 export const DEFAULT_LEAD_STAGES: LeadStage[] = [
     { id: "novo", nome: "Novo Lead", cor: "#5d9cec", ordem: 1 },
     { id: "visita", nome: "Visita Agendada", cor: "#ed8936", ordem: 2 },
-    { id: "negociacao", nome: "Em Negociacao", cor: "#3182ce", ordem: 3 },
+    { id: "negociacao", nome: "Em Negociação", cor: "#3182ce", ordem: 3 },
     { id: "fechado", nome: "Fechado", cor: "#82cf6e", ordem: 4 },
     { id: "perdido", nome: "Perdido", cor: "#f56565", ordem: 5 },
 ];

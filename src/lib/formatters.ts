@@ -112,3 +112,7 @@ export const formatCpfCnpj = (value?: string | null): string => {
 export const isClosedStatus = (status?: string | null): boolean => {
     return normalizeText(status) === "fechado";
 };
+
+/** Texto das barras de progresso em pt-BR: "32,5%", "100%" (antd mostraria "32.5%"). */
+export const formatoProgresso = (percentual?: number): string =>
+    `${(Number.isFinite(percentual ?? NaN) ? (percentual as number) : 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
