@@ -471,7 +471,7 @@ export const LeadDetails = ({
                 ) : null}
             </div>
 
-            <Card>
+            <Card className="crm-lead-resumo">
                 <div
                     style={{
                         display: "flex",
@@ -514,9 +514,9 @@ export const LeadDetails = ({
                         </Space>
                     </div>
 
-                    <div style={{ textAlign: "right" }}>
+                    <div className="crm-lead-valor">
                         <Text type="secondary">Valor do negócio</Text>
-                        <div style={{ fontSize: 28, fontWeight: 700, color: "#15803d" }}>
+                        <div className="crm-lead-valor__numero">
                             {formatCurrencyBRL(valorDoLead(record), "R$ 0,00")}
                         </div>
                         {isEnergiaSolar && record.conta_energia_media ? (
@@ -579,10 +579,14 @@ export const LeadDetails = ({
                         gap: 14,
                     }}
                 >
-                    <div>
+                    <div style={{ minWidth: 0 }}>
                         <Text type="secondary">E-mail</Text>
                         <br />
-                        <Text strong>{record.email || "-"}</Text>
+                        {/* Uma linha com reticências (e-mail completo no title):
+                            antes quebrava no meio do domínio ("exemplo.com.\nbr"). */}
+                        <Text strong ellipsis={{ tooltip: record.email || undefined }} style={{ maxWidth: "100%" }}>
+                            {record.email || "-"}
+                        </Text>
                     </div>
                     <div>
                         <Text type="secondary">CPF/CNPJ</Text>
@@ -641,7 +645,7 @@ export const LeadDetails = ({
                         loading={uploadingKind === "proposta"}
                         onClick={() => propostaInputRef.current?.click()}
                     >
-                        Upload proposta
+                        Enviar proposta (PDF)
                     </Button>
                    {isEnergiaSolar && (
     <Button
@@ -649,7 +653,7 @@ export const LeadDetails = ({
         loading={uploadingKind === "conta_luz"}
         onClick={() => contaInputRef.current?.click()}
     >
-        Upload conta de luz
+        Enviar conta de luz (PDF)
     </Button>
 )}
                 </Space>

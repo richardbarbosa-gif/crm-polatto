@@ -15,7 +15,7 @@ export const ClienteShow = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     return (
-        <Show canDelete={Boolean(record) && podeExcluir(record)} isLoading={isLoading} title="Detalhes do Cliente">
+        <Show canDelete={Boolean(record) && podeExcluir(record)} isLoading={isLoading} title="Detalhes do lead">
             <LeadDetails
                 record={record}
                 isLoading={isLoading}

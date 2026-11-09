@@ -41,6 +41,7 @@ import {
     resolveAutomaticLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
+import { buscarEnderecoPorCep, formatarCep } from "../../lib/cep";
 import type { PipelineRecord, PipelineStageRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 import { CustomFieldsForm } from "../../components/custom-fields";
@@ -300,31 +301,18 @@ export const ClienteCreate = () => {
     };
 
     const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const cepRaw = event.target.value.replace(/\D/g, "");
-        form.setFieldValue("cep", cepRaw.replace(/^(\d{5})(\d)/, "$1-$2"));
+        const cep = formatarCep(event.target.value);
+        form.setFieldValue("cep", cep);
+        if (cep.replace(/\D/g, "").length !== 8) return;
 
-        if (cepRaw.length !== 8) return;
-
-        try {
-            const response = await fetch(`https://viacep.com.br/ws/${cepRaw}/json/`);
-            const data = (await response.json()) as {
-                erro?: boolean;
-                logradouro?: string;
-                bairro?: string;
-                localidade?: string;
-                uf?: string;
-            };
-
-            if (data.erro) {
-                message.warning("CEP não encontrado. Preencha o endereço manualmente.");
-                return;
-            }
-            const endereco = [data.logradouro, data.bairro].filter(Boolean).join(", ");
-            const cidade = [data.localidade, data.uf].filter(Boolean).join(" - ");
-            form.setFieldValue("endereco_instalacao", [endereco, cidade].filter(Boolean).join(", "));
+        const resultado = await buscarEnderecoPorCep(cep);
+        if (resultado.status === "ok") {
+            form.setFieldValue("endereco_instalacao", resultado.endereco);
             message.success("Endereço encontrado.");
             setTimeout(() => numeroInputRef.current?.focus(), 100);
-        } catch {
+        } else if (resultado.status === "nao_encontrado") {
+            message.warning("CEP não encontrado. Preencha o endereço manualmente.");
+        } else {
             message.warning("Não foi possível buscar o CEP. Preencha o endereço manualmente.");
         }
     };
@@ -475,7 +463,7 @@ export const ClienteCreate = () => {
     );
 
     return (
-        <Create saveButtonProps={finalSaveButtonProps} title={isEnergiaSolar ? "Novo cliente solar" : "Nova oportunidade"}>
+        <Create saveButtonProps={finalSaveButtonProps} title="Novo lead">
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteCreateFormValues)}>
                 <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} />
 
@@ -520,7 +508,7 @@ export const ClienteCreate = () => {
                 {/* Endereço e conta de luz são do modelo de energia solar: para
                     outros segmentos eram obrigatórios e travavam o cadastro. */}
                 {isEnergiaSolar ? (
-                    <div className="crm-form-section" style={{ background: "var(--crm-surface-2, #f8f9fa)", padding: 15, borderRadius: 8, marginBottom: 20, border: "1px solid var(--crm-border, #ddd)" }}>
+                    <div className="crm-form-section crm-form-endereco">
                         <Row gutter={15}>
                             <Col xs={24} lg={5}>
                                 <Form.Item label="CEP" name="cep" rules={[{ required: true, message: "Informe o CEP." }]}>

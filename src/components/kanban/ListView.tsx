@@ -326,11 +326,12 @@ export const ListView: React.FC<ListViewProps> = ({
                             },
                             {
                                 title: "Valor",
+                                className: "crm-nowrap",
                                 key: "valor",
                                 render: (_, record: KanbanLead) =>
                                     formatCurrencyBRL(valorDoLead(record), "R$ 0,00"),
                             },
-                            { title: "Telefone", dataIndex: "telefone" },
+                            { title: "Telefone", dataIndex: "telefone", className: "crm-nowrap" },
                             {
                                 title: "",
                                 render: (_, record: KanbanLead) => (
