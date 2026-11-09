@@ -39,15 +39,21 @@ type SearchResult = {
 };
 
 const TIPO_META: Record<SearchResult["tipo"], { label: string; icon: React.ReactNode; cor: string }> = {
-    lead: { label: "Negócio", icon: <UserOutlined style={{ color: "#64748b", fontSize: 18 }} />, cor: "blue" },
-    organizacao: { label: "Organização", icon: <BankOutlined style={{ color: "#64748b", fontSize: 18 }} />, cor: "purple" },
-    pessoa: { label: "Contato", icon: <ContactsOutlined style={{ color: "#64748b", fontSize: 18 }} />, cor: "green" },
+    lead: { label: "Negócio", icon: <UserOutlined />, cor: "blue" },
+    organizacao: { label: "Organização", icon: <BankOutlined />, cor: "purple" },
+    pessoa: { label: "Contato", icon: <ContactsOutlined />, cor: "green" },
 };
 
 export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) => {
     const [searchTerm, setSearchTerm] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
+    const [ativo, setAtivo] = useState(0);
     const go = useGo();
+
+    // Nova busca: o destaque volta para o primeiro resultado
+    useEffect(() => {
+        setAtivo(0);
+    }, [debouncedSearch]);
 
     // Aguarda o usuário parar de digitar por 500ms para poupar o banco de dados
     useEffect(() => {
@@ -179,6 +185,25 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
         go({ to: result.destino, type: "push" });
     };
 
+    // Navegação por teclado (↑ ↓ Enter), como em toda busca Ctrl+K.
+    // Enter só age quando os resultados já são do texto digitado: antes do
+    // debounce terminar, abriria um resultado da busca anterior.
+    const resultadosAtuais = searchTerm === debouncedSearch && !isLoading;
+    const indiceAtivo = results.length ? Math.min(ativo, results.length - 1) : -1;
+    const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!results.length) return;
+        if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setAtivo((atual) => (atual + 1) % results.length);
+        } else if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setAtivo((atual) => (atual - 1 + results.length) % results.length);
+        } else if (event.key === "Enter" && resultadosAtuais && indiceAtivo >= 0) {
+            event.preventDefault();
+            handleSelect(results[indiceAtivo]);
+        }
+    };
+
     return (
         <Modal
             open={open}
@@ -186,78 +211,78 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
             footer={null}
             closable={false}
             width={580}
+            className="crm-busca"
             styles={{
                 body: { padding: 0 },
-                content: { padding: 0, overflow: 'hidden', borderRadius: 12, boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)' }
+                content: { padding: 0, overflow: "hidden", borderRadius: 12 },
             }}
         >
             {/* Cabeçalho da Busca */}
-            <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px', borderBottom: '1px solid #f0f0f0' }}>
-                <SearchOutlined style={{ fontSize: 22, color: '#94a3b8', marginRight: 12 }} />
+            <div className="crm-busca__topo">
+                <SearchOutlined className="crm-busca__icone" />
                 <Input
                     autoFocus
                     aria-label="Buscar no CRM"
+                    aria-controls="crm-busca-resultados"
                     placeholder="Buscar negócios, organizações e contatos..."
                     variant="borderless"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    style={{ fontSize: 18, padding: 0, boxShadow: 'none' }}
+                    onKeyDown={handleKeyDown}
+                    style={{ fontSize: 18, padding: 0, boxShadow: "none" }}
                 />
-                <div style={{ fontSize: 11, color: '#94a3b8', backgroundColor: '#f1f5f9', padding: '4px 8px', borderRadius: 6, fontWeight: 600 }}>
-                    ESC
-                </div>
+                <kbd className="crm-busca__tecla">ESC</kbd>
             </div>
 
             {/* Corpo de Resultados */}
-            <div style={{ padding: '8px 0', minHeight: 120, backgroundColor: '#f8fafc' }}>
+            <div className="crm-busca__corpo">
                 {!buscaAtiva ? (
-                    <div style={{ textAlign: 'center', padding: '30px 20px', color: '#94a3b8' }}>
+                    <div className="crm-busca__vazio">
                         <Text type="secondary">Digite ao menos 2 letras para buscar em negócios, organizações e contatos.</Text>
                     </div>
                 ) : isLoading ? (
-                    <div style={{ padding: '20px' }}><Skeleton active paragraph={{ rows: 2 }} title={false} /></div>
+                    <div style={{ padding: 20 }}><Skeleton active paragraph={{ rows: 2 }} title={false} /></div>
                 ) : results.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '30px 20px', color: '#94a3b8' }}>
+                    <div className="crm-busca__vazio">
                         <Text type="secondary">Nenhum resultado para "{debouncedSearch}"</Text>
                     </div>
                 ) : (
-                    <List
-                        dataSource={results}
-                        renderItem={(item: SearchResult) => (
-                            <List.Item
-                                style={{ padding: '12px 20px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                onClick={() => handleSelect(item)}
-                            >
-                                <List.Item.Meta
-                                    avatar={
-                                        <div style={{ width: 40, height: 40, borderRadius: '50%', backgroundColor: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {TIPO_META[item.tipo].icon}
-                                        </div>
-                                    }
-                                    title={
-                                        <Space size={8}>
-                                            <Text strong style={{ fontSize: 15, color: '#1e293b' }}>{item.titulo}</Text>
-                                            <Tag color={TIPO_META[item.tipo].cor} bordered={false} style={{ fontSize: 11 }}>
-                                                {TIPO_META[item.tipo].label}
-                                            </Tag>
-                                        </Space>
-                                    }
-                                    description={
-                                        <Space size={8} style={{ marginTop: 4 }}>
-                                            {item.subtitulo ? (
-                                                <Text type="secondary" style={{ fontSize: 13 }}>{item.subtitulo}</Text>
-                                            ) : null}
-                                            {item.status && <Tag color="blue" bordered={false}>{item.status}</Tag>}
-                                            {item.responsavel && <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>Resp: {item.responsavel}</Text>}
-                                        </Space>
-                                    }
-                                />
-                                <RightOutlined style={{ color: '#cbd5e1' }} />
-                            </List.Item>
-                        )}
-                    />
+                    <div id="crm-busca-resultados" role="listbox" aria-label="Resultados da busca">
+                        <List
+                            dataSource={results}
+                            renderItem={(item: SearchResult, indice: number) => (
+                                <List.Item
+                                    role="option"
+                                    aria-selected={indice === indiceAtivo}
+                                    className={`crm-busca__item${indice === indiceAtivo ? " crm-busca__item--ativo" : ""}`}
+                                    onMouseEnter={() => setAtivo(indice)}
+                                    onClick={() => handleSelect(item)}
+                                >
+                                    <List.Item.Meta
+                                        avatar={<div className="crm-busca__avatar">{TIPO_META[item.tipo].icon}</div>}
+                                        title={
+                                            <Space size={8}>
+                                                <Text strong className="crm-busca__titulo">{item.titulo}</Text>
+                                                <Tag color={TIPO_META[item.tipo].cor} bordered={false} style={{ fontSize: 11 }}>
+                                                    {TIPO_META[item.tipo].label}
+                                                </Tag>
+                                            </Space>
+                                        }
+                                        description={
+                                            <Space size={8} style={{ marginTop: 4 }}>
+                                                {item.subtitulo ? (
+                                                    <Text type="secondary" style={{ fontSize: 13 }}>{item.subtitulo}</Text>
+                                                ) : null}
+                                                {item.status && <Tag color="blue" bordered={false}>{item.status}</Tag>}
+                                                {item.responsavel && <Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>Resp: {item.responsavel}</Text>}
+                                            </Space>
+                                        }
+                                    />
+                                    <RightOutlined className="crm-busca__seta" />
+                                </List.Item>
+                            )}
+                        />
+                    </div>
                 )}
             </div>
         </Modal>

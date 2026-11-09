@@ -50,6 +50,31 @@ describe("buildLeadFilters", () => {
         });
     });
 
+    it("fechado/perdido incluem as etapas marcadas no funil (etapa renomeada)", () => {
+        const etapasTerminais = { ganho: ["16", "outros"], perdido: [17] };
+        expect(buildLeadFilters({ temperatura: "fechado", etapasTerminais })[0]).toEqual({
+            operator: "or",
+            value: [
+                { field: "status", operator: "contains", value: "fechado" },
+                { field: "status", operator: "contains", value: "ganho" },
+                { field: "stage_id", operator: "in", value: ["16"] },
+            ],
+        });
+        expect(buildKpiFilters({ temperatura: "perdido", etapasTerminais })[0]).toEqual({
+            operator: "or",
+            value: [
+                { field: "status", operator: "contains", value: "perdido" },
+                { field: "stage_id", operator: "in", value: ["17"] },
+            ],
+        });
+        // Sem etapas marcadas: comportamento antigo (só texto)
+        expect(buildLeadFilters({ temperatura: "perdido", etapasTerminais: { ganho: [], perdido: [] } })[0]).toEqual({
+            field: "status",
+            operator: "contains",
+            value: "perdido",
+        });
+    });
+
     it("visão restrita limita aos leads do próprio usuário", () => {
         const filtros = buildLeadFilters({
             canViewAllLeads: false,

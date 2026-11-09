@@ -3,7 +3,7 @@ import { CustomFieldsForm } from "../../components/custom-fields";
 import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 import { useList, type HttpError } from "@refinedev/core";
-import { Alert, Form, Input, InputNumber, Select, Spin } from "antd";
+import { Alert, Col, Form, Input, InputNumber, Row, Select, Spin } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
@@ -27,6 +27,7 @@ import {
     resolveEditableLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
+import { useBuscaCep } from "../../hooks/useBuscaCep";
 import { CampoOrigem } from "../../components/origem/campo-origem";
 import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
 import { origemDoLead, origemParaDadosExtras } from "../../lib/origemLead";
@@ -37,7 +38,10 @@ type ClienteEditFormValues = {
     email?: string;
     telefone?: string;
     cpf_cnpj?: string;
+    cep?: string;
     endereco_instalacao?: string;
+    numero?: string;
+    complemento?: string;
     conta_energia_media?: number | null;
     valor?: number | null;
     responsavel_id?: string;
@@ -221,9 +225,11 @@ export const ClienteEdit = () => {
         });
     };
 
+    const { numeroInputRef, handleCepChange } = useBuscaCep(form);
+
     if (recordError) {
         return (
-            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit title="Editar lead" canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="error" showIcon message="Falha ao carregar o lead" description={recordError.message || "Não foi possível abrir o cadastro para edição."} />
             </Edit>
         );
@@ -231,7 +237,7 @@ export const ClienteEdit = () => {
 
     if (isRecordLoading && !record) {
         return (
-            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit title="Editar lead" canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
                     <Spin tip="Carregando lead..." />
                 </div>
@@ -241,7 +247,7 @@ export const ClienteEdit = () => {
 
     if (!record && !isRecordLoading) {
         return (
-            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit title="Editar lead" canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="warning" showIcon message="Lead não encontrado" description="O registro não existe, foi excluído ou você não tem permissão de acesso." />
             </Edit>
         );
@@ -249,7 +255,7 @@ export const ClienteEdit = () => {
 
     if (!canEditRecord && record) {
         return (
-            <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
+            <Edit title="Editar lead" canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={{ ...saveButtonProps, disabled: true }}>
                 <Alert type="warning" showIcon message="Acesso restrito" description="Este lead não está vinculado ao seu usuário." />
             </Edit>
         );
@@ -258,72 +264,132 @@ export const ClienteEdit = () => {
     const ddi = typeof record?.ddi === "string" && record.ddi ? record.ddi : "+55";
 
     return (
-        <Edit canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={saveButtonProps}>
+        <Edit title="Editar lead" canDelete={Boolean(record) && podeExcluir(record)} saveButtonProps={saveButtonProps}>
+            {/* Mesmo grid do "Novo lead": antes o editar era uma coluna única, com
+                campos menores e outra ordem — parecia outro sistema. */}
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteEditFormValues)}>
-                <Form.Item label="Nome completo" name="nome" rules={[{ required: true, whitespace: true, message: "Informe o nome do cliente." }]}>
-                    <Input autoComplete="name" />
-                </Form.Item>
+                <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} />
 
-                {/* Não obrigatório: o cadastro não pede e-mail. Exigir aqui travava a
-                    edição de todo lead criado sem ele — inclusive os importados. */}
-                <Form.Item label="E-mail" name="email" rules={[{ type: "email", message: "E-mail inválido." }]}>
-                    <Input type="email" autoComplete="email" />
-                </Form.Item>
+                <Row gutter={20}>
+                    <Col xs={24}>
+                        <Form.Item
+                            label={tipoPessoa === "pf" ? "Nome completo" : "Razão social / nome da empresa"}
+                            name="nome"
+                            rules={[{ required: true, whitespace: true, message: "Informe o nome do cliente." }]}
+                        >
+                            <Input size="large" autoComplete={tipoPessoa === "pf" ? "name" : "organization"} />
+                        </Form.Item>
+                    </Col>
+                </Row>
 
-                <Form.Item
-                    label="Telefone / WhatsApp"
-                    name="telefone"
-                    rules={[
-                        {
-                            validator: async (_, valor?: string) => {
-                                if (valor && !validarTelefone(valor, ddi)) {
-                                    throw new Error("Telefone incompleto. Inclua o DDD.");
-                                }
-                            },
-                        },
-                    ]}
-                >
-                    <Input inputMode="tel" autoComplete="tel" />
-                </Form.Item>
+                <Row gutter={20}>
+                    <Col xs={24} lg={12}>
+                        <Form.Item
+                            label="WhatsApp / Telefone"
+                            name="telefone"
+                            rules={[
+                                {
+                                    validator: async (_, valor?: string) => {
+                                        if (valor && !validarTelefone(valor, ddi)) {
+                                            throw new Error("Telefone incompleto. Inclua o DDD.");
+                                        }
+                                    },
+                                },
+                            ]}
+                        >
+                            <Input size="large" inputMode="tel" autoComplete="tel" />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={12}>
+                        {/* Não obrigatório: o cadastro não pede e-mail. Exigir aqui travava a
+                            edição de todo lead criado sem ele — inclusive os importados. */}
+                        <Form.Item label="E-mail" name="email" rules={[{ type: "email", message: "E-mail inválido." }]}>
+                            <Input size="large" type="email" autoComplete="email" />
+                        </Form.Item>
+                    </Col>
+                </Row>
 
-                <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} size="middle" />
-
+                {/* Endereço sem obrigatoriedade na edição: leads antigos e importados
+                    não têm CEP/número e não podem ficar travados por isso. */}
                 {isEnergiaSolar ? (
-                    <>
-                        <Form.Item label="Endereço de instalação" name="endereco_instalacao">
-                            <Input />
-                        </Form.Item>
-
-                        <Form.Item label="Média da conta de luz" name="conta_energia_media">
-                            <InputNumber {...propsMoeda} style={{ width: 220 }} />
-                        </Form.Item>
-                    </>
+                    <div className="crm-form-section crm-form-endereco">
+                        <Row gutter={15}>
+                            <Col xs={24} lg={5}>
+                                <Form.Item label="CEP" name="cep">
+                                    <Input onChange={handleCepChange} maxLength={9} inputMode="numeric" />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} lg={13}>
+                                <Form.Item label="Endereço" name="endereco_instalacao">
+                                    <Input placeholder="Preenchido pelo CEP — pode ajustar" />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} lg={3}>
+                                <Form.Item label="Número" name="numero">
+                                    <Input ref={numeroInputRef} />
+                                </Form.Item>
+                            </Col>
+                            <Col xs={24} lg={3}>
+                                <Form.Item label="Compl." name="complemento">
+                                    <Input />
+                                </Form.Item>
+                            </Col>
+                        </Row>
+                    </div>
                 ) : null}
 
-                <Form.Item label="Valor do negócio" name="valor">
-                    <InputNumber {...propsMoeda} style={{ width: 220 }} />
-                </Form.Item>
-
-                <Form.Item label="Responsável" name="responsavel_id">
-                    <Select
-                        showSearch
-                        allowClear
-                        placeholder="Selecione da equipe"
-                        options={listaResponsaveis}
-                        disabled={!canViewAllLeads}
-                        optionFilterProp="label"
-                    />
-                </Form.Item>
-
-                <CampoOrigem canais={canaisOrigem} origemAtual={origemAtual} size="middle" />
-
-                <Form.Item label="Etapa do funil" name="stage_id" rules={[{ required: true, message: "Selecione a etapa." }]}>
-                    <Select options={stageOptions} showSearch optionFilterProp="label" />
-                </Form.Item>
-
-                <Form.Item label="Temperatura" name="temperature" extra={automaticTemperature ? `Automática: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}` : "Manual para leads em aberto."}>
-                    <Select allowClear placeholder={automaticTemperature ? "Temperatura automática" : "Selecione"} disabled={Boolean(automaticTemperature)} options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({ value: option.value, label: <TemperatureBadge value={option.value} /> }))} />
-                </Form.Item>
+                <Row gutter={20}>
+                    {isEnergiaSolar ? (
+                        <Col xs={24} lg={6}>
+                            <Form.Item label="Média da conta de luz" name="conta_energia_media">
+                                <InputNumber {...propsMoeda} size="large" />
+                            </Form.Item>
+                        </Col>
+                    ) : null}
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Valor da venda" name="valor" tooltip="Valor estimado do negócio (tamanho da venda).">
+                            <InputNumber {...propsMoeda} size="large" placeholder="Ex.: 15.000,00" />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Responsável" name="responsavel_id">
+                            <Select
+                                size="large"
+                                showSearch
+                                allowClear
+                                placeholder="Selecione da equipe"
+                                options={listaResponsaveis}
+                                disabled={!canViewAllLeads}
+                                optionFilterProp="label"
+                            />
+                        </Form.Item>
+                    </Col>
+                    <Col xs={24} lg={6}>
+                        <Form.Item label="Etapa do funil" name="stage_id" rules={[{ required: true, message: "Selecione a etapa." }]}>
+                            <Select size="large" options={stageOptions} showSearch optionFilterProp="label" />
+                        </Form.Item>
+                    </Col>
+                    {canaisOrigem.length > 0 || origemAtual.id ? (
+                        <Col xs={24} lg={6}>
+                            <CampoOrigem canais={canaisOrigem} origemAtual={origemAtual} />
+                        </Col>
+                    ) : null}
+                    <Col xs={24} lg={6}>
+                        <Form.Item
+                            label="Temperatura"
+                            name="temperature"
+                            extra={automaticTemperature ? `Automática: ${LEAD_TEMPERATURE_LABELS[automaticTemperature]}` : "Manual para leads em aberto."}
+                        >
+                            <Select
+                                size="large"
+                                allowClear
+                                placeholder={automaticTemperature ? "Temperatura automática" : "Selecione"}
+                                disabled={Boolean(automaticTemperature)}
+                                options={LEAD_TEMPERATURE_OPTIONS.map((option) => ({ value: option.value, label: <TemperatureBadge value={option.value} /> }))}
+                            />
+                        </Form.Item>
+                    </Col>
+                </Row>
                 {camposCustomizados.length > 0 ? <CustomFieldsForm campos={camposCustomizados} /> : null}
             </Form>
         </Edit>

@@ -65,11 +65,11 @@ const getNextTaskInfo = (
     }
 
     if (vencimento.isBefore(dayjs())) {
-        return { texto: `Atrasada · ${titulo}`, cor: "#dc2626" };
+        return { texto: `Atrasada · ${titulo}`, cor: "var(--crm-danger-fg)" };
     }
 
     if (vencimento.isSame(dayjs(), "day")) {
-        return { texto: `Hoje ${vencimento.format("HH:mm")} · ${titulo}`, cor: "#d97706" };
+        return { texto: `Hoje ${vencimento.format("HH:mm")} · ${titulo}`, cor: "var(--crm-warning-fg)" };
     }
 
     return { texto: `${vencimento.format("DD/MM")} · ${titulo}`, cor: "var(--crm-ink-500)" };
@@ -141,10 +141,13 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             >
                 {/* Corpo principal */}
                 <div style={{ padding: "12px 14px 10px" }}>
-                    {/* Linha 1: Nome + Idade */}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                    {/* Linha 1: Nome + selo "Parado". O nome usa até 2 linhas: com o
+                        selo ao lado, em 1 linha ele era cortado cedo ("Clínica Odontoló…"). */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, marginBottom: 6 }}>
                         <Text
                             strong
+                            className="crm-lead-card__nome"
+                            title={lead.nome || undefined}
                             style={{
                                 fontSize: 14,
                                 fontWeight: 600,
@@ -152,52 +155,22 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                                 lineHeight: 1.3,
                                 letterSpacing: "-0.01em",
                                 flex: 1,
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                whiteSpace: "nowrap",
+                                minWidth: 0,
                             }}
                         >
                             {lead.nome || "Lead sem nome"}
                         </Text>
                         {parado && (
                             <span
+                                className="crm-lead-card__selo-parado"
                                 title={`Sem atividade além do prazo da etapa (${lead.dias_para_parado ?? "?"} dias)`}
-                                style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 3,
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    color: "#b91c1c",
-                                    background: "rgba(239,68,68,0.08)",
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
-                                    marginLeft: 6,
-                                    flexShrink: 0,
-                                    whiteSpace: "nowrap",
-                                }}
                             >
                                 <ClockCircleOutlined style={{ fontSize: 9 }} />
                                 {rotuloParado(lead.dias_sem_atividade)}
                             </span>
                         )}
                         {age.isStale && (
-                            <span
-                                title={`Lead parado há ${age.days} dias`}
-                                style={{
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    gap: 3,
-                                    fontSize: 10,
-                                    fontWeight: 600,
-                                    color: "#ef4444",
-                                    background: "rgba(239,68,68,0.06)",
-                                    padding: "2px 6px",
-                                    borderRadius: 4,
-                                    marginLeft: 6,
-                                    flexShrink: 0,
-                                }}
-                            >
+                            <span className="crm-lead-card__selo-parado" title={`Lead parado há ${age.days} dias`}>
                                 <ClockCircleOutlined style={{ fontSize: 9 }} />
                                 {age.label}
                             </span>
@@ -268,10 +241,10 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                             </>
                         ) : semProximoPasso ? (
                             <>
-                                <span style={{ color: "#b45309", display: "inline-flex", flexShrink: 0 }}>
+                                <span style={{ color: "var(--crm-warning-fg)", display: "inline-flex", flexShrink: 0 }}>
                                     <ExclamationCircleOutlined style={{ fontSize: 11 }} />
                                 </span>
-                                <Text style={{ fontSize: 11, color: "#b45309", fontWeight: 600, flex: 1, whiteSpace: "nowrap" }}>
+                                <Text style={{ fontSize: 11, color: "var(--crm-warning-fg)", fontWeight: 600, flex: 1, whiteSpace: "nowrap" }}>
                                     Sem próximo passo
                                 </Text>
                                 {onAgendar ? (
@@ -284,21 +257,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                                             stopActionPropagation(e);
                                             onAgendar(lead);
                                         }}
-                                        style={{
-                                            pointerEvents: "auto",
-                                            display: "inline-flex",
-                                            alignItems: "center",
-                                            gap: 3,
-                                            fontSize: 11,
-                                            fontWeight: 600,
-                                            color: "#b45309",
-                                            background: "rgba(245,158,11,0.10)",
-                                            border: "1px solid rgba(245,158,11,0.35)",
-                                            borderRadius: 6,
-                                            padding: "2px 8px",
-                                            cursor: "pointer",
-                                            flexShrink: 0,
-                                        }}
+                                        className="crm-lead-card__agendar"
                                     >
                                         <PlusOutlined style={{ fontSize: 10 }} /> Agendar
                                     </button>
@@ -318,14 +277,8 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     </div>
                 </div>
 
-                {/* Actions — compacto, só ícones */}
-                <div
-                    style={{
-                        display: "flex",
-                        borderTop: "1px solid var(--crm-border-subtle)",
-                        background: "rgba(248,250,252,0.4)",
-                    }}
-                >
+                {/* Ações do cartão: estilo no tema (.crm-lead-card__action) */}
+                <div className="crm-lead-card__actions">
                     {stageMoveOptions && stageMoveOptions.length > 0 && onMoveToStage ? (
                         <Dropdown
                             trigger={["click"]}
@@ -338,28 +291,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                             }}
                         >
                             <button
+                                type="button"
+                                className="crm-lead-card__action"
                                 data-no-card-open="true"
-                                aria-label="Mover para outra etapa"
+                                aria-label={`Mover ${lead.nome || "o lead"} para outra etapa`}
                                 onPointerDown={(e) => stopActionPropagation(e)}
                                 onClick={(e) => stopActionPropagation(e)}
-                                style={{
-                                    flex: 1,
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    gap: 5,
-                                    padding: "7px 0",
-                                    fontSize: 12,
-                                    fontWeight: 500,
-                                    color: "var(--crm-ink-500)",
-                                    background: "transparent",
-                                    border: "none",
-                                    borderRight: "1px solid var(--crm-border-subtle)",
-                                    cursor: "pointer",
-                                    transition: "color 0.15s, background 0.15s",
-                                }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.04)"; e.currentTarget.style.color = "#3b82f6"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--crm-ink-500)"; }}
                             >
                                 <SwapOutlined style={{ fontSize: 12 }} /> Mover
                             </button>
@@ -368,74 +305,33 @@ export const LeadCard: React.FC<LeadCardProps> = ({
                     {onWhatsApp && telefoneWhatsApp(lead.telefone, lead.ddi) ? (
                         <button
                             type="button"
+                            className="crm-lead-card__action crm-lead-card__action--icon"
                             data-no-card-open="true"
                             aria-label={`WhatsApp para ${lead.nome || "o lead"}`}
                             title="WhatsApp com modelo de mensagem"
                             onPointerDown={(e) => stopActionPropagation(e)}
                             onClick={(e) => { stopActionPropagation(e); onWhatsApp(lead); }}
-                            style={{
-                                flex: "0 0 40px",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                padding: "7px 0",
-                                fontSize: 13,
-                                color: "#16a34a",
-                                background: "transparent",
-                                border: "none",
-                                borderRight: "1px solid var(--crm-border-subtle)",
-                                cursor: "pointer",
-                            }}
                         >
                             <WhatsAppOutlined />
                         </button>
                     ) : null}
                     <button
+                        type="button"
+                        className="crm-lead-card__action"
                         data-no-card-open="true"
+                        aria-label={`Editar ${lead.nome || "lead"}`}
                         onPointerDown={(e) => stopActionPropagation(e)}
                         onClick={(e) => { stopActionPropagation(e); onEdit(lead.id); }}
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 5,
-                            padding: "7px 0",
-                            fontSize: 12,
-                            fontWeight: 500,
-                            color: "var(--crm-ink-500)",
-                            background: "transparent",
-                            border: "none",
-                            borderRight: "1px solid var(--crm-border-subtle)",
-                            cursor: "pointer",
-                            transition: "color 0.15s, background 0.15s",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.04)"; e.currentTarget.style.color = "#3b82f6"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--crm-ink-500)"; }}
                     >
                         <EditOutlined style={{ fontSize: 12 }} /> Editar
                     </button>
                     <button
+                        type="button"
+                        className="crm-lead-card__action"
                         data-no-card-open="true"
+                        aria-label={`Ver ${lead.nome || "lead"}`}
                         onPointerDown={(e) => stopActionPropagation(e)}
                         onClick={(e) => { stopActionPropagation(e); onView(lead); }}
-                        style={{
-                            flex: 1,
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: 5,
-                            padding: "7px 0",
-                            fontSize: 12,
-                            fontWeight: 500,
-                            color: "var(--crm-ink-500)",
-                            background: "transparent",
-                            border: "none",
-                            cursor: "pointer",
-                            transition: "color 0.15s, background 0.15s",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(59,130,246,0.04)"; e.currentTarget.style.color = "#3b82f6"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "var(--crm-ink-500)"; }}
                     >
                         <EyeOutlined style={{ fontSize: 12 }} /> Ver
                     </button>

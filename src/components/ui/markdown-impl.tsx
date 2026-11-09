@@ -2,7 +2,8 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import rehypeSanitize from "rehype-sanitize";
-import type { ComponentProps } from "react";
+import { useContext, type ComponentProps } from "react";
+import { ColorModeContext } from "../../contexts/color-mode";
 
 /**
  * SEGURANÇA: o preview do @uiw/react-md-editor liga o rehype-raw por padrão,
@@ -15,6 +16,9 @@ import type { ComponentProps } from "react";
  */
 type PreviewRehypePlugins = NonNullable<ComponentProps<typeof MDEditor.Markdown>["rehypePlugins"]>;
 const SANITIZE_PLUGINS: PreviewRehypePlugins = [[rehypeSanitize]];
+
+/** O editor tem paleta própria: segue o tema do CRM (era fixo no claro). */
+const useModoMarkdown = () => (useContext(ColorModeContext).mode === "dark" ? "dark" : "light");
 
 export type MarkdownEditorProps = {
     value: string;
@@ -29,7 +33,7 @@ export const MarkdownEditorImpl = ({
     placeholder,
     height = 160,
 }: MarkdownEditorProps) => (
-    <div data-color-mode="light">
+    <div data-color-mode={useModoMarkdown()}>
         <MDEditor
             value={value}
             onChange={(next) => onChange(next ?? "")}
@@ -46,7 +50,7 @@ export type MarkdownViewerProps = {
 };
 
 export const MarkdownViewerImpl = ({ source }: MarkdownViewerProps) => (
-    <div data-color-mode="light">
+    <div data-color-mode={useModoMarkdown()}>
         <MDEditor.Markdown
             source={source}
             rehypePlugins={SANITIZE_PLUGINS}

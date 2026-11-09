@@ -86,6 +86,13 @@ export const traducoesPtBR: Record<string, string> = {
     "pages.error.info": "A página que você procura não existe ou foi movida.",
     "pages.error.backHome": "Voltar ao início",
 
+    // ---- Títulos das telas de cadastro do lead (sem isto o Refine
+    // escrevia "Edit Oportunidade" no cabeçalho da edição) ----
+    "clientes.titles.list": "Oportunidades",
+    "clientes.titles.create": "Novo lead",
+    "clientes.titles.edit": "Editar lead",
+    "clientes.titles.show": "Detalhes do lead",
+
     // ---- Título do documento ----
     "documentTitle.default": "CRM Polatto",
     "documentTitle.suffix": " | CRM Polatto",

@@ -1,4 +1,4 @@
-import { Alert, Space, Typography } from "antd";
+import { Alert, Typography } from "antd";
 import type { ReactNode } from "react";
 import { Card } from "../../components/ui";
 
@@ -6,28 +6,24 @@ type InsightsHeaderProps = {
     title: string;
     subtitle?: string;
     extra?: ReactNode;
+    /** Ícone do quadrado à esquerda do título (mesmo da barra lateral). */
+    icon?: ReactNode;
 };
 
-export const InsightsHeader = ({ title, subtitle, extra }: InsightsHeaderProps) => {
+// Mesmo padrão de cabeçalho das demais telas (classes crm-page-header-*),
+// para que Relatórios, Equipe e Metas não destoem de Orçamentos, Histórico etc.
+export const InsightsHeader = ({ title, subtitle, extra, icon }: InsightsHeaderProps) => {
     return (
-        <div
-            style={{
-                display: "flex",
-                alignItems: "flex-start",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-                marginBottom: 16,
-            }}
-        >
-            <Space direction="vertical" size={2}>
-                <Typography.Title level={3} style={{ margin: 0 }}>
+        <div className="crm-page-header" style={{ marginBottom: 16 }}>
+            <div>
+                <Typography.Title level={2} className="crm-page-header-title">
+                    {icon}
                     {title}
                 </Typography.Title>
                 {subtitle ? (
-                    <Typography.Text type="secondary">{subtitle}</Typography.Text>
+                    <Typography.Text className="crm-page-header-subtitle">{subtitle}</Typography.Text>
                 ) : null}
-            </Space>
+            </div>
             {extra}
         </div>
     );

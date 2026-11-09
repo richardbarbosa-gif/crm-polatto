@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    chaveDeEtapa,
     formatCpfCnpj,
     formatCurrencyBRL,
     formatPercentBR,
@@ -117,5 +118,17 @@ describe("formatPercentBR", () => {
     it("NaN e Infinity viram 0,0", () => {
         expect(formatPercentBR(Number.NaN)).toBe("0,0");
         expect(formatPercentBR(Number.POSITIVE_INFINITY)).toBe("0,0");
+    });
+});
+
+describe("chaveDeEtapa", () => {
+    it("ignora acento, caixa e espaços repetidos (só para nomes de etapa)", () => {
+        expect(chaveDeEtapa("Em Negociação")).toBe(chaveDeEtapa("em negociacao"));
+        expect(chaveDeEtapa("  Visita   Técnica ")).toBe("visita tecnica");
+        expect(chaveDeEtapa(null)).toBe("");
+    });
+
+    it("normalizeText continua sensível a acento (nomes de pessoas)", () => {
+        expect(normalizeText("José")).not.toBe(normalizeText("Jose"));
     });
 });

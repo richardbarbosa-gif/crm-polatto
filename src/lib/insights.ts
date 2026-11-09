@@ -121,7 +121,7 @@ export const toOwnerKey = (value?: string | null): string => {
 
 export const toOwnerLabel = (value?: string | null): string => {
     const normalized = normalizeText(value);
-    return normalized ? (value?.trim() || "Sem responsavel") : "Sem responsavel";
+    return normalized ? (value?.trim() || "Sem responsável") : "Sem responsável";
 };
 
 /**

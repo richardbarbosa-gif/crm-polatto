@@ -9,7 +9,6 @@ import {
     Form,
     Input,
     InputNumber,
-    type InputRef,
     Modal,
     Row,
     Select,
@@ -41,6 +40,7 @@ import {
     resolveAutomaticLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
+import { useBuscaCep } from "../../hooks/useBuscaCep";
 import type { PipelineRecord, PipelineStageRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 import { CustomFieldsForm } from "../../components/custom-fields";
@@ -127,7 +127,6 @@ export const ClienteCreate = () => {
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
     const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>("pf");
-    const numeroInputRef = useRef<InputRef>(null);
     const [propostaFile, setPropostaFile] = useState<File | null>(null);
     const [contaLuzFile, setContaLuzFile] = useState<File | null>(null);
     const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -190,6 +189,7 @@ export const ClienteCreate = () => {
             }
         },
     });
+    const { numeroInputRef, handleCepChange } = useBuscaCep(form);
 
     const { query: stagesQuery } = useList<PipelineStageRecord>({
         resource: "pipeline_stages",
@@ -299,35 +299,6 @@ export const ClienteCreate = () => {
         form.setFieldValue("telefone", formatarTelefone(event.target.value, paisSelecionado));
     };
 
-    const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const cepRaw = event.target.value.replace(/\D/g, "");
-        form.setFieldValue("cep", cepRaw.replace(/^(\d{5})(\d)/, "$1-$2"));
-
-        if (cepRaw.length !== 8) return;
-
-        try {
-            const response = await fetch(`https://viacep.com.br/ws/${cepRaw}/json/`);
-            const data = (await response.json()) as {
-                erro?: boolean;
-                logradouro?: string;
-                bairro?: string;
-                localidade?: string;
-                uf?: string;
-            };
-
-            if (data.erro) {
-                message.warning("CEP não encontrado. Preencha o endereço manualmente.");
-                return;
-            }
-            const endereco = [data.logradouro, data.bairro].filter(Boolean).join(", ");
-            const cidade = [data.localidade, data.uf].filter(Boolean).join(" - ");
-            form.setFieldValue("endereco_instalacao", [endereco, cidade].filter(Boolean).join(", "));
-            message.success("Endereço encontrado.");
-            setTimeout(() => numeroInputRef.current?.focus(), 100);
-        } catch {
-            message.warning("Não foi possível buscar o CEP. Preencha o endereço manualmente.");
-        }
-    };
 
     const toUploadFileList = (file: File | null, uid: string): UploadFile[] => {
         if (!file) return [];
@@ -475,7 +446,7 @@ export const ClienteCreate = () => {
     );
 
     return (
-        <Create saveButtonProps={finalSaveButtonProps} title={isEnergiaSolar ? "Novo cliente solar" : "Nova oportunidade"}>
+        <Create saveButtonProps={finalSaveButtonProps} title="Novo lead">
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteCreateFormValues)}>
                 <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} />
 
@@ -520,7 +491,7 @@ export const ClienteCreate = () => {
                 {/* Endereço e conta de luz são do modelo de energia solar: para
                     outros segmentos eram obrigatórios e travavam o cadastro. */}
                 {isEnergiaSolar ? (
-                    <div className="crm-form-section" style={{ background: "var(--crm-surface-2, #f8f9fa)", padding: 15, borderRadius: 8, marginBottom: 20, border: "1px solid var(--crm-border, #ddd)" }}>
+                    <div className="crm-form-section crm-form-endereco">
                         <Row gutter={15}>
                             <Col xs={24} lg={5}>
                                 <Form.Item label="CEP" name="cep" rules={[{ required: true, message: "Informe o CEP." }]}>

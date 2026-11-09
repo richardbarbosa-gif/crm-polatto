@@ -1,5 +1,6 @@
 import {
     CalendarOutlined,
+    DashboardOutlined,
     FlagOutlined,
     RiseOutlined,
     TeamOutlined,
@@ -10,7 +11,7 @@ import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
@@ -36,6 +37,7 @@ import {
 } from "../../lib/taskExecutionStatus";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard } from "./shared";
+import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
 
 type RecentEvent = {
     id: string;
@@ -198,7 +200,7 @@ export const InsightsPanelPage = () => {
             object: "Atividade",
             event: task.titulo ? `Atividade: ${task.titulo}` : "Atividade registrada",
             before: "-",
-            after: task.tipo || "-",
+            after: rotuloTipoAtividade(task.tipo),
         }));
 
         return sortByDateDesc([...statusEvents, ...taskEvents], (event) => event.when).slice(0, 12);
@@ -211,7 +213,8 @@ export const InsightsPanelPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
-                title="Painel de Insights"
+                icon={<DashboardOutlined />}
+                title="Painel comercial"
                 subtitle="Visão executiva de desempenho comercial, atividades e previsibilidade."
                 extra={
                     <Space wrap>
@@ -233,17 +236,17 @@ export const InsightsPanelPage = () => {
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Pipeline aberto"
-                        value={metrics.pipelineValue}
+                        value={formatCurrencyBRL(metrics.pipelineValue, "R$ 0,00")}
                         prefix={<RiseOutlined style={{ color: "#4c8bf5" }} />}
                         accentColor="#4c8bf5"
                         valueStyle={{ color: "#1d4ed8" }}
-                        subtitle={formatCurrencyBRL(metrics.pipelineValue, "R$ 0,00")}
+                        subtitle="Negócios em aberto (nem ganhos nem perdidos)"
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Ganho no mês"
-                        value={metrics.closedThisMonthValue}
+                        value={formatCurrencyBRL(metrics.closedThisMonthValue, "R$ 0,00")}
                         prefix={<FlagOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         valueStyle={{ color: "#166534" }}
@@ -299,7 +302,7 @@ export const InsightsPanelPage = () => {
                                         const base = record.ganhos + record.perdas;
                                         const percent = base > 0 ? (record.ganhos / base) * 100 : 0;
                                         return (
-                                            <Progress
+                                            <Progress format={formatoProgresso}
                                                 percent={Number(percent.toFixed(1))}
                                                 size="small"
                                                 strokeColor="#16a34a"
@@ -309,6 +312,7 @@ export const InsightsPanelPage = () => {
                                 },
                                 {
                                     title: "Valor",
+                                    className: "crm-nowrap",
                                     dataIndex: "valor",
                                     width: 130,
                                     render: (value: number) => formatCurrencyBRL(value, "R$ 0,00"),
@@ -343,7 +347,7 @@ export const InsightsPanelPage = () => {
                                                         <Typography.Text strong>
                                                             {task.titulo || "Atividade"}
                                                         </Typography.Text>
-                                                        <Tag color="blue">{task.tipo || "tipo"}</Tag>
+                                                        <Tag color="blue">{rotuloTipoAtividade(task.tipo)}</Tag>
                                                     </Space>
                                                 }
                                                 description={
@@ -383,6 +387,7 @@ export const InsightsPanelPage = () => {
                     columns={[
                         {
                             title: "Data",
+                            className: "crm-nowrap",
                             dataIndex: "when",
                             width: 140,
                             render: (value?: string | null) =>

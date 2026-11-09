@@ -1,5 +1,6 @@
 import {
     CheckCircleOutlined,
+    DashboardOutlined,
     DollarCircleOutlined,
     FireOutlined,
     RiseOutlined,
@@ -14,7 +15,7 @@ import { ListaNegociosSaude } from "../../components/saude/lista-negocios-saude"
 import { PrimeiroAcesso } from "../../components/primeiro-acesso";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue } from "../../lib/formatters";
+import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue, formatoProgresso } from "../../lib/formatters";
 import {
     classificarDesfecho,
     indexarEtapas,
@@ -48,12 +49,13 @@ type LeadRecente = {
 type MetaDoMes = { funcionario_id?: string | null; valor_meta?: number | string | null; target_wins?: number | null };
 type RealizadoDoMes = { funcionario_id?: string | null; vendas_qtd?: number | string | null; vendas_valor?: number | string | null };
 
-const CORES_DESFECHO = { ganho: "#10b981", perdido: "#ef4444", aberto: "#3b82f6" } as const;
+const CORES_DESFECHO = { ganho: "#10b981", perdido: "#ef4444", aberto: "#2563eb" } as const;
 
-const temperatureColors: Record<"quente" | "morno" | "frio", { bg: string; text: string; label: string }> = {
-    quente: { bg: "rgba(239, 68, 68, 0.08)", text: "#dc2626", label: "Quente" },
-    morno: { bg: "rgba(245, 158, 11, 0.08)", text: "#d97706", label: "Morno" },
-    frio: { bg: "rgba(100, 116, 139, 0.08)", text: "#64748b", label: "Frio" },
+// Mesmas cores dos selos de temperatura (tokens do tema: funcionam no escuro)
+const temperatureColors: Record<"quente" | "morno" | "frio", { bg: string; text: string; borda: string; label: string }> = {
+    quente: { bg: "var(--crm-badge-hot-bg)", text: "var(--crm-badge-hot)", borda: "var(--crm-badge-hot-bd)", label: "Quente" },
+    morno: { bg: "var(--crm-badge-warm-bg)", text: "var(--crm-badge-warm)", borda: "var(--crm-badge-warm-bd)", label: "Morno" },
+    frio: { bg: "var(--crm-badge-cold-bg)", text: "var(--crm-badge-cold)", borda: "var(--crm-badge-cold-bd)", label: "Frio" },
 };
 
 /**
@@ -174,7 +176,10 @@ export const DashboardPage = () => {
         <div className="crm-page-shell">
             <div className="crm-page-header">
                 <div>
-                    <Title level={3} className="crm-page-header-title">Dashboard</Title>
+                    <Title level={2} className="crm-page-header-title">
+                        <DashboardOutlined />
+                        Dashboard
+                    </Title>
                     <Text className="crm-page-header-subtitle">
                         Visão executiva do funil — {dayjs().format("DD [de] MMMM [de] YYYY")}
                     </Text>
@@ -197,69 +202,69 @@ export const DashboardPage = () => {
                 />
             ) : null}
 
-            <Row gutter={[14, 14]}>
-                <Col xs={24} sm={12} lg={6}>
+            <div className="crm-kpi-grid">
+                <div>
                     <div className="crm-dashboard-hero" style={{ borderRadius: 14, padding: "20px 22px 18px", position: "relative", overflow: "hidden" }}>
                         <div style={{ position: "absolute", top: -30, right: -20, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(96,165,250,0.15) 0%, transparent 70%)" }} />
-                        <Text style={{ color: "rgba(148,163,184,0.85)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 550, display: "block", marginBottom: 8 }}>
+                        <Text style={{ color: "rgba(203,213,225,0.85)", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, display: "block", marginBottom: 8 }}>
                             Pipeline em aberto
                         </Text>
-                        <div style={{ fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
+                        <div style={{ fontSize: 26, fontWeight: 700, color: "#fff", fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.03em", lineHeight: 1.1 }}>
                             {formatCurrencyBRL(resumo.valorAberto, "R$ 0")}
                         </div>
-                        <Text style={{ color: "rgba(148,163,184,0.75)", fontSize: 12, marginTop: 6, display: "block" }}>
-                            {resumo.abertos} {resumo.abertos === 1 ? "oportunidade ativa" : "oportunidades ativas"}
+                        <Text style={{ color: "rgba(203,213,225,0.85)", fontSize: 12, marginTop: 6, display: "block" }}>
+                            {resumo.abertos} {resumo.abertos === 1 ? "lead em aberto" : "leads em aberto"}
                         </Text>
+                        {/* Previsão ponderada mora aqui: como 5º cartão ficava sozinho
+                            numa segunda linha da grade de 4 colunas. */}
+                        {resumo.temProbabilidade ? (
+                            <Text
+                                style={{ color: "rgba(203,213,225,0.85)", fontSize: 12, marginTop: 2, display: "block" }}
+                                title="Valor em aberto × probabilidade da etapa"
+                            >
+                                Previsão ponderada:{" "}
+                                <b style={{ color: "#fcd34d" }}>{formatCurrencyBRL(resumo.valorPonderado, "R$ 0")}</b>
+                            </Text>
+                        ) : null}
                     </div>
-                </Col>
+                </div>
 
-                <Col xs={24} sm={12} lg={6}>
+                <div>
                     <StatCard
                         title="Receita ganha (acumulada)"
                         value={formatCurrencyBRL(resumo.valorGanho, "R$ 0")}
-                        prefix={<CheckCircleOutlined style={{ color: "#10b981" }} />}
-                        valueStyle={{ color: "#059669" }}
+                        prefix={<CheckCircleOutlined style={{ color: "var(--crm-success-fg)" }} />}
+                        valueStyle={{ color: "var(--crm-success-fg)" }}
                         accentColor="#10b981"
                         subtitle={`${resumo.ganhos} ${resumo.ganhos === 1 ? "venda realizada" : "vendas realizadas"}`}
                         style={{ height: "100%" }}
                     />
-                </Col>
+                </div>
 
-                <Col xs={24} sm={12} lg={6}>
+                <div>
                     <StatCard
                         title="Conversão"
                         value={formatPercentBR(resumo.conversao)}
                         suffix="%"
-                        prefix={<RiseOutlined style={{ color: "#3b82f6" }} />}
-                        accentColor="#3b82f6"
+                        prefix={<RiseOutlined style={{ color: "var(--crm-sky-600)" }} />}
+                        accentColor="#2563eb"
                         subtitle={`${resumo.ganhos} ganho${resumo.ganhos === 1 ? "" : "s"} de ${resumo.encerrados} encerrado${resumo.encerrados === 1 ? "" : "s"}`}
                         style={{ height: "100%" }}
                     />
-                </Col>
+                </div>
 
-                <Col xs={24} sm={12} lg={6}>
+                <div>
                     <StatCard
                         title="Ticket médio"
                         value={formatCurrencyBRL(ticketMedio, "R$ 0")}
-                        prefix={<DollarCircleOutlined style={{ color: "#3b82f6" }} />}
-                        accentColor="#3b82f6"
+                        prefix={<DollarCircleOutlined style={{ color: "var(--crm-sky-600)" }} />}
+                        accentColor="#2563eb"
                         subtitle="Por venda ganha"
                         style={{ height: "100%" }}
                     />
-                </Col>
+                </div>
 
-                {resumo.temProbabilidade ? (
-                    <Col xs={24} sm={12} lg={6}>
-                        <StatCard
-                            title="Previsão ponderada"
-                            value={formatCurrencyBRL(resumo.valorPonderado, "R$ 0")}
-                            subtitle="Valor em aberto × probabilidade da etapa"
-                            accentColor="#8b5cf6"
-                            style={{ height: "100%" }}
-                        />
-                    </Col>
-                ) : null}
-            </Row>
+            </div>
 
             <Row gutter={[14, 14]}>
                 <Col xs={24} lg={16}>
@@ -275,7 +280,7 @@ export const DashboardPage = () => {
                     >
                         {resumo.porEtapa.length === 0 ? (
                             <EmptyState
-                                title="Nenhuma oportunidade ainda"
+                                title="Nenhum lead ainda"
                                 description="Cadastre o primeiro lead para acompanhar o funil."
                             />
                         ) : (
@@ -340,7 +345,7 @@ export const DashboardPage = () => {
                                                 padding: "14px 8px",
                                                 borderRadius: 10,
                                                 background: config.bg,
-                                                border: `1px solid ${config.text}15`,
+                                                border: `1px solid ${config.borda}`,
                                             }}
                                         >
                                             <div style={{ fontSize: 22, fontWeight: 700, color: config.text, fontFamily: "'Sora','Inter',sans-serif" }}>
@@ -362,7 +367,7 @@ export const DashboardPage = () => {
                             detalhe={(linha) => rotuloSemContato(linha.dias_sem_contato)}
                             vazio="Nenhum lead quente esperando contato."
                             habilitado={!isLoadingAccess}
-                            corDetalhe="#dc2626"
+                            corDetalhe="var(--crm-danger-fg)"
                         />
 
                         <Card
@@ -404,7 +409,7 @@ export const DashboardPage = () => {
                                                 </div>
                                             </div>
                                         )}
-                                        strokeColor={{ "0%": "#3b82f6", "100%": "#10b981" }}
+                                        strokeColor={{ "0%": "#2563eb", "100%": "#10b981" }}
                                         strokeWidth={8}
                                         size={140}
                                     />
@@ -442,7 +447,7 @@ export const DashboardPage = () => {
                             pagination={false}
                             dataSource={topResponsaveis}
                             scroll={{ x: 480 }}
-                            locale={{ emptyText: "Sem negócios atribuídos ainda." }}
+                            locale={{ emptyText: "Nenhum lead atribuído ainda." }}
                             columns={[
                                 {
                                     title: "#",
@@ -465,16 +470,18 @@ export const DashboardPage = () => {
                                     render: (v: string) => <Text strong style={{ fontSize: 13.5 }}>{v}</Text>,
                                 },
                                 { title: "Leads", dataIndex: "total", width: 65 },
-                                { title: "Ganhos", dataIndex: "ganhos", width: 70, render: (v: number) => <Text style={{ color: "#059669", fontWeight: 600 }}>{v}</Text> },
+                                { title: "Ganhos", dataIndex: "ganhos", width: 70, render: (v: number) => <Text style={{ color: "var(--crm-success-fg)", fontWeight: 600 }}>{v}</Text> },
                                 {
                                     title: "Conversão",
+                                    className: "crm-nowrap",
                                     width: 140,
                                     render: (_, r) => (
-                                        <Progress percent={Number(taxaDeConversao(r.ganhos, r.perdidos).toFixed(0))} size="small" strokeColor="#10b981" />
+                                        <Progress format={formatoProgresso} percent={Number(taxaDeConversao(r.ganhos, r.perdidos).toFixed(0))} size="small" strokeColor="#10b981" />
                                     ),
                                 },
                                 {
                                     title: "Valor",
+                                    className: "crm-nowrap",
                                     dataIndex: "valor",
                                     width: 120,
                                     render: (v: number) => <Text strong>{formatCurrencyBRL(v, "R$ 0")}</Text>,

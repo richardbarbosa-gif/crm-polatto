@@ -1,4 +1,9 @@
-import { DownloadOutlined, HistoryOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+    DownloadOutlined,
+    HistoryOutlined,
+    ProfileOutlined,
+    ReloadOutlined,
+} from "@ant-design/icons";
 import { useList } from "@refinedev/core";
 import { Alert, Select, Skeleton, Space, Table, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -144,6 +149,7 @@ export const InsightsActivityLogPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
+                icon={<ProfileOutlined />}
                 title="Registro de atividades"
                 subtitle="Auditoria de alterações no funil e eventos operacionais."
                 extra={
@@ -189,7 +195,7 @@ export const InsightsActivityLogPage = () => {
 
             <IntroCard
                 title="Trilha de auditoria comercial"
-                description="Rastreie quem alterou etapas, quando a mudanca ocorreu e qual impacto ela trouxe."
+                description="Rastreie quem alterou etapas, quando a mudança ocorreu e qual impacto ela trouxe."
                 extra={<HistoryOutlined style={{ color: "#d7e5f7", fontSize: 24 }} />}
             />
 
@@ -231,6 +237,7 @@ export const InsightsActivityLogPage = () => {
                         columns={[
                             {
                                 title: "Data",
+                                className: "crm-nowrap",
                                 dataIndex: "date",
                                 width: 150,
                                 render: (value?: string | null) =>

@@ -107,11 +107,16 @@
     --crm-ink-900: #0d1628;
     --crm-ink-700: #334155;
     --crm-ink-600: #475569;
-    --crm-ink-500: #64748b;
-    --crm-ink-400: #94a3b8;
+    /* 500 e 400 escurecidos: o #94a3b8 antigo (subtítulos, contadores) dava
+       2,4:1 de contraste no fundo da página e reprovava no AA. */
+    --crm-ink-500: #556377;
+    --crm-ink-400: #64748b;
     --crm-ink-300: #cbd5e1;
 
     --crm-border: rgba(13, 22, 40, 0.07);
+    /* Borda de campo de formulário: precisa ser visível (WCAG 1.4.11). */
+    --crm-border-input: rgba(13, 22, 40, 0.16);
+    --crm-border-input-hover: rgba(13, 22, 40, 0.28);
     --crm-border-subtle: rgba(13, 22, 40, 0.045);
     --crm-border-interactive: rgba(37, 99, 235, 0.3);
 
@@ -137,8 +142,10 @@
     --crm-ring-danger: 0 0 0 3px rgba(239, 68, 68, 0.14);
 
     /* Gradientes reutilizáveis */
-    --crm-grad-primary: linear-gradient(180deg, #3d82f7 0%, #2563eb 100%);
-    --crm-grad-primary-hover: linear-gradient(180deg, #4c8cf9 0%, #2a6bf0 100%);
+    /* Gradiente da ação primária: o topo #3d82f7 deixava o texto branco com
+       3,7:1; agora fica acima de 4,5:1 em toda a altura do botão. */
+    --crm-grad-primary: linear-gradient(180deg, #2f6fed 0%, #2158d6 100%);
+    --crm-grad-primary-hover: linear-gradient(180deg, #3a78f0 0%, #2563eb 100%);
     --crm-grad-gold: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
     --crm-grad-sider: linear-gradient(180deg, #0e1729 0%, #0a1120 52%, #070d19 100%);
     --crm-grad-surface: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
@@ -185,7 +192,7 @@ h1, h2, h3, h4, h5, h6,
 }
 
 ::selection {
-    background: rgba(59, 130, 246, 0.15);
+    background: rgba(37, 99, 235, 0.15);
     color: var(--crm-ink-900);
 }
 
@@ -290,7 +297,7 @@ h1, h2, h3, h4, h5, h6,
     align-items: center;
     justify-content: center;
     border-radius: 8px;
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    background: linear-gradient(135deg, var(--crm-sky-600), #2563eb);
     color: #ffffff;
     font-family: "Sora", sans-serif;
     font-size: 14px;
@@ -298,7 +305,7 @@ h1, h2, h3, h4, h5, h6,
     letter-spacing: 0;
     line-height: 1;
     flex-shrink: 0;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
 }
 
 .crm-sider-brand__name {
@@ -324,52 +331,6 @@ h1, h2, h3, h4, h5, h6,
     top: -1px;
 }
 
-.crm-sider-nav {
-    flex: 1;
-    overflow-y: auto;
-    padding-top: 4px;
-    scrollbar-width: none;
-}
-
-.crm-sider-nav::-webkit-scrollbar {
-    width: 0;
-}
-
-.crm-sider-footer {
-    margin-top: 4px;
-    padding: 10px 8px 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.crm-sider-settings {
-    width: 100% !important;
-    margin-bottom: 4px;
-    border: 1px solid rgba(255, 255, 255, 0.06) !important;
-    border-radius: var(--crm-radius-sm) !important;
-    color: rgba(148, 163, 184, 0.7) !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: flex-start !important;
-    gap: 8px;
-    font-size: 12.5px;
-    font-weight: 450;
-    transition: all var(--crm-duration) var(--crm-ease) !important;
-}
-
-.crm-sider-settings:hover {
-    color: #e2e8f0 !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
-    background: rgba(255, 255, 255, 0.04) !important;
-}
-
-.crm-sider-settings-collapsed {
-    justify-content: center !important;
-    padding-inline: 0 !important;
-}
-
-.crm-sider-footer .ant-btn {
-    color: rgba(148, 163, 184, 0.7);
-}
 
 /* (Top bar styles moved to Premium section below) */
 
@@ -517,7 +478,7 @@ h1, h2, h3, h4, h5, h6,
 .ant-select-focused .ant-select-selector,
 .ant-picker-focused {
     border-color: var(--crm-sky-500) !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.08) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.08) !important;
 }
 
 .ant-modal .ant-modal-content {
@@ -540,7 +501,7 @@ h1, h2, h3, h4, h5, h6,
 .ant-input:focus-visible,
 .ant-input-number:focus-visible,
 .ant-select-focused .ant-select-selector {
-    outline: 2px solid rgba(59, 130, 246, 0.4) !important;
+    outline: 2px solid rgba(37, 99, 235, 0.4) !important;
     outline-offset: 2px;
 }
 
@@ -775,8 +736,8 @@ h1, h2, h3, h4, h5, h6,
 }
 
 .crm-kanban-column-drop-active {
-    background: rgba(59, 130, 246, 0.03);
-    box-shadow: inset 0 0 0 1.5px rgba(59, 130, 246, 0.2);
+    background: rgba(37, 99, 235, 0.03);
+    box-shadow: inset 0 0 0 1.5px rgba(37, 99, 235, 0.2);
     border-radius: var(--crm-radius);
 }
 
@@ -944,7 +905,7 @@ h1, h2, h3, h4, h5, h6,
    ═══════════════════════════════════════════════════════════ */
 
 .crm-config-page {
-    max-width: 960px;
+    max-width: 1180px;
     margin: 0 auto;
 }
 
@@ -1150,6 +1111,11 @@ html[data-theme="dark"] {
     --crm-border: rgba(232, 238, 247, 0.1);
     --crm-border-subtle: rgba(232, 238, 247, 0.06);
     --crm-border-interactive: rgba(107, 163, 255, 0.4);
+    --crm-border-input: rgba(232, 238, 247, 0.16);
+    --crm-border-input-hover: rgba(232, 238, 247, 0.28);
+
+    --crm-grad-primary: linear-gradient(180deg, #4c8cf9 0%, #2f6fed 100%);
+    --crm-grad-primary-hover: linear-gradient(180deg, #5b97fa 0%, #3a78f0 100%);
 
     /* No escuro a profundidade vem de sombra mais densa e menos difusa */
     --crm-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.28);
@@ -1174,13 +1140,13 @@ html[data-theme="dark"] {
 }
 
 html[data-theme="dark"] body {
-    color: #e6edf3;
-    background: #0d1117;
+    color: var(--crm-ink-900);
+    background: var(--crm-surface-0);
 }
 
 html[data-theme="dark"] ::selection {
-    background: rgba(59, 130, 246, 0.3);
-    color: #e6edf3;
+    background: rgba(37, 99, 235, 0.3);
+    color: var(--crm-ink-900);
 }
 
 html[data-theme="dark"] ::-webkit-scrollbar-thumb {
@@ -1192,7 +1158,7 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 }
 
 html[data-theme="dark"] .crm-button-default {
-    background: #161b22 !important;
+    background: var(--crm-surface-1) !important;
     border-color: rgba(240, 246, 252, 0.1) !important;
 }
 
@@ -1202,8 +1168,8 @@ html[data-theme="dark"] .crm-button-default:hover {
 
 html[data-theme="dark"] .ant-table-thead > tr > th,
 html[data-theme="dark"] .ant-table-thead > tr > td {
-    background: #161b22 !important;
-    color: #8b949e !important;
+    background: var(--crm-surface-1) !important;
+    color: var(--crm-ink-500) !important;
     border-bottom-color: rgba(240, 246, 252, 0.1) !important;
 }
 
@@ -1216,7 +1182,7 @@ html[data-theme="dark"] .ant-table-tbody > tr:hover > td {
 }
 
 html[data-theme="dark"] .ant-card {
-    background: #161b22;
+    background: var(--crm-surface-1);
     border-color: rgba(240, 246, 252, 0.1);
 }
 
@@ -1225,11 +1191,11 @@ html[data-theme="dark"] .ant-card .ant-card-head {
 }
 
 html[data-theme="dark"] .ant-modal-content {
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 html[data-theme="dark"] .ant-drawer-content {
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 /* ── Dark: Form inputs ── */
@@ -1238,8 +1204,8 @@ html[data-theme="dark"] .ant-select-selector,
 html[data-theme="dark"] .ant-input-number,
 html[data-theme="dark"] .ant-picker {
     border-color: rgba(240, 246, 252, 0.1) !important;
-    background: #0d1117 !important;
-    color: #e6edf3 !important;
+    background: var(--crm-surface-0) !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .ant-input:hover,
@@ -1251,34 +1217,34 @@ html[data-theme="dark"] .ant-picker:hover {
 
 html[data-theme="dark"] .ant-input::placeholder,
 html[data-theme="dark"] .ant-input-number-input::placeholder {
-    color: #484f58 !important;
+    color: var(--crm-ink-300) !important;
 }
 
 html[data-theme="dark"] .ant-select-selection-placeholder {
-    color: #484f58 !important;
+    color: var(--crm-ink-300) !important;
 }
 
 html[data-theme="dark"] .ant-select-selection-item {
-    color: #e6edf3 !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .ant-form-item-label > label {
-    color: #b1bac4 !important;
+    color: var(--crm-ink-700) !important;
 }
 
 /* ── Dark: Select dropdown ── */
 html[data-theme="dark"] .ant-select-dropdown {
-    background: #1c2333 !important;
+    background: var(--crm-surface-2) !important;
     border-color: rgba(240, 246, 252, 0.1) !important;
 }
 
 html[data-theme="dark"] .ant-select-item {
-    color: #c9d1d9 !important;
+    color: var(--crm-ink-700) !important;
 }
 
 html[data-theme="dark"] .ant-select-item-option-active,
 html[data-theme="dark"] .ant-select-item-option-selected {
-    background: rgba(59, 130, 246, 0.15) !important;
+    background: rgba(37, 99, 235, 0.15) !important;
 }
 
 /* ── Dark: Kanban/Lead cards ── */
@@ -1298,18 +1264,18 @@ html[data-theme="dark"] .crm-lead-card .ant-card-actions {
 html[data-theme="dark"] .crm-kanban-empty {
     border-color: rgba(240, 246, 252, 0.06);
     background: rgba(255, 255, 255, 0.02);
-    color: #6e7681;
+    color: var(--crm-ink-400);
 }
 
 html[data-theme="dark"] .crm-kanban-column-drop-active {
-    background: rgba(59, 130, 246, 0.06);
-    box-shadow: inset 0 0 0 1.5px rgba(59, 130, 246, 0.25);
+    background: rgba(37, 99, 235, 0.06);
+    box-shadow: inset 0 0 0 1.5px rgba(37, 99, 235, 0.25);
 }
 
 /* ── Dark: Soft blocks & form sections ── */
 html[data-theme="dark"] .crm-soft-block {
     border-color: rgba(240, 246, 252, 0.08);
-    background: #0d1117;
+    background: var(--crm-surface-0);
 }
 
 html[data-theme="dark"] .crm-soft-block:hover {
@@ -1318,55 +1284,55 @@ html[data-theme="dark"] .crm-soft-block:hover {
 
 html[data-theme="dark"] .crm-form-section {
     border-color: rgba(240, 246, 252, 0.08);
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 /* ── Dark: Agenda ── */
 html[data-theme="dark"] .crm-agenda-day-item {
     border-color: rgba(240, 246, 252, 0.08);
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 html[data-theme="dark"] .crm-agenda-day-item:hover {
-    border-color: rgba(59, 130, 246, 0.3);
+    border-color: rgba(37, 99, 235, 0.3);
 }
 
 html[data-theme="dark"] .crm-agenda-treatment {
     border-color: rgba(240, 246, 252, 0.08);
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 /* ── Dark: Notifications, tooltips, dropdowns ── */
 html[data-theme="dark"] .ant-notification-notice {
-    background: #1c2333;
+    background: var(--crm-surface-2);
     border-color: rgba(240, 246, 252, 0.1);
 }
 
 html[data-theme="dark"] .ant-dropdown-menu {
-    background: #1c2333 !important;
+    background: var(--crm-surface-2) !important;
 }
 
 html[data-theme="dark"] .ant-dropdown-menu-item {
-    color: #c9d1d9 !important;
+    color: var(--crm-ink-700) !important;
 }
 
 html[data-theme="dark"] .ant-dropdown-menu-item:hover {
-    background: rgba(59, 130, 246, 0.12) !important;
+    background: rgba(37, 99, 235, 0.12) !important;
 }
 
 html[data-theme="dark"] .ant-message-notice-content {
-    background: #1c2333;
-    color: #e6edf3;
+    background: var(--crm-surface-2);
+    color: var(--crm-ink-900);
 }
 
 /* ── Dark: Segmented, pagination, progress ── */
 html[data-theme="dark"] .ant-segmented {
-    background: #0d1117 !important;
+    background: var(--crm-surface-0) !important;
 }
 
 html[data-theme="dark"] .ant-segmented-item-selected {
-    background: #161b22 !important;
-    color: #e6edf3 !important;
+    background: var(--crm-surface-1) !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .ant-pagination-item {
@@ -1375,15 +1341,15 @@ html[data-theme="dark"] .ant-pagination-item {
 }
 
 html[data-theme="dark"] .ant-pagination-item a {
-    color: #c9d1d9 !important;
+    color: var(--crm-ink-700) !important;
 }
 
 html[data-theme="dark"] .ant-pagination-item-active {
-    border-color: #3b82f6 !important;
+    border-color: var(--crm-sky-600) !important;
 }
 
 html[data-theme="dark"] .ant-pagination-item-active a {
-    color: #3b82f6 !important;
+    color: var(--crm-sky-600) !important;
 }
 
 /* ── Dark: Modal mask & overlays ── */
@@ -1397,12 +1363,12 @@ html[data-theme="dark"] .ant-drawer-mask {
 
 /* ── Dark: Opportunities header ── */
 html[data-theme="dark"] .crm-opportunities-header {
-    background: #161b22;
+    background: var(--crm-surface-1);
     border-bottom-color: rgba(240, 246, 252, 0.06);
 }
 
 html[data-theme="dark"] .crm-view-toggle {
-    background: #0d1117;
+    background: var(--crm-surface-0);
 }
 
 /* ── Dark: Alert ── */
@@ -1417,21 +1383,21 @@ html[data-theme="dark"] .crm-config-row + .crm-config-row {
 
 /* ── Dark: List shell ── */
 html[data-theme="dark"] .crm-list-shell {
-    background: #161b22;
+    background: var(--crm-surface-1);
 }
 
 /* ── Dark: Typography overrides ── */
 html[data-theme="dark"] .crm-page-header-title,
 html[data-theme="dark"] .crm-opportunities-title {
-    color: #e6edf3 !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .crm-lead-card-title {
-    color: #e6edf3 !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .ant-typography {
-    color: #c9d1d9;
+    color: var(--crm-ink-700);
 }
 
 html[data-theme="dark"] .ant-table-wrapper .ant-table {
@@ -1439,35 +1405,35 @@ html[data-theme="dark"] .ant-table-wrapper .ant-table {
 }
 
 html[data-theme="dark"] .ant-table-wrapper .ant-table-thead > tr > th {
-    background: #161b22 !important;
+    background: var(--crm-surface-1) !important;
 }
 
 html[data-theme="dark"] .ant-statistic-title {
-    color: #8b949e !important;
+    color: var(--crm-ink-500) !important;
 }
 
 html[data-theme="dark"] .ant-statistic-content-value {
-    color: #e6edf3;
+    color: var(--crm-ink-900);
 }
 
 html[data-theme="dark"] .ant-progress-text {
-    color: #c9d1d9 !important;
+    color: var(--crm-ink-700) !important;
 }
 
 html[data-theme="dark"] .ant-empty-description {
-    color: #6e7681;
+    color: var(--crm-ink-400);
 }
 
 html[data-theme="dark"] .ant-tabs-tab {
-    color: #8b949e !important;
+    color: var(--crm-ink-500) !important;
 }
 
 html[data-theme="dark"] .ant-tabs-tab-active .ant-tabs-tab-btn {
-    color: #e6edf3 !important;
+    color: var(--crm-ink-900) !important;
 }
 
 html[data-theme="dark"] .ant-tabs-ink-bar {
-    background: #3b82f6;
+    background: var(--crm-sky-600);
 }
 
 html[data-theme="dark"] .ant-switch {
@@ -1475,10 +1441,10 @@ html[data-theme="dark"] .ant-switch {
 }
 
 html[data-theme="dark"] .ant-switch-checked {
-    background: #3b82f6;
+    background: var(--crm-sky-600);
 }
 html[data-theme="dark"] .ant-card.ant-card-bordered[style*="maxWidth"] {
-    background: #161b22 !important;
+    background: var(--crm-surface-1) !important;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(240, 246, 252, 0.06) !important;
 }
 
@@ -1578,7 +1544,7 @@ html[data-theme="dark"] .crm-topbar-user-email {
 
 /* Avatar */
 .crm-topbar-avatar {
-    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    background: linear-gradient(135deg, var(--crm-sky-600), #2563eb) !important;
     border: 2px solid rgba(96, 165, 250, 0.2) !important;
     font-weight: 600;
     font-size: 13px !important;
@@ -1752,7 +1718,7 @@ html[data-theme="dark"] .crm-lead-card:hover {
 
 .crm-company-selector.ant-select-focused .ant-select-selector {
     border-color: rgba(96, 165, 250, 0.5) !important;
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12) !important;
 }
 
 .crm-company-selector .ant-select-selection-item {
@@ -2212,4 +2178,731 @@ html[data-theme="dark"] .ant-layout:not(:has(.ant-layout-sider)) h3.ant-typograp
   .crm-kanban-kpis {
     gap: 10px !important;
   }
+}
+
+/* ======================================================================
+   REVISÃO DE ACABAMENTO (nov/2026)
+   Mesma regra da camada "Navy & Gold": tudo via tokens, no fim do arquivo,
+   para padronizar o que estava diferente entre telas e corrigir o que não
+   funcionava no modo escuro e no celular.
+   ====================================================================== */
+
+:root {
+    /* Cores semânticas de TEXTO (≥ 4,5:1 no fundo claro). Os componentes
+       usavam hex fixos (#dc2626, #d97706...) que somem no modo escuro. */
+    --crm-danger-fg: #b91c1c;
+    --crm-warning-fg: #b45309;
+    --crm-success-fg: #047857;
+    --crm-info-fg: #1d4ed8;
+    --crm-whatsapp-fg: #15803d;
+
+    /* Selos (Badge): texto, fundo e borda por tom */
+    --crm-badge-neutral: #475569;
+    --crm-badge-neutral-bg: #f1f5f9;
+    --crm-badge-neutral-bd: rgba(100, 116, 139, 0.22);
+    --crm-badge-info: #1d4ed8;
+    --crm-badge-info-bg: #eff6ff;
+    --crm-badge-info-bd: rgba(37, 99, 235, 0.22);
+    --crm-badge-success: #047857;
+    --crm-badge-success-bg: #ecfdf5;
+    --crm-badge-success-bd: rgba(16, 185, 129, 0.25);
+    --crm-badge-warning: #b45309;
+    --crm-badge-warning-bg: #fffbeb;
+    --crm-badge-warning-bd: rgba(245, 158, 11, 0.3);
+    --crm-badge-danger: #b91c1c;
+    --crm-badge-danger-bg: #fef2f2;
+    --crm-badge-danger-bd: rgba(239, 68, 68, 0.25);
+    --crm-badge-cold: #475569;
+    --crm-badge-cold-bg: #f8fafc;
+    --crm-badge-cold-bd: rgba(100, 116, 139, 0.22);
+    --crm-badge-warm: #c2410c;
+    --crm-badge-warm-bg: #fff7ed;
+    --crm-badge-warm-bd: rgba(234, 88, 12, 0.25);
+    --crm-badge-hot: #b91c1c;
+    --crm-badge-hot-bg: #fef2f2;
+    --crm-badge-hot-bd: rgba(239, 68, 68, 0.25);
+
+    /* Ícone do cabeçalho de página: ecoa o dourado do item ativo do menu */
+    --crm-page-icon: var(--crm-gold-600);
+    --crm-page-icon-bg: rgba(245, 158, 11, 0.12);
+    --crm-page-icon-bd: rgba(245, 158, 11, 0.22);
+}
+
+html[data-theme="dark"] {
+    --crm-danger-fg: #f87171;
+    --crm-warning-fg: #fbbf24;
+    --crm-success-fg: #34d399;
+    --crm-info-fg: #7fb0ff;
+    --crm-whatsapp-fg: #4ade80;
+
+    --crm-badge-neutral: #cbd5e1;
+    --crm-badge-neutral-bg: rgba(148, 163, 184, 0.14);
+    --crm-badge-neutral-bd: rgba(148, 163, 184, 0.24);
+    --crm-badge-info: #93c5fd;
+    --crm-badge-info-bg: rgba(59, 130, 246, 0.16);
+    --crm-badge-info-bd: rgba(96, 165, 250, 0.3);
+    --crm-badge-success: #6ee7b7;
+    --crm-badge-success-bg: rgba(16, 185, 129, 0.15);
+    --crm-badge-success-bd: rgba(52, 211, 153, 0.3);
+    --crm-badge-warning: #fcd34d;
+    --crm-badge-warning-bg: rgba(245, 158, 11, 0.15);
+    --crm-badge-warning-bd: rgba(251, 191, 36, 0.3);
+    --crm-badge-danger: #fca5a5;
+    --crm-badge-danger-bg: rgba(239, 68, 68, 0.15);
+    --crm-badge-danger-bd: rgba(248, 113, 113, 0.3);
+    --crm-badge-cold: #cbd5e1;
+    --crm-badge-cold-bg: rgba(148, 163, 184, 0.12);
+    --crm-badge-cold-bd: rgba(148, 163, 184, 0.24);
+    --crm-badge-warm: #fdba74;
+    --crm-badge-warm-bg: rgba(234, 88, 12, 0.16);
+    --crm-badge-warm-bd: rgba(251, 146, 60, 0.3);
+    --crm-badge-hot: #fca5a5;
+    --crm-badge-hot-bg: rgba(239, 68, 68, 0.15);
+    --crm-badge-hot-bd: rgba(248, 113, 113, 0.3);
+
+    --crm-page-icon: var(--crm-gold-400);
+    --crm-page-icon-bg: rgba(245, 158, 11, 0.14);
+    --crm-page-icon-bd: rgba(245, 158, 11, 0.26);
+}
+
+/* ----------------------------------------------------------------------
+   R1. MENU LATERAL — itens como filhos diretos do <Menu> (o item ativo
+   volta a aparecer); Configurações e Sair presos ao rodapé.
+   ---------------------------------------------------------------------- */
+.ant-layout-sider .ant-menu-root {
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 12px;
+}
+
+.ant-layout-sider .crm-sider-footer-item {
+    margin-top: auto !important;
+    /* fio separador 8px acima, sem pseudo-elemento (o ::before é a barra
+       dourada do item ativo) */
+    box-shadow: 0 -9px 0 -8px rgba(255, 255, 255, 0.08);
+}
+
+.ant-layout-sider .ant-menu-item a {
+    color: inherit !important;
+}
+
+/* ----------------------------------------------------------------------
+   R2. BARRA SUPERIOR — os botões só com ícone (busca, sino) eram navy
+   sobre navy: invisíveis no tema claro.
+   ---------------------------------------------------------------------- */
+.crm-topbar .ant-btn-text {
+    color: rgba(203, 213, 225, 0.9) !important;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--crm-radius) !important;
+}
+
+.crm-topbar .ant-btn-text:hover,
+.crm-topbar .ant-btn-text:focus-visible {
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.crm-topbar .ant-badge .ant-badge-count {
+    box-shadow: 0 0 0 2px var(--crm-navy-900);
+}
+
+/* Celular: o botão do menu (do Refine) flutuava por cima do conteúdo.
+   Vai para dentro da barra superior. */
+@media (max-width: 991.98px) {
+    .ant-layout-has-sider > .ant-btn.ant-btn-icon-only:has(.anticon-bars) {
+        position: fixed !important;
+        top: 8px !important;
+        left: 8px !important;
+        z-index: 1001 !important;
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: var(--crm-radius) !important;
+        border: 1px solid rgba(148, 163, 184, 0.22) !important;
+        background: rgba(255, 255, 255, 0.06) !important;
+        color: #e2e8f0 !important;
+        box-shadow: none !important;
+    }
+
+    .crm-topbar {
+        padding-left: 60px !important;
+        padding-right: 12px !important;
+    }
+}
+
+/* ----------------------------------------------------------------------
+   R3. CABEÇALHO DE PÁGINA — um padrão só (antes: h2, h3, com e sem ícone,
+   tamanhos diferentes por tela).
+   ---------------------------------------------------------------------- */
+.crm-page-header-title,
+h2.crm-page-header-title.ant-typography,
+h3.crm-page-header-title.ant-typography {
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+    font-family: "Sora", "Inter", -apple-system, sans-serif;
+    font-size: 26px !important;
+    line-height: 1.25 !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.025em;
+    color: var(--crm-ink-950) !important;
+    margin: 0 !important;
+}
+
+.crm-page-header-title > .anticon {
+    flex-shrink: 0;
+    display: inline-grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    margin: 0 !important;
+    border-radius: 12px;
+    font-size: 19px;
+    color: var(--crm-page-icon) !important;
+    background: var(--crm-page-icon-bg);
+    border: 1px solid var(--crm-page-icon-bd);
+}
+
+.crm-page-header-subtitle {
+    display: block;
+    color: var(--crm-ink-500) !important;
+    font-size: 14px;
+    margin-top: 6px;
+}
+
+@media (max-width: 640px) {
+    .crm-page-header-title,
+    h2.crm-page-header-title.ant-typography,
+    h3.crm-page-header-title.ant-typography {
+        font-size: 22px !important;
+    }
+
+    .crm-page-header-title > .anticon {
+        width: 34px;
+        height: 34px;
+        font-size: 16px;
+        border-radius: 10px;
+    }
+}
+
+/* Cabeçalho das telas de cadastro do Refine (criar/editar/ver lead) */
+.ant-page-header .ant-page-header-heading-title {
+    font-family: "Sora", "Inter", -apple-system, sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--crm-ink-950);
+}
+
+/* ----------------------------------------------------------------------
+   R4. CAMPOS DE FORMULÁRIO — borda visível (era 7% de opacidade: o campo
+   sumia no fundo branco) e o mesmo foco em todos.
+   ---------------------------------------------------------------------- */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select:not(.crm-company-selector) .ant-select-selector,
+.ant-input-number,
+.ant-picker {
+    border-color: var(--crm-border-input) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover,
+.ant-select:not(.crm-company-selector):hover .ant-select-selector,
+.ant-input-number:hover,
+.ant-picker:hover {
+    border-color: var(--crm-border-input-hover) !important;
+}
+
+.ant-input-affix-wrapper > .ant-input,
+.ant-input-affix-wrapper > .ant-input:focus {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+.ant-input-affix-wrapper-focused,
+.ant-input:focus,
+.ant-input-number-focused,
+.ant-picker-focused,
+.ant-select-focused:not(.crm-company-selector) .ant-select-selector {
+    border-color: var(--crm-sky-600) !important;
+    box-shadow: var(--crm-ring) !important;
+}
+
+html[data-theme="dark"] .ant-input-affix-wrapper {
+    background: var(--crm-surface-0) !important;
+}
+
+html[data-theme="dark"] .ant-input-affix-wrapper > .ant-input {
+    background: transparent !important;
+}
+
+/* Foco por teclado sempre visível */
+.ant-btn:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+button:focus-visible {
+    outline: 2px solid var(--crm-sky-600) !important;
+    outline-offset: 2px;
+}
+
+/* ----------------------------------------------------------------------
+   R5. SELOS — uma linguagem só para temperatura, status, papéis e
+   status de orçamento.
+   ---------------------------------------------------------------------- */
+.crm-badge.ant-tag {
+    margin-inline-end: 0;
+    border-radius: var(--crm-radius-full);
+    padding: 1px 10px;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 18px;
+    letter-spacing: 0;
+    white-space: nowrap;
+}
+
+.crm-badge--neutral { color: var(--crm-badge-neutral) !important; background: var(--crm-badge-neutral-bg) !important; border-color: var(--crm-badge-neutral-bd) !important; }
+.crm-badge--info { color: var(--crm-badge-info) !important; background: var(--crm-badge-info-bg) !important; border-color: var(--crm-badge-info-bd) !important; }
+.crm-badge--success { color: var(--crm-badge-success) !important; background: var(--crm-badge-success-bg) !important; border-color: var(--crm-badge-success-bd) !important; }
+.crm-badge--warning { color: var(--crm-badge-warning) !important; background: var(--crm-badge-warning-bg) !important; border-color: var(--crm-badge-warning-bd) !important; }
+.crm-badge--danger { color: var(--crm-badge-danger) !important; background: var(--crm-badge-danger-bg) !important; border-color: var(--crm-badge-danger-bd) !important; }
+.crm-badge--cold { color: var(--crm-badge-cold) !important; background: var(--crm-badge-cold-bg) !important; border-color: var(--crm-badge-cold-bd) !important; }
+.crm-badge--warm { color: var(--crm-badge-warm) !important; background: var(--crm-badge-warm-bg) !important; border-color: var(--crm-badge-warm-bd) !important; }
+.crm-badge--hot { color: var(--crm-badge-hot) !important; background: var(--crm-badge-hot-bg) !important; border-color: var(--crm-badge-hot-bd) !important; }
+
+.ant-tag {
+    border-radius: var(--crm-radius-full);
+    white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------------
+   R6. ESTADO VAZIO
+   ---------------------------------------------------------------------- */
+.crm-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    text-align: center;
+    padding: 44px 28px;
+    border: 1.5px dashed var(--crm-border-input);
+    border-radius: var(--crm-radius-lg);
+    background: var(--crm-surface-1);
+}
+
+.crm-empty-state__icon {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    font-size: 24px;
+    line-height: 1;
+    color: var(--crm-sky-600);
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.14);
+}
+
+html[data-theme="dark"] .crm-empty-state__icon {
+    color: #7fb0ff;
+    background: rgba(76, 140, 249, 0.12);
+    border-color: rgba(76, 140, 249, 0.22);
+}
+
+.crm-empty-state__title.ant-typography {
+    margin: 2px 0 0 !important;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.crm-empty-state__description.ant-typography {
+    max-width: 460px;
+    font-size: 13.5px;
+    color: var(--crm-ink-500);
+}
+
+.crm-empty-state__action {
+    margin-top: 6px;
+}
+
+/* ----------------------------------------------------------------------
+   R7. TABELAS — telefone, CNPJ, datas e valores não quebram no meio.
+   ---------------------------------------------------------------------- */
+.crm-nowrap,
+.ant-table-wrapper td.crm-nowrap,
+.ant-table-wrapper th.crm-nowrap {
+    white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------------
+   R8. KANBAN — ações do cartão sem cor inline (funcionam no escuro) e
+   alvos de toque de 40px+ no celular.
+   ---------------------------------------------------------------------- */
+.crm-lead-card__actions {
+    display: flex;
+    border-top: 1px solid var(--crm-border-subtle);
+    background: var(--crm-surface-0);
+}
+
+.crm-lead-card__action {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 34px;
+    padding: 6px 0;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--crm-ink-500);
+    background: transparent;
+    border: none;
+    border-right: 1px solid var(--crm-border-subtle);
+    cursor: pointer;
+    transition: color var(--crm-duration-fast), background var(--crm-duration-fast);
+}
+
+.crm-lead-card__action:last-child {
+    border-right: none;
+}
+
+.crm-lead-card__action:hover {
+    color: var(--crm-sky-600);
+    background: rgba(37, 99, 235, 0.06);
+}
+
+html[data-theme="dark"] .crm-lead-card__action:hover {
+    color: #7fb0ff;
+    background: rgba(76, 140, 249, 0.1);
+}
+
+.crm-lead-card__action--icon {
+    flex: 0 0 44px;
+    font-size: 14px;
+    color: var(--crm-whatsapp-fg);
+}
+
+.crm-lead-card__agendar {
+    pointer-events: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--crm-warning-fg);
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    border-radius: 6px;
+    padding: 2px 8px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.crm-lead-card__selo-parado {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--crm-danger-fg);
+    background: rgba(239, 68, 68, 0.08);
+    padding: 2px 6px;
+    border-radius: 6px;
+    margin-left: 6px;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+html[data-theme="dark"] .crm-lead-card__selo-parado {
+    background: rgba(248, 113, 113, 0.14);
+}
+
+@media (pointer: coarse) {
+    .crm-lead-card__action {
+        min-height: 42px;
+    }
+
+    .crm-lead-card__agendar {
+        min-height: 32px;
+        padding: 4px 10px;
+    }
+}
+
+/* Cabeçalho fosco da coluna: no escuro era um degradê claro e o nome da
+   etapa ficava ilegível. */
+html[data-theme="dark"] .crm-kanban-column-head {
+    background: linear-gradient(180deg, rgba(19, 26, 38, 0.95) 0%, rgba(19, 26, 38, 0.7) 100%) !important;
+}
+
+html[data-theme="dark"] .crm-kanban-column {
+    background: linear-gradient(180deg, rgba(26, 35, 51, 0.6) 0%, rgba(26, 35, 51, 0.25) 100%) !important;
+    border-color: var(--crm-border-subtle) !important;
+}
+
+/* ----------------------------------------------------------------------
+   R9. NÚMEROS — valores alinhados em KPIs e barras de progresso.
+   ---------------------------------------------------------------------- */
+.ant-statistic-content,
+.ant-progress-text {
+    font-variant-numeric: tabular-nums;
+}
+
+/* ----------------------------------------------------------------------
+   R10. MODO ESCURO — superfícies que ficavam brancas ou com hex fixo.
+   ---------------------------------------------------------------------- */
+html[data-theme="dark"] .crm-card,
+html[data-theme="dark"] .ant-card {
+    background: var(--crm-surface-1);
+    border-color: var(--crm-border) !important;
+}
+
+html[data-theme="dark"] .ant-modal .ant-modal-content,
+html[data-theme="dark"] .ant-modal .ant-modal-header,
+html[data-theme="dark"] .ant-drawer .ant-drawer-content {
+    background: var(--crm-surface-2);
+}
+
+html[data-theme="dark"] .ant-table-wrapper .ant-table-thead > tr > th {
+    background: var(--crm-surface-2) !important;
+    color: var(--crm-ink-600) !important;
+}
+
+html[data-theme="dark"] .ant-table-wrapper .ant-table,
+html[data-theme="dark"] .ant-table-wrapper .ant-table-container {
+    background: var(--crm-surface-1);
+}
+
+html[data-theme="dark"] ::selection {
+    background: rgba(76, 140, 249, 0.35);
+    color: #ffffff;
+}
+
+/* Editor de markdown (nota do lead): segue o tema */
+html[data-theme="dark"] .w-md-editor {
+    --color-canvas-default: var(--crm-surface-0);
+    --color-fg-default: var(--crm-ink-900);
+    --color-border-default: var(--crm-border-input);
+    background: var(--crm-surface-0);
+    color: var(--crm-ink-900);
+    box-shadow: 0 0 0 1px var(--crm-border-input);
+}
+
+html[data-theme="dark"] .w-md-editor-toolbar {
+    background: var(--crm-surface-2);
+    border-color: var(--crm-border);
+}
+
+html[data-theme="dark"] .w-md-editor-toolbar li > button {
+    color: var(--crm-ink-700);
+}
+
+html[data-theme="dark"] .w-md-editor-text-input,
+html[data-theme="dark"] .w-md-editor-text-pre,
+html[data-theme="dark"] .w-md-editor-text-pre > code,
+html[data-theme="dark"] .wmde-markdown {
+    color: var(--crm-ink-900) !important;
+    background: transparent !important;
+}
+
+/* ===================================================================
+   Revisão geral — tabelas
+   O antd aplica overflow-wrap: break-word nas células, o que parte
+   telefone, CNPJ e data no meio ("(11) 9876-\n5432"). Aqui: quebra só
+   entre palavras, rola para o lado quando não couber e nunca parte
+   dados de formato fixo (classe crm-nowrap na coluna).
+   =================================================================== */
+/* Especificidade acima da do antd (.ant-table-wrapper .ant-table-tbody > tr > td),
+   que é quem aplica o overflow-wrap: break-word. */
+.ant-table-wrapper .ant-table .ant-table-thead > tr > th,
+.ant-table-wrapper .ant-table .ant-table-tbody > tr > td,
+.ant-table-wrapper .ant-table .ant-table-cell,
+.ant-table-wrapper .ant-table .ant-typography {
+    /* o Typography do antd também força word-break: break-word no texto */
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+.ant-table-wrapper .ant-table-content {
+    overflow-x: auto;
+}
+
+.ant-table-wrapper .ant-table-cell.crm-nowrap,
+.crm-nowrap {
+    white-space: nowrap;
+}
+
+/* Motivos de perda (Ganhos x Perdas) */
+.crm-motivo-perda {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--crm-border-input);
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+/* Menu lateral: subitens de Relatórios cortavam ("Ganhos e per…",
+   "Vendas por or…"). Recuo menor mantém a hierarquia e cabe o texto. */
+.ant-layout-sider .ant-menu-sub.ant-menu-inline > .ant-menu-item {
+    padding-left: 32px !important;
+    padding-right: 12px !important;
+}
+
+/* Bloco de endereço (CEP) — o mesmo no "Novo lead" e no "Editar lead" */
+.crm-form-section.crm-form-endereco {
+    background: var(--crm-surface-2);
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border: 1px solid var(--crm-border);
+}
+
+html[data-theme="dark"] .crm-form-section.crm-form-endereco {
+    background: var(--crm-surface-2);
+}
+
+/* Kanban: nome do lead em até 2 linhas (antes: 1 linha cortada pelo selo) */
+.crm-lead-card__nome {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.crm-lead-card__selo-parado {
+    margin-left: 0;
+    margin-top: 1px;
+}
+
+/* Busca global (Ctrl+K) — antes com 13 cores fixas: caixa branca no escuro */
+.crm-busca__topo {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--crm-border);
+}
+
+.crm-busca__icone {
+    font-size: 22px;
+    color: var(--crm-ink-400);
+    margin-right: 12px;
+}
+
+.crm-busca__tecla {
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--crm-ink-500);
+    background: var(--crm-surface-2);
+    border: 1px solid var(--crm-border);
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.crm-busca__corpo {
+    padding: 8px 0;
+    min-height: 120px;
+    max-height: min(60vh, 520px);
+    overflow-y: auto;
+    background: var(--crm-surface-0);
+}
+
+.crm-busca__vazio {
+    text-align: center;
+    padding: 30px 20px;
+}
+
+.crm-busca .ant-list-item.crm-busca__item {
+    padding: 12px 20px;
+    cursor: pointer;
+    border-block-end: 1px solid var(--crm-border-subtle);
+}
+
+.crm-busca .ant-list-item.crm-busca__item--ativo {
+    background: var(--crm-surface-2);
+}
+
+.crm-busca__avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--crm-ink-500);
+    background: var(--crm-surface-2);
+}
+
+.crm-busca__titulo.ant-typography {
+    font-size: 15px;
+    color: var(--crm-ink-900);
+}
+
+.crm-busca__seta {
+    color: var(--crm-ink-300);
+}
+
+/* Agenda no celular: marcadores no lugar dos títulos */
+.crm-agenda-marcadores {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 2px 3px;
+    padding-top: 2px;
+    line-height: 1;
+}
+
+.crm-agenda-marcadores .ant-badge-status-dot {
+    width: 7px;
+    height: 7px;
+}
+
+.crm-agenda-marcadores__mais {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--crm-ink-500);
+}
+
+@media (max-width: 767px) {
+    .crm-agenda-calendar-card .ant-picker-calendar-full .ant-picker-calendar-date-content {
+        height: 26px;
+    }
+}
+
+/* Resumo do lead: valor alinhado à direita ao lado do nome; quando o
+   espaço é estreito (painel lateral, celular) e o bloco desce para baixo
+   do nome, alinha à esquerda — antes ficava "flutuando" desalinhado. */
+.crm-lead-resumo .ant-card-body {
+    container-type: inline-size;
+}
+
+.crm-lead-valor {
+    text-align: right;
+}
+
+.crm-lead-valor__numero {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--crm-success-fg, #15803d);
+}
+
+@container (max-width: 680px) {
+    .crm-lead-valor {
+        text-align: left;
+    }
+}
+
+/* Campo da busca global sem moldura (o tema escuro pintava borda e fundo) */
+html[data-theme="dark"] .crm-busca__topo .ant-input,
+html[data-theme="dark"] .crm-busca__topo .ant-input:hover,
+html[data-theme="dark"] .crm-busca__topo .ant-input:focus {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
 }

@@ -10,7 +10,7 @@ import { Button } from "../../components/ui";
 import { TaskFormModal, type TaskContextData } from "../../components/modal/agenda";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { formatPercentBR, normalizeText } from "../../lib/formatters";
+import { chaveDeEtapa, formatPercentBR } from "../../lib/formatters";
 import { buildKpiFilters, buildLeadFilters } from "../../lib/leadFilters";
 import { buildLeadCountByStageId, buildStagesVisiveis, type KpiRow } from "../../lib/kanbanStages";
 import {
@@ -318,7 +318,8 @@ export const ClienteList = () => {
     }, [persistedStagesRaw, pipelineAtivo]);
 
     const stageIdByName = useMemo(
-        () => new Map(stages.map((s) => [normalizeText(s.nome), String(s.id ?? s.nome)])),
+        // chaveDeEtapa: status legado "Em Negociacao" casa com a etapa "Em Negociação"
+        () => new Map(stages.map((s) => [chaveDeEtapa(s.nome), String(s.id ?? s.nome)])),
         [stages],
     );
     const stageById = useMemo(
@@ -340,12 +341,22 @@ export const ClienteList = () => {
         [stages],
     );
 
+    // Etapas marcadas como ganho/perdido: o filtro "Fechado"/"Perdido" acha
+    // também negócios em etapas renomeadas (não só pelo texto do status).
+    const etapasTerminais = useMemo(
+        () => ({
+            ganho: stages.filter((s) => s.persisted && s.ganho && s.id != null).map((s) => String(s.id)),
+            perdido: stages.filter((s) => s.persisted && s.perdido && s.id != null).map((s) => String(s.id)),
+        }),
+        [stages],
+    );
+
     const resolveLeadStageId = (cliente: KanbanLead): string => {
         const rawStageId = cliente?.stage_id ?? cliente?.stageId;
         if (rawStageId !== undefined && rawStageId !== null && String(rawStageId).trim()) {
             return String(rawStageId);
         }
-        const normalizedStatus = normalizeText(cliente?.status);
+        const normalizedStatus = chaveDeEtapa(cliente?.status);
         if (!normalizedStatus) return "";
         return stageIdByName.get(normalizedStatus) || "";
     };
@@ -382,8 +393,9 @@ export const ClienteList = () => {
                 etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
+                etapasTerminais,
             }),
-        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
+        [debouncedSearch, responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates, etapasTerminais],
     );
 
     const filterKey = useMemo(
@@ -405,8 +417,9 @@ export const ClienteList = () => {
                 etapasDoFunil,
                 canViewAllLeads,
                 ownerCandidates,
+                etapasTerminais,
             }),
-        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates],
+        [responsavelFiltro, temperaturaFiltro, pipelineAtivo, etapasDoFunil, canViewAllLeads, ownerCandidates, etapasTerminais],
     );
 
     // ---- KPI query (View agregada – dados já somados no banco) ----
@@ -622,7 +635,7 @@ export const ClienteList = () => {
             return;
         }
         const duplicated = manageableStages.some(
-            (s) => normalizeText(s.nome) === normalizeText(nome),
+            (s) => chaveDeEtapa(s.nome) === chaveDeEtapa(nome),
         );
         if (duplicated) {
             message.warning("Já existe uma coluna com esse nome.");

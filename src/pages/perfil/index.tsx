@@ -1,4 +1,5 @@
 import { LockOutlined, UserOutlined } from "@ant-design/icons";
+import { rotuloDoPapel } from "../../lib/permissions";
 import { Alert, Col, Form, Input, Row, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 import { Button, Card } from "../../components/ui";
@@ -106,7 +107,7 @@ export const PerfilPage = () => {
                                 <Input value={identity?.email ?? employee?.email ?? ""} disabled />
                             </Form.Item>
                             <Form.Item label="Papel" extra="O papel e o cargo são definidos pelo gerente, em Equipe.">
-                                <Input value={roleCandidate ?? "—"} disabled />
+                                <Input value={roleCandidate ? rotuloDoPapel(roleCandidate) : "—"} disabled />
                             </Form.Item>
                             <Form.Item label="Nome" name="nome" rules={[regra((v) => validarNome(v))]}>
                                 <Input maxLength={120} autoComplete="name" />

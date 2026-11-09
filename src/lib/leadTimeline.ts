@@ -123,7 +123,7 @@ const toTimelineTitle = (
         return "Status alterado";
     }
 
-    if (type === "ligacao") return "Ligacao registrada";
+    if (type === "ligacao") return "Ligação registrada";
     if (type === "upload") return "Arquivo anexado";
     if (type === "nota") return "Nota registrada";
     return "Atividade registrada";
@@ -501,7 +501,7 @@ export const uploadNewLeadDocument = async (
     const isPdf =
         file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
     if (!isPdf) {
-        throw new Error("Apenas arquivos PDF sao permitidos para documentos do lead.");
+        throw new Error("Apenas arquivos PDF são permitidos para documentos do lead.");
     }
 
     if (file.size > MAX_PDF_FILE_SIZE_BYTES) {
@@ -531,7 +531,7 @@ export const uploadNewLeadDocument = async (
 
     if (existingDocsError && !isSupabaseMissingColumn(existingDocsError)) {
         throw new Error(
-            `Falha ao validar versao de documentos existentes: ${existingDocsError.message}`,
+            `Falha ao validar versão de documentos existentes: ${existingDocsError.message}`,
         );
     }
 

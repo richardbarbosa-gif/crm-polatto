@@ -228,7 +228,7 @@ export const BaseClientesPage = () => {
             key: "nome",
             render: (_, record) => (
                 <div>
-                    <Typography.Text strong style={{ color: "#153046" }}>
+                    <Typography.Text strong style={{ color: "var(--crm-ink-900)" }}>
                         {record.nome || "-"}
                     </Typography.Text>
                     <div style={{ marginTop: 2 }}>
@@ -241,6 +241,7 @@ export const BaseClientesPage = () => {
         },
         {
             title: "Contato",
+            className: "crm-nowrap",
             key: "contato",
             render: (_, record) => (
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
@@ -259,6 +260,7 @@ export const BaseClientesPage = () => {
         },
         {
             title: "Valor",
+            className: "crm-nowrap",
             key: "valor",
             render: (_: unknown, record: ClienteBaseRecord) =>
                 formatCurrencyBRL(valorDoLead(record), "--"),
@@ -271,6 +273,7 @@ export const BaseClientesPage = () => {
         },
         {
             title: "Data",
+            className: "crm-nowrap",
             dataIndex: "created_at",
             key: "created_at",
             render: (value) => formatDateBR(value, "-"),
@@ -318,16 +321,17 @@ export const BaseClientesPage = () => {
         <div className="crm-page-shell">
             <div className="crm-page-header">
                 <div>
-                    <Typography.Title level={3} className="crm-page-header-title">
+                    <Typography.Title level={2} className="crm-page-header-title">
+                        <TeamOutlined />
                         Base de Clientes
                     </Typography.Title>
                     <Typography.Text className="crm-page-header-subtitle">
-                        Carteira de clientes com oportunidades fechadas e historico de contato.
+                        Carteira de clientes com oportunidades fechadas e histórico de contato.
                     </Typography.Text>
                     {!canViewAllLeads ? (
                         <div>
                             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                                Visao restrita para {ownerDisplayName}
+                                Visão restrita para {ownerDisplayName}
                             </Typography.Text>
                         </div>
                     ) : null}
@@ -361,7 +365,7 @@ export const BaseClientesPage = () => {
             <Card className="crm-card">
                 <div className="crm-toolbar">
                     <Input.Search
-                        placeholder="Buscar por nome, telefone ou email"
+                        placeholder="Buscar por nome, telefone ou e-mail"
                         value={searchText}
                         onChange={(event) => setSearchText(event.target.value)}
                         allowClear
@@ -381,7 +385,9 @@ export const BaseClientesPage = () => {
                             disabled={responsaveisDisponiveis.length === 0}
                         />
                         <Select
-                            style={{ width: 130 }}
+                            aria-label="Período"
+                            style={{ width: 170 }}
+                            popupMatchSelectWidth={false}
                             value={periodoDias}
                             onChange={(value) => setPeriodoDias(value)}
                             options={PERIOD_OPTIONS}

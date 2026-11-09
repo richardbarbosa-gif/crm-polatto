@@ -17,6 +17,7 @@ import {
     Card,
     Drawer,
     Empty,
+    Grid,
     List,
     Modal,
     Segmented,
@@ -41,19 +42,9 @@ import {
 import { supabaseClient } from "../../utility";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
+import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
 
-const TIPO_LABELS: Record<string, string> = {
-    visita: "Visita",
-    ligacao: "Ligação",
-    whatsapp: "WhatsApp",
-    email: "E-mail",
-};
-
-const getTipoLabel = (tipo?: string | null) => {
-    if (!tipo) return "Sem tipo";
-    if (tipo === "etec" || tipo === "etc") return "Outro";
-    return TIPO_LABELS[tipo] || tipo;
-};
+const getTipoLabel = (tipo?: string | null) => rotuloTipoAtividade(tipo);
 
 const getClienteFallbackLabel = (clienteId?: string | number | null) => {
     if (!clienteId) return "Cliente não informado";
@@ -142,6 +133,8 @@ export const AgendaPage = () => {
 
     const [visibleDate, setVisibleDate] = useState(dayjs());
     const [diaSelecionado, setDiaSelecionado] = useState<Dayjs | null>(null);
+    const telas = Grid.useBreakpoint();
+    const celular = telas.md === false;
 
     const [tarefaEmFoco, setTarefaEmFoco] = useState<TarefaRecord | null>(null);
     const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -318,6 +311,26 @@ export const AgendaPage = () => {
         const tarefasDoDia = getTarefasDoDia(value);
         if (!tarefasDoDia.length) return null;
 
+        // Celular: a célula tem ~50px e o título virava uma letra por linha.
+        // Lá mostramos só marcadores; tocar no dia abre a lista completa.
+        if (celular) {
+            return (
+                <div className="crm-agenda-marcadores" aria-label={`${tarefasDoDia.length} agendamento(s)`}>
+                    {tarefasDoDia.slice(0, 3).map((tarefa) => (
+                        <Badge
+                            key={tarefa.id}
+                            status={getSituationBadgeStatus(
+                                getTaskSituation(tarefa.data_vencimento, dayjs(), getExecutionStatus(tarefa)),
+                            )}
+                        />
+                    ))}
+                    {tarefasDoDia.length > 3 ? (
+                        <span className="crm-agenda-marcadores__mais">+{tarefasDoDia.length - 3}</span>
+                    ) : null}
+                </div>
+            );
+        }
+
         return (
             <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {tarefasDoDia.slice(0, 3).map((tarefa) => (
@@ -404,6 +417,7 @@ export const AgendaPage = () => {
         return (
             <div className="crm-page-shell">
                 <Typography.Title level={2} className="crm-page-header-title">
+                    <CalendarOutlined />
                     Agenda
                 </Typography.Title>
                 <Alert
@@ -430,6 +444,7 @@ export const AgendaPage = () => {
             <div className="crm-page-header">
                 <div>
                     <Typography.Title level={2} className="crm-page-header-title">
+                        <CalendarOutlined />
                         Agenda
                     </Typography.Title>
                     <Typography.Text className="crm-page-header-subtitle">
@@ -447,7 +462,9 @@ export const AgendaPage = () => {
 
             <Card className="crm-card crm-agenda-calendar-card">
                 <Calendar
-                    dateCellRender={dateCellRender}
+                    // Só os dias recebem conteúdo. Devolver info.originNode nos meses
+                    // (visão "Ano") repetia o nome do mês dentro da célula.
+                    cellRender={(valor, info) => (info.type === "date" ? dateCellRender(valor) : null)}
                     onSelect={handleDateSelect}
                     onPanelChange={handlePanelChange}
                 />

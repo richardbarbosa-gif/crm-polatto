@@ -19,13 +19,14 @@ import {
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { propsMoeda } from "../../lib/moedaInput";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
+import { rotuloDoPapel } from "../../lib/permissions";
 
 type GoalViewMode = "valor" | "quantidade";
 
@@ -231,23 +232,24 @@ export const InsightsGoalsPage = () => {
     return (
         <div style={{ padding: 20 }}>
             <InsightsHeader
-                title="Dashboard de Quota"
-                subtitle={`Motor de performance em tempo real. Mês: ${monthRef.format("MM/YYYY")}`}
+                icon={<FlagOutlined />}
+                title="Metas da equipe"
+                subtitle={`Desempenho do time em tempo real — ${monthRef.format("MM/YYYY")}`}
                 extra={
                     <Space wrap>
                         <DatePicker picker="month" value={monthRef} onChange={(val) => setMonthRef(val || dayjs())} allowClear={false} />
                         <Segmented<GoalViewMode> options={[{ label: "Receita (R$)", value: "valor" }, { label: "Volume (Qtd)", value: "quantidade" }]} value={viewMode} onChange={setViewMode} />
                         {/* Metas são definidas pelo gerente (o banco recusa gravação de vendedor) */}
                         {isGerente ? (
-                            <Button type="primary" icon={<PlusOutlined />} onClick={openBatchModal}>Definir Metas</Button>
+                            <Button type="primary" icon={<PlusOutlined />} onClick={openBatchModal}>Definir metas</Button>
                         ) : null}
                     </Space>
                 }
             />
 
             <IntroCard
-                title="Leaderboard & Pace"
-                description="Acompanhe quem está no ritmo para bater a meta e veja o ranking da equipa atualizado a cada negócio fechado."
+                title="Ranking e ritmo do mês"
+                description="Acompanhe quem está no ritmo para bater a meta e veja o ranking da equipe atualizado a cada negócio fechado."
             />
 
             {schemaMissing && <MissingSchemaAlert description="Estrutura de metas não encontrada no banco." />}
@@ -256,7 +258,7 @@ export const InsightsGoalsPage = () => {
             {/* KPIs GLOBAIS */}
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 20 }}>
                 <StatCard
-                    title={viewMode === "valor" ? "Quota Global (R$)" : "Meta Global (Qtd)"}
+                    title={viewMode === "valor" ? "Meta global (R$)" : "Meta global (Qtd)"}
                     value={viewMode === "valor" ? summary.totalTargetValue : summary.totalTargetWins}
                     prefix={<FlagOutlined style={{ color: "#2563eb" }} />}
                     accentColor="#2563eb"
@@ -293,19 +295,23 @@ export const InsightsGoalsPage = () => {
                                 title: "Posição",
                                 width: 80,
                                 align: 'center',
-                                render: (_, __, index) => (
-                                    index === 0 ? <CrownOutlined style={{ color: '#eab308', fontSize: 24 }} /> : 
+                                // Coroa só para quem já vendeu: sem resultado no mês,
+                                // ninguém "lidera" com R$ 0,00.
+                                render: (_, record, index) => {
+                                    const temResultado = (viewMode === "valor" ? record.actualValue : record.actualWins) > 0;
+                                    if (!temResultado) return <Typography.Text type="secondary">{index + 1}º</Typography.Text>;
+                                    return index === 0 ? <CrownOutlined style={{ color: '#eab308', fontSize: 24 }} /> :
                                     index === 1 ? <CrownOutlined style={{ color: '#94a3b8', fontSize: 20 }} /> :
                                     index === 2 ? <CrownOutlined style={{ color: '#b45309', fontSize: 20 }} /> :
-                                    <Typography.Text type="secondary">{index + 1}º</Typography.Text>
-                                ),
+                                    <Typography.Text type="secondary">{index + 1}º</Typography.Text>;
+                                },
                             },
                             {
                                 title: "Consultor",
                                 render: (_, record) => (
                                     <Space direction="vertical" size={0}>
                                         <Typography.Text strong style={{ fontSize: 15 }}>{record.employee_name}</Typography.Text>
-                                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{record.role}</Typography.Text>
+                                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>{rotuloDoPapel(record.role)}</Typography.Text>
                                     </Space>
                                 ),
                             },
@@ -319,7 +325,7 @@ export const InsightsGoalsPage = () => {
                                 ),
                             },
                             {
-                                title: viewMode === "valor" ? "Quota (R$)" : "Meta (Qtd)",
+                                title: viewMode === "valor" ? "Meta (R$)" : "Meta (Qtd)",
                                 align: 'right',
                                 render: (_, record) => (
                                     <Typography.Text type="secondary">
@@ -349,18 +355,18 @@ export const InsightsGoalsPage = () => {
                                         <div style={{ paddingRight: 16 }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                                                 <Typography.Text strong style={{ color: bateuMeta ? '#10b981' : '#3b82f6' }}>
-                                                    {progresso.toFixed(1)}%
+                                                    {formatPercentBR(progresso)}%
                                                 </Typography.Text>
                                                 {metricasTempo.isMesAtual && !bateuMeta && (
                                                     <Tooltip title="Ritmo de vendas projetado para o fim do mês">
                                                         <Tag color={noRitmo ? "processing" : "warning"} bordered={false} style={{ margin: 0 }}>
-                                                            {noRitmo ? <FireOutlined /> : <FallOutlined />} {noRitmo ? "No Ritmo" : "Atrasado"}
+                                                            {noRitmo ? <FireOutlined /> : <FallOutlined />} {noRitmo ? "No ritmo" : "Atrasado"}
                                                         </Tag>
                                                     </Tooltip>
                                                 )}
                                                 {bateuMeta && <Tag color="success" bordered={false} style={{ margin: 0 }}><TrophyOutlined /> Bateu!</Tag>}
                                             </div>
-                                            <Progress 
+                                            <Progress format={formatoProgresso} 
                                                 percent={progresso} 
                                                 showInfo={false} 
                                                 size="small"
@@ -379,12 +385,12 @@ export const InsightsGoalsPage = () => {
             {/* MODAL DE DEFINIÇÃO DE METAS EM LOTE */}
            {/* MODAL DE DEFINIÇÃO DE METAS EM LOTE */}
             <Modal
-                title={`Definir Quotas: ${monthRef.format("MMMM/YYYY")}`}
+                title={`Definir metas: ${monthRef.format("MMMM/YYYY")}`}
                 open={isModalOpen}
                 width={700}
                 onCancel={() => setIsModalOpen(false)}
                 onOk={handleSaveBatch}
-                okText="Salvar Quotas"
+                okText="Salvar metas"
                 confirmLoading={isSaving}
                 destroyOnClose
             >
@@ -401,7 +407,7 @@ export const InsightsGoalsPage = () => {
                                                 <Typography.Text strong>{form.getFieldValue(['goals', field.name, 'employee_name'])}</Typography.Text>
                                             </Form.Item>
                                             
-                                            <Form.Item label={index === 0 ? "Quota de Receita (R$)" : ""} {...field} name={[field.name, 'target_value']} style={{ flex: 1.5, marginBottom: 12 }}>
+                                            <Form.Item label={index === 0 ? "Meta de receita (R$)" : ""} {...field} name={[field.name, 'target_value']} style={{ flex: 1.5, marginBottom: 12 }}>
                                                 {/* Correção AQUI: min={0 as number} */}
                                                 <InputNumber {...propsMoeda} />
                                             </Form.Item>

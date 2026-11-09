@@ -2,6 +2,16 @@ export const normalizeText = (value?: string | null): string => {
     return (value ?? "").toString().trim().toLowerCase();
 };
 
+/**
+ * Chave para casar NOME DE ETAPA com o status do negócio: ignora acento e
+ * espaços repetidos. Negócios antigos gravaram "Em Negociacao" (sem acento) e
+ * a etapa padrão hoje se chama "Em Negociação". Uso restrito a etapas: para
+ * nomes de pessoas (dono do lead, permissões) continua valendo normalizeText,
+ * em que "José" e "Jose" não são a mesma pessoa.
+ */
+export const chaveDeEtapa = (value?: string | null): string =>
+    normalizeText(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ");
+
 const toNumber = (value: unknown): number | null => {
     if (typeof value === "number") {
         return Number.isFinite(value) ? value : null;
@@ -112,3 +122,7 @@ export const formatCpfCnpj = (value?: string | null): string => {
 export const isClosedStatus = (status?: string | null): boolean => {
     return normalizeText(status) === "fechado";
 };
+
+/** Texto das barras de progresso em pt-BR: "32,5%", "100%" (antd mostraria "32.5%"). */
+export const formatoProgresso = (percentual?: number): string =>
+    `${(Number.isFinite(percentual ?? NaN) ? (percentual as number) : 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;

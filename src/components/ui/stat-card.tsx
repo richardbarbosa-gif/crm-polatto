@@ -49,6 +49,9 @@ export const StatCard = ({
                 value={value}
                 prefix={prefix}
                 suffix={suffix}
+                // pt-BR: o padrão do antd é "1,234.5" (formato americano)
+                groupSeparator="."
+                decimalSeparator=","
                 valueStyle={{
                     fontSize: 22,
                     fontWeight: 700,
