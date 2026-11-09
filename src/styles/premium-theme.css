@@ -2713,7 +2713,13 @@ html[data-theme="dark"] .wmde-markdown {
    entre palavras, rola para o lado quando não couber e nunca parte
    dados de formato fixo (classe crm-nowrap na coluna).
    =================================================================== */
-.ant-table-wrapper .ant-table-cell {
+/* Especificidade acima da do antd (.ant-table-wrapper .ant-table-tbody > tr > td),
+   que é quem aplica o overflow-wrap: break-word. */
+.ant-table-wrapper .ant-table .ant-table-thead > tr > th,
+.ant-table-wrapper .ant-table .ant-table-tbody > tr > td,
+.ant-table-wrapper .ant-table .ant-table-cell,
+.ant-table-wrapper .ant-table .ant-typography {
+    /* o Typography do antd também força word-break: break-word no texto */
     overflow-wrap: normal;
     word-break: normal;
 }
