@@ -236,17 +236,17 @@ export const InsightsPanelPage = () => {
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Pipeline aberto"
-                        value={metrics.pipelineValue}
+                        value={formatCurrencyBRL(metrics.pipelineValue, "R$ 0,00")}
                         prefix={<RiseOutlined style={{ color: "#4c8bf5" }} />}
                         accentColor="#4c8bf5"
                         valueStyle={{ color: "#1d4ed8" }}
-                        subtitle={formatCurrencyBRL(metrics.pipelineValue, "R$ 0,00")}
+                        subtitle="Negócios em aberto (nem ganhos nem perdidos)"
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
                     <StatCard
                         title="Ganho no mês"
-                        value={metrics.closedThisMonthValue}
+                        value={formatCurrencyBRL(metrics.closedThisMonthValue, "R$ 0,00")}
                         prefix={<FlagOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
                         valueStyle={{ color: "#166534" }}
