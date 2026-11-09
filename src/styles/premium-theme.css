@@ -2891,3 +2891,12 @@ html[data-theme="dark"] .crm-form-section.crm-form-endereco {
         text-align: left;
     }
 }
+
+/* Campo da busca global sem moldura (o tema escuro pintava borda e fundo) */
+html[data-theme="dark"] .crm-busca__topo .ant-input,
+html[data-theme="dark"] .crm-busca__topo .ant-input:hover,
+html[data-theme="dark"] .crm-busca__topo .ant-input:focus {
+    background: transparent !important;
+    border-color: transparent !important;
+    box-shadow: none !important;
+}
