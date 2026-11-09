@@ -1,4 +1,4 @@
-import { normalizeText } from "./formatters";
+import { chaveDeEtapa } from "./formatters";
 
 export type LeadStage = {
     id: string;
@@ -63,7 +63,7 @@ const dedupeStatusNames = (values: string[]): string[] => {
     const map = new Map<string, string>();
 
     values.forEach((value) => {
-        const normalized = normalizeText(value);
+        const normalized = chaveDeEtapa(value);
         if (!normalized) {
             return;
         }
@@ -176,7 +176,7 @@ export const buildLeadStages = (stagesData?: StageRecord[] | null): LeadStage[] 
     // + cópia do tenant). Etapas homônimas de funis diferentes são mantidas.
     const deduped = new Map<string, LeadStage>();
     normalized.forEach((stage) => {
-        const nome = normalizeText(stage.nome);
+        const nome = chaveDeEtapa(stage.nome);
         if (!nome) return;
         const key = `${stage.pipeline_id ?? ""}::${nome}`;
         if (deduped.has(key)) return;
@@ -208,13 +208,13 @@ export const coerceLeadStatusValue = (
         return exact.value;
     }
 
-    const normalizedValue = normalizeText(value);
+    const normalizedValue = chaveDeEtapa(value);
     if (!normalizedValue) {
         return fallback;
     }
 
     const normalizedMatch = activeOptions.find(
-        (option) => normalizeText(option.value) === normalizedValue,
+        (option) => chaveDeEtapa(option.value) === normalizedValue,
     );
     if (normalizedMatch) {
         return normalizedMatch.value;
@@ -240,12 +240,12 @@ export const coerceLeadStageIdValue = (
         return String(exact.id);
     }
 
-    const normalizedValue = normalizeText(asString);
+    const normalizedValue = chaveDeEtapa(asString);
     if (!normalizedValue) {
         return fallback;
     }
 
-    const byName = availableStages.find((stage) => normalizeText(stage.nome) === normalizedValue);
+    const byName = availableStages.find((stage) => chaveDeEtapa(stage.nome) === normalizedValue);
     if (byName) {
         return String(byName.id);
     }

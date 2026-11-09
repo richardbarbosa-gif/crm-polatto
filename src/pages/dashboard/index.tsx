@@ -202,7 +202,7 @@ export const DashboardPage = () => {
                 />
             ) : null}
 
-            <div className="crm-kpi-grid crm-kpi-grid--dashboard">
+            <div className="crm-kpi-grid">
                 <div>
                     <div className="crm-dashboard-hero" style={{ borderRadius: 14, padding: "20px 22px 18px", position: "relative", overflow: "hidden" }}>
                         <div style={{ position: "absolute", top: -30, right: -20, width: 120, height: 120, borderRadius: "50%", background: "radial-gradient(circle, rgba(96,165,250,0.15) 0%, transparent 70%)" }} />

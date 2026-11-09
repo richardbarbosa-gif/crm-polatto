@@ -258,7 +258,7 @@ export const InsightsGoalsPage = () => {
             {/* KPIs GLOBAIS */}
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 20 }}>
                 <StatCard
-                    title={viewMode === "valor" ? "Meta global (R$)" : "Meta Global (Qtd)"}
+                    title={viewMode === "valor" ? "Meta global (R$)" : "Meta global (Qtd)"}
                     value={viewMode === "valor" ? summary.totalTargetValue : summary.totalTargetWins}
                     prefix={<FlagOutlined style={{ color: "#2563eb" }} />}
                     accentColor="#2563eb"

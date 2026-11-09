@@ -9,7 +9,6 @@ import {
     Form,
     Input,
     InputNumber,
-    type InputRef,
     Modal,
     Row,
     Select,
@@ -41,7 +40,7 @@ import {
     resolveAutomaticLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
-import { buscarEnderecoPorCep, formatarCep } from "../../lib/cep";
+import { useBuscaCep } from "../../hooks/useBuscaCep";
 import type { PipelineRecord, PipelineStageRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
 import { CustomFieldsForm } from "../../components/custom-fields";
@@ -128,7 +127,6 @@ export const ClienteCreate = () => {
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
     const [paisSelecionado, setPaisSelecionado] = useState("+55");
     const [tipoPessoa, setTipoPessoa] = useState<TipoPessoa>("pf");
-    const numeroInputRef = useRef<InputRef>(null);
     const [propostaFile, setPropostaFile] = useState<File | null>(null);
     const [contaLuzFile, setContaLuzFile] = useState<File | null>(null);
     const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -191,6 +189,7 @@ export const ClienteCreate = () => {
             }
         },
     });
+    const { numeroInputRef, handleCepChange } = useBuscaCep(form);
 
     const { query: stagesQuery } = useList<PipelineStageRecord>({
         resource: "pipeline_stages",
@@ -300,22 +299,6 @@ export const ClienteCreate = () => {
         form.setFieldValue("telefone", formatarTelefone(event.target.value, paisSelecionado));
     };
 
-    const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const cep = formatarCep(event.target.value);
-        form.setFieldValue("cep", cep);
-        if (cep.replace(/\D/g, "").length !== 8) return;
-
-        const resultado = await buscarEnderecoPorCep(cep);
-        if (resultado.status === "ok") {
-            form.setFieldValue("endereco_instalacao", resultado.endereco);
-            message.success("Endereço encontrado.");
-            setTimeout(() => numeroInputRef.current?.focus(), 100);
-        } else if (resultado.status === "nao_encontrado") {
-            message.warning("CEP não encontrado. Preencha o endereço manualmente.");
-        } else {
-            message.warning("Não foi possível buscar o CEP. Preencha o endereço manualmente.");
-        }
-    };
 
     const toUploadFileList = (file: File | null, uid: string): UploadFile[] => {
         if (!file) return [];

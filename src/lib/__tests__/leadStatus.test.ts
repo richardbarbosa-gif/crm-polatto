@@ -63,4 +63,10 @@ describe("pipelineDaEtapa e coerceLeadStageIdValue", () => {
         const stages = buildLeadStages(etapas);
         expect(coerceLeadStageIdValue("Proposta", stages)).toBe("2");
     });
+
+    it("status legado sem acento casa com a etapa acentuada", () => {
+        // Negócios antigos gravaram "Em Negociacao"; a etapa padrão é "Em Negociação".
+        expect(coerceLeadStageIdValue("Em Negociacao", DEFAULT_LEAD_STAGES)).toBe("negociacao");
+        expect(coerceLeadStageIdValue("  em  negociação ", DEFAULT_LEAD_STAGES)).toBe("negociacao");
+    });
 });

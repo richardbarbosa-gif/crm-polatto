@@ -462,7 +462,9 @@ export const AgendaPage = () => {
 
             <Card className="crm-card crm-agenda-calendar-card">
                 <Calendar
-                    cellRender={(valor, info) => (info.type === "date" ? dateCellRender(valor) : info.originNode)}
+                    // Só os dias recebem conteúdo. Devolver info.originNode nos meses
+                    // (visão "Ano") repetia o nome do mês dentro da célula.
+                    cellRender={(valor, info) => (info.type === "date" ? dateCellRender(valor) : null)}
                     onSelect={handleDateSelect}
                     onPanelChange={handlePanelChange}
                 />

@@ -3,8 +3,8 @@ import { CustomFieldsForm } from "../../components/custom-fields";
 import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 import { useList, type HttpError } from "@refinedev/core";
-import { Alert, Col, Form, Input, InputNumber, Row, Select, Spin, message, type InputRef } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Col, Form, Input, InputNumber, Row, Select, Spin } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
@@ -27,7 +27,7 @@ import {
     resolveEditableLeadTemperature,
 } from "../../lib/leadTemperature";
 import { propsMoeda } from "../../lib/moedaInput";
-import { buscarEnderecoPorCep, formatarCep } from "../../lib/cep";
+import { useBuscaCep } from "../../hooks/useBuscaCep";
 import { CampoOrigem } from "../../components/origem/campo-origem";
 import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
 import { origemDoLead, origemParaDadosExtras } from "../../lib/origemLead";
@@ -225,23 +225,7 @@ export const ClienteEdit = () => {
         });
     };
 
-    const numeroInputRef = useRef<InputRef>(null);
-    const handleCepChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const cep = formatarCep(event.target.value);
-        form.setFieldValue("cep", cep);
-        if (cep.replace(/\D/g, "").length !== 8) return;
-
-        const resultado = await buscarEnderecoPorCep(cep);
-        if (resultado.status === "ok") {
-            form.setFieldValue("endereco_instalacao", resultado.endereco);
-            message.success("Endereço encontrado.");
-            setTimeout(() => numeroInputRef.current?.focus(), 100);
-        } else if (resultado.status === "nao_encontrado") {
-            message.warning("CEP não encontrado. Preencha o endereço manualmente.");
-        } else {
-            message.warning("Não foi possível buscar o CEP. Preencha o endereço manualmente.");
-        }
-    };
+    const { numeroInputRef, handleCepChange } = useBuscaCep(form);
 
     if (recordError) {
         return (

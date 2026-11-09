@@ -1,7 +1,7 @@
 import { HistoryOutlined, RollbackOutlined } from "@ant-design/icons";
 import { useList, useUpdate, type CrudFilter } from "@refinedev/core";
 import { Alert, Col, Modal, Row, Segmented, Skeleton, Table, Tag, Typography, message } from "antd";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
@@ -107,7 +107,18 @@ export const HistoricoPage = () => {
         queryOptions: { enabled: !isLoadingAccess && etapasProntas, retry: false },
     });
 
-    const desfechoDe = (registro: ClienteRecord) => classificarDesfecho(registro, etapasPorId);
+    // Toda linha daqui é ganho ou perdido (o filtro garante). Se a etapa
+    // gravada for de outra fase (status e etapa dessincronizados em dado
+    // legado), vale o texto do status, que foi o que trouxe a linha: assim os
+    // totais sempre batem com a lista.
+    const desfechoDe = useCallback(
+        (registro: ClienteRecord): "ganho" | "perdido" => {
+            const desfecho = classificarDesfecho(registro, etapasPorId);
+            if (desfecho !== "aberto") return desfecho;
+            return textoIndicaPerda(registro.status) ? "perdido" : "ganho";
+        },
+        [etapasPorId],
+    );
 
     const registros = useMemo(
         () => ((listQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean),
@@ -121,14 +132,14 @@ export const HistoricoPage = () => {
 
     const kpis = useMemo(() => {
         const rows = ((kpiQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean);
-        const ganhos = rows.filter((r) => classificarDesfecho(r, etapasPorId) === "ganho");
-        const perdidos = rows.filter((r) => classificarDesfecho(r, etapasPorId) === "perdido");
+        const ganhos = rows.filter((r) => desfechoDe(r) === "ganho");
+        const perdidos = rows.filter((r) => desfechoDe(r) === "perdido");
         const valorGanho = ganhos.reduce(
             (acc, r) => acc + valorDoLead(r),
             0,
         );
         return { totalGanhos: ganhos.length, totalPerdidos: perdidos.length, valorGanho };
-    }, [kpiQuery?.data?.data, etapasPorId]);
+    }, [kpiQuery?.data?.data, desfechoDe]);
 
     /**
      * Primeira etapa em aberto do funil do negócio. Reabrir gravava
