@@ -48,6 +48,11 @@ for f in "$REPO_DIR"/database/migrations/*.sql; do
 done
 echo "  ok — todas as migrations são idempotentes"
 
+# As suítes cadastram empresas pela API (provisionar_tenant). Em produção
+# o cadastro nasce FECHADO (migration 18); aqui o operador o abre, como
+# manda o README. A suíte 13 prova o comportamento com ele fechado.
+psql -v ON_ERROR_STOP=1 -q -c "update public.plataforma_config set cadastro_aberto = true;" >/dev/null
+
 echo "==> Suíte 1: isolamento multi-tenant, migração, LGPD"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/01_testes_isolamento.sql"
 
@@ -156,6 +161,13 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/11_teste_origem_perfil.sql"
 echo "==> Suíte 12: automações do funil (migration 17) — gatilhos, condições, idempotência, isolamento, sem laço, falha isolada"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/12_teste_automacoes.sql"
 
+echo "==> Suíte 13: equipe sem auth.users, cadastro fechado, histórico inviolável e RLS com índice (migration 18)"
+# Recria a "produção suja" (RPCs antigas que gravavam em auth.users e uma
+# policy no formato lento) e reaplica a 18 por cima, como numa virada.
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/tests/13_preparo_estado_antigo.sql" >/dev/null
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/migrations/2026-11-10_18_equipe_historico_rls.sql" >/dev/null 2>&1
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/13_teste_equipe_historico_rls.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.
@@ -175,4 +187,5 @@ for f in "$REPO_DIR"/database/migrations/2026-07-19_01_*.sql "$REPO_DIR"/databas
     psql -v ON_ERROR_STOP=1 -q -f "$f" >/dev/null 2>&1 || { echo "FALHOU (virada do banco novo): $(basename "$f")"; exit 1; }
 done
 echo "  ok — virada do banco novo concluída"
+psql -v ON_ERROR_STOP=1 -q -c "update public.plataforma_config set cadastro_aberto = true;" >/dev/null
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/08_teste_banco_novo.sql"

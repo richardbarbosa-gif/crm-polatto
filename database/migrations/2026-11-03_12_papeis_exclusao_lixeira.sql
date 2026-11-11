@@ -288,193 +288,13 @@ as $$
     end;
 $$;
 
-create or replace function public.criar_usuario_equipe(
-    p_email text,
-    p_senha text,
-    p_nome text,
-    p_cargo text default 'vendedor',
-    p_role text default 'vendedor'
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, auth, extensions
-as $$
-declare
-    v_tenant uuid := public.current_tenant_id();
-    v_email text := lower(btrim(coalesce(p_email, '')));
-    v_nome text := btrim(coalesce(p_nome, ''));
-    v_papel text := public.normalizar_papel(p_role);
-    v_cargo text;
-    v_user uuid;
-    v_func_antigo uuid;
-begin
-    if auth.uid() is null then
-        return jsonb_build_object('success', false, 'error', 'Faça login para continuar.');
-    end if;
-    if v_tenant is null or not public.eh_admin_do_tenant(v_tenant) then
-        return jsonb_build_object('success', false, 'error', 'Somente o gerente da empresa pode cadastrar usuários.');
-    end if;
-
-    perform public.enforce_rate_limit('criar_usuario_equipe', 20, interval '1 hour');
-
-    if v_nome = '' then
-        return jsonb_build_object('success', false, 'error', 'Informe o nome.');
-    end if;
-    if v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then
-        return jsonb_build_object('success', false, 'error', 'E-mail inválido.');
-    end if;
-    if length(coalesce(p_senha, '')) < 8 then
-        return jsonb_build_object('success', false, 'error', 'A senha precisa ter pelo menos 8 caracteres.');
-    end if;
-    if exists (select 1 from auth.users u where lower(u.email) = v_email) then
-        return jsonb_build_object('success', false, 'error', 'Este e-mail já possui conta.');
-    end if;
-
-    -- Funcionário desta empresa com o mesmo e-mail que ainda não tem login
-    -- (cadastrado só como membro da equipe) ou que foi removido: o login é
-    -- ligado à MESMA linha (mantém histórico, metas e relatórios). Se já
-    -- tem login, ou é de outra empresa, recusa.
-    select f.id into v_func_antigo
-    from public.funcionarios f
-    where lower(f.email) = v_email
-    limit 1;
-
-    if v_func_antigo is not null and not exists (
-        select 1 from public.funcionarios f
-        where f.id = v_func_antigo and f.tenant_id = v_tenant
-          and (f.deleted_at is not null or f.user_id is null)
-    ) then
-        return jsonb_build_object('success', false, 'error', 'Este e-mail já está cadastrado na equipe.');
-    end if;
-
-    v_cargo := coalesce(nullif(btrim(p_cargo), ''), initcap(v_papel));
-    v_user := gen_random_uuid();
-
-    insert into auth.users (
-        id, instance_id, aud, role, email, encrypted_password,
-        email_confirmed_at, confirmation_token, recovery_token,
-        email_change_token_new, raw_app_meta_data, raw_user_meta_data,
-        created_at, updated_at
-    ) values (
-        v_user, '00000000-0000-0000-0000-000000000000',
-        'authenticated', 'authenticated', v_email, crypt(p_senha, gen_salt('bf')),
-        now(), '', '', '',
-        jsonb_build_object('provider', 'email', 'providers', array['email']),
-        jsonb_build_object('full_name', v_nome),
-        now(), now()
-    );
-
-    if to_regclass('auth.identities') is not null then
-        insert into auth.identities (
-            id, user_id, provider_id, identity_data, provider,
-            last_sign_in_at, created_at, updated_at
-        ) values (
-            v_user, v_user, v_user::text,
-            jsonb_build_object('sub', v_user::text, 'email', v_email, 'email_verified', true),
-            'email', now(), now(), now()
-        );
-    end if;
-
-    if v_func_antigo is not null then
-        update public.funcionarios
-        set user_id = v_user, nome = v_nome, cargo = v_cargo, ativo = true, deleted_at = null
-        where id = v_func_antigo;
-    else
-        insert into public.funcionarios (id, user_id, nome, email, cargo, ativo, tenant_id)
-        values (v_user, v_user, v_nome, v_email, v_cargo, true, v_tenant);
-    end if;
-
-    insert into public.utilizadores_empresas (auth_uid, empresa_id, role)
-    values (v_user, v_tenant, v_papel);
-
-    return jsonb_build_object(
-        'success', true,
-        'user_id', coalesce(v_func_antigo, v_user),
-        'tenant_id', v_tenant,
-        'message', 'Usuário criado. Ele já pode entrar com o e-mail e a senha informados.'
-    );
-exception when others then
-    return jsonb_build_object('success', false, 'error', sqlerrm);
-end;
-$$;
-
-comment on function public.criar_usuario_equipe(text, text, text, text, text) is 'Gerente cadastra um membro (login + funcionário + vínculo) na empresa ATIVA. Papel limitado a gerente/vendedor.';
-
-create or replace function public.excluir_usuario_equipe(p_user_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, auth
-as $$
-declare
-    v_tenant uuid := public.current_tenant_id();
-    v_nome text;
-    v_email text;
-begin
-    if auth.uid() is null or v_tenant is null or not public.eh_admin_do_tenant(v_tenant) then
-        return jsonb_build_object('success', false, 'error', 'Somente o gerente da empresa pode remover membros.');
-    end if;
-    if p_user_id is null or p_user_id = auth.uid() then
-        return jsonb_build_object('success', false, 'error', 'Você não pode remover a si mesmo.');
-    end if;
-
-    select f.nome, lower(f.email) into v_nome, v_email
-    from public.funcionarios f
-    where (f.id = p_user_id or f.user_id = p_user_id)
-      and f.tenant_id = v_tenant
-    limit 1;
-
-    if v_nome is null and not exists (
-        select 1 from public.utilizadores_empresas ue
-        where ue.auth_uid = p_user_id and ue.empresa_id = v_tenant
-    ) then
-        return jsonb_build_object('success', false, 'error', 'Membro não encontrado nesta empresa.');
-    end if;
-
-    if exists (select 1 from public.system_admins sa where lower(sa.email) = v_email) then
-        return jsonb_build_object('success', false, 'error', 'Administradores da plataforma não podem ser removidos por aqui.');
-    end if;
-
-    -- A empresa nunca fica sem gerente
-    if exists (
-        select 1 from public.utilizadores_empresas ue
-        where ue.auth_uid = p_user_id and ue.empresa_id = v_tenant
-          and public.normalizar_papel(ue.role) = 'gerente'
-    ) and not exists (
-        select 1 from public.utilizadores_empresas ue
-        where ue.empresa_id = v_tenant and ue.auth_uid <> p_user_id
-          and public.normalizar_papel(ue.role) = 'gerente'
-    ) then
-        return jsonb_build_object('success', false, 'error', 'A empresa precisa de pelo menos um gerente.');
-    end if;
-
-    delete from public.utilizadores_empresas
-    where auth_uid = p_user_id and empresa_id = v_tenant;
-
-    -- Funcionário vai para a lixeira (relatórios mantêm o nome)
-    update public.funcionarios
-    set ativo = false, deleted_at = coalesce(deleted_at, now())
-    where (id = p_user_id or user_id = p_user_id) and tenant_id = v_tenant;
-
-    -- O login só some se a pessoa não pertencer a nenhuma outra empresa
-    if not exists (select 1 from public.utilizadores_empresas ue where ue.auth_uid = p_user_id) then
-        if to_regclass('auth.identities') is not null then
-            delete from auth.identities where user_id = p_user_id;
-        end if;
-        delete from auth.users where id = p_user_id;
-    end if;
-
-    return jsonb_build_object(
-        'success', true,
-        'message', coalesce(v_nome, 'Membro') || ' removido da equipe.'
-    );
-exception when others then
-    return jsonb_build_object('success', false, 'error', sqlerrm);
-end;
-$$;
-
-comment on function public.excluir_usuario_equipe(uuid) is 'Gerente remove um membro da empresa ATIVA: desfaz o vínculo, manda o funcionário para a lixeira e apaga o login se ele não tiver outra empresa.';
+-- criar_usuario_equipe / excluir_usuario_equipe moravam aqui e gravavam
+-- direto em auth.users / auth.identities. Foram substituídas na migration
+-- 18 por equipe_preparar_criacao / equipe_concluir_criacao /
+-- equipe_remover_membro + Edge Function `equipe-usuarios` (o login é
+-- criado e apagado pela API de administração do Auth). Não recriar aqui:
+-- reexecutar esta migration traria de volta a escrita em tabela interna
+-- do Supabase.
 
 create or replace function public.alterar_papel_membro(p_user_id uuid, p_papel text)
 returns jsonb
@@ -546,7 +366,7 @@ begin
         select p.oid::regprocedure as fn
         from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
         where ns.nspname = 'public'
-          and p.proname in ('criar_usuario_equipe', 'excluir_usuario_equipe', 'alterar_papel_membro',
+          and p.proname in ('alterar_papel_membro',
                             'check_feature', 'registro_eh_do_usuario', 'restaurar_registro')
     loop
         execute format('revoke execute on function %s from public', r.fn);

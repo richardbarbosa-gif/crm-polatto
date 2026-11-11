@@ -9,7 +9,7 @@
 --      usuário AUTENTICADO. A empresa ativa do seletor (header/claim) é
 --      respeitada, mas SEMPRE validada contra os vínculos reais — o valor
 --      enviado pelo cliente nunca é usado sem conferência.
---   4. Rate limiting genérico (aplicar em criar_usuario_equipe)
+--   4. Rate limiting genérico (usado pelo cadastro de equipe, migration 18)
 --   5. RLS por tenant nas tabelas do modelo novo
 --
 -- IDEMPOTENTE. Executar APÓS o arquivo 01.
@@ -480,7 +480,7 @@ end $$;
 
 -- ---------------------------------------------------------------------
 -- Item 4 do escopo: RATE LIMITING genérico.
--- Uso dentro de qualquer função sensível (ex: criar_usuario_equipe):
+-- Uso dentro de qualquer função sensível (ex: equipe_preparar_criacao):
 --   perform public.enforce_rate_limit('criar_usuario_equipe', 10, interval '1 hour');
 -- Lança exceção quando o usuário autenticado excede o limite na janela.
 -- ---------------------------------------------------------------------
@@ -533,13 +533,4 @@ begin
 end;
 $$;
 
--- Aviso operacional: aplicar na função existente de criação de usuários.
-do $$
-begin
-    if exists (
-        select 1 from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
-        where ns.nspname = 'public' and p.proname = 'criar_usuario_equipe'
-    ) then
-        raise notice 'AÇÃO NECESSÁRIA: adicionar como primeira linha do corpo de criar_usuario_equipe: perform public.enforce_rate_limit(''criar_usuario_equipe'', 10, interval ''1 hour'');';
-    end if;
-end $$;
+-- O cadastro de equipe aplica o limite dentro de equipe_preparar_criacao (migration 18).

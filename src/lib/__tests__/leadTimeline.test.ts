@@ -85,22 +85,25 @@ describe("ehIdDoModeloNovo", () => {
 
 describe("registrarMudancaDeEtapa", () => {
     it("REGRESSÃO: no modelo novo não duplica o que o trigger do banco já grava", async () => {
-        const ok = await registrarMudancaDeEtapa({ leadId: UUID, de: "Novo", para: "Proposta" });
+        const ok = await registrarMudancaDeEtapa({ leadId: UUID });
         expect(ok).toBe(true);
         expect(inserts).toHaveLength(0);
     });
 
     it("no modelo novo registra só o motivo da perda", async () => {
-        await registrarMudancaDeEtapa({ leadId: UUID, de: "Proposta", para: "Perdido", motivoPerda: "Preço" });
+        await registrarMudancaDeEtapa({ leadId: UUID, motivoPerda: "Preço" });
         expect(inserts).toHaveLength(1);
         expect(inserts[0].tabela).toBe("atividades_lead");
         expect(inserts[0].payload).toMatchObject({ titulo: "Motivo da perda", descricao: "Preço" });
     });
 
-    it("na tabela antiga grava histórico e timeline", async () => {
-        const ok = await registrarMudancaDeEtapa({ leadId: 42, de: "Novo", para: "Fechado", autor: "Ana" });
+    it("REGRESSÃO: nunca grava cliente_status_history pelo navegador (só o trigger do banco escreve lá)", async () => {
+        const ok = await registrarMudancaDeEtapa({ leadId: 42, autor: "Ana" });
         expect(ok).toBe(true);
-        expect(inserts.map((i) => i.tabela)).toEqual(["cliente_status_history", "atividades_lead"]);
+        expect(inserts).toHaveLength(0);
+
+        await registrarMudancaDeEtapa({ leadId: UUID, motivoPerda: "Preço", autor: "Ana" });
+        expect(inserts.map((i) => i.tabela)).toEqual(["atividades_lead"]);
     });
 });
 

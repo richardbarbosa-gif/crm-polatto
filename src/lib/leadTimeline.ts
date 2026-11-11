@@ -344,78 +344,43 @@ export const ehIdDoModeloNovo = (id: unknown): boolean =>
 type MudancaDeEtapaInput = {
     leadId: string | number | null | undefined;
     tenantId?: string | null;
-    de: string;
-    para: string;
     motivoPerda?: string;
     autor?: string;
 };
 
 /**
- * Registra a mudança de etapa no histórico e na timeline do lead.
+ * Complementa o histórico de uma mudança de etapa.
  *
- * No modelo novo (id UUID) o trigger registrar_mudanca_stage do banco
- * (migration 04) JÁ grava cliente_status_history e atividades_lead a cada
- * troca de etapa. Gravar também aqui duplicava cada movimentação na
- * timeline, e o insert em cliente_status_history (cliente_id bigint)
- * falhava com o UUID — o usuário via "não foi possível registrar no
- * histórico" a cada card arrastado. Aqui só complementa o que o trigger
- * não sabe: o motivo da perda.
+ * Quem registra a movimentação é o BANCO: o trigger registrar_mudanca_stage
+ * grava cliente_status_history e a linha da timeline a cada troca de etapa,
+ * com data e autor do servidor. A API nem tem permissão de escrita em
+ * cliente_status_history (migration 18): gravar daqui duplicava a
+ * movimentação e deixava data e autor nas mãos do navegador. Aqui só entra
+ * o que o trigger não sabe: o motivo da perda.
  *
- * Devolve false quando o histórico não pôde ser gravado.
+ * Devolve false quando o motivo não pôde ser gravado.
  */
 export const registrarMudancaDeEtapa = async ({
     leadId,
     tenantId,
-    de,
-    para,
     motivoPerda,
     autor,
 }: MudancaDeEtapaInput): Promise<boolean> => {
-    if (leadId === null || leadId === undefined || leadId === "") return true;
-
-    if (ehIdDoModeloNovo(leadId)) {
-        if (!motivoPerda) return true;
-        try {
-            await addLeadActivity({
-                leadId,
-                tenantId,
-                activityType: "perda",
-                title: "Motivo da perda",
-                description: motivoPerda,
-                author: autor,
-            });
-            return true;
-        } catch {
-            return false;
-        }
-    }
-
-    let ok = true;
-    const { error: historyError } = await supabaseClient.from("cliente_status_history").insert({
-        tenant_id: tenantId || undefined,
-        cliente_id: leadId,
-        de_status: de,
-        para_status: para,
-        movido_em: new Date().toISOString(),
-        movido_por: autor || null,
-    });
-    if (historyError && !isSupabaseMissingRelation(historyError)) ok = false;
+    if (leadId === null || leadId === undefined || leadId === "" || !motivoPerda) return true;
 
     try {
         await addLeadActivity({
             leadId,
             tenantId,
-            activityType: "status",
-            title: "Mudança de etapa",
-            description: motivoPerda ? `${de} -> ${para} (motivo: ${motivoPerda})` : `${de} -> ${para}`,
-            fromStatus: de,
-            toStatus: para,
+            activityType: "perda",
+            title: "Motivo da perda",
+            description: motivoPerda,
             author: autor,
         });
+        return true;
     } catch {
-        ok = false;
+        return false;
     }
-    return ok;
 };
 
 const sanitizeFileName = (fileName: string): string => {

@@ -93,19 +93,8 @@ where id = 'lead-files';
 create view public.vw_teste_definer as
     select id, tenant_id, titulo from public.negocios;
 
--- (5) RPC que só existia em produção (corpo desconhecido). A migration 12
--- passou a versioná-la; o simulacro só entra se ela ainda não existir.
-do $$
-begin
-    if to_regprocedure('public.criar_usuario_equipe(text, text, text, text, text)') is null then
-        execute $f$
-            create function public.criar_usuario_equipe(
-                p_email text, p_senha text, p_nome text, p_cargo text, p_role text
-            ) returns jsonb language sql security definer set search_path = public
-            as 'select jsonb_build_object(''success'', false)'
-        $f$;
-    end if;
-end $$;
+-- (5) RPCs antigas da equipe, que só existiam em produção e gravavam em
+-- auth.users: a migration 18 as remove (provado na suíte 13).
 
 -- (6) policy using(true) reaplicada numa tabela legada já isolada
 create policy tarefas_authenticated_all on public.tarefas
@@ -412,7 +401,8 @@ begin
               'provisionar_tenant', 'log_acesso_titular', 'lgpd_exportar_dados_titular',
               'lgpd_apagar_dados_titular', 'get_tenant_segmento', 'uso_do_tenant',
               'restaurar_registro', 'registrar_erro_cliente', 'enforce_rate_limit',
-              'eh_admin_do_tenant', 'criar_usuario_equipe'
+              'eh_admin_do_tenant', 'equipe_preparar_criacao', 'equipe_concluir_criacao',
+              'equipe_remover_membro'
           )
     loop
         if has_function_privilege('anon', r.fn, 'execute') then
@@ -423,7 +413,7 @@ begin
         end if;
     end loop;
     if v_falhas <> '' then raise notice 'Privilégios incorretos:%', v_falhas; end if;
-    perform public.assert(v_falhas = '', 'H7b: RPCs do app seguem liberadas para authenticated (inclusive criar_usuario_equipe de produção) e fechadas para anon');
+    perform public.assert(v_falhas = '', 'H7b: RPCs do app seguem liberadas para authenticated (inclusive as da equipe) e fechadas para anon');
 end $$;
 
 -- ataque concreto: reatribuir as etapas do B para um funil alheio

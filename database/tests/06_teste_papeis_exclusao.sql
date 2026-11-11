@@ -386,13 +386,13 @@ declare
 begin
     -- vendedor não cria usuário
     perform public.login_como(v_ana, 'ana.vendas@teste.com');
-    r_vend := public.criar_usuario_equipe('intruso@teste.com', 'senhaforte123', 'Intruso', 'Vendedor', 'admin');
+    r_vend := crm_teste.equipe_criar('intruso@teste.com', 'senhaforte123', 'Intruso', 'Vendedor', 'admin');
     perform public.login_admin();
 
     -- chave pública nem executa
     perform public.login_anon();
     begin
-        perform public.criar_usuario_equipe('anon@teste.com', 'senhaforte123', 'Anon', 'x', 'admin');
+        perform public.equipe_preparar_criacao('anon@teste.com', 'Anon');
     exception when insufficient_privilege then
         v_anon_bloqueado := true;
     end;
@@ -400,15 +400,15 @@ begin
 
     -- gerente cria (header forjado para o B não muda a empresa de destino)
     perform public.login_como(v_user_a, 'vendedor.a@teste.com', v_tenant_b);
-    r_forjado := public.criar_usuario_equipe('carla.vendas@teste.com', 'senhaforte123', 'Carla Vendas', 'Vendedora', 'vendedor');
-    r_dup := public.criar_usuario_equipe('carla.vendas@teste.com', 'senhaforte123', 'Carla 2', 'Vendedora', 'vendedor');
-    r_senha := public.criar_usuario_equipe('curta@teste.com', '123', 'Senha Curta', 'Vendedora', 'vendedor');
+    r_forjado := crm_teste.equipe_criar('carla.vendas@teste.com', 'senhaforte123', 'Carla Vendas', 'Vendedora', 'vendedor');
+    r_dup := crm_teste.equipe_criar('carla.vendas@teste.com', 'senhaforte123', 'Carla 2', 'Vendedora', 'vendedor');
+    r_senha := crm_teste.equipe_criar('curta@teste.com', '123', 'Senha Curta', 'Vendedora', 'vendedor');
     perform public.login_admin();
     v_novo := (r_forjado ->> 'user_id')::uuid;
 
     perform public.assert(not (r_vend ->> 'success')::boolean, 'T1a: vendedor não cadastra usuário');
     perform public.assert(not exists (select 1 from auth.users where email = 'intruso@teste.com'), 'T1a: nenhuma conta criada pelo vendedor');
-    perform public.assert(v_anon_bloqueado, 'T1a: chave pública (anon) não executa criar_usuario_equipe');
+    perform public.assert(v_anon_bloqueado, 'T1a: chave pública (anon) não executa equipe_preparar_criacao');
     perform public.assert((r_forjado ->> 'success')::boolean, 'T1b: gerente cadastra membro');
     perform public.assert(
         exists (select 1 from public.utilizadores_empresas where auth_uid = v_novo and empresa_id = v_tenant_a and role = 'vendedor')
@@ -436,12 +436,12 @@ begin
 
     -- remover
     perform public.login_como(v_ana, 'ana.vendas@teste.com');
-    r_exc_vend := public.excluir_usuario_equipe(v_novo);
+    r_exc_vend := crm_teste.equipe_remover(v_novo);
     perform public.login_admin();
     perform public.login_como(v_user_a, 'vendedor.a@teste.com');
-    r_exc_self := public.excluir_usuario_equipe(v_user_a);
-    r_exc_outro_tenant := public.excluir_usuario_equipe(v_user_b);
-    r_exc_ok := public.excluir_usuario_equipe(v_novo);
+    r_exc_self := crm_teste.equipe_remover(v_user_a);
+    r_exc_outro_tenant := crm_teste.equipe_remover(v_user_b);
+    r_exc_ok := crm_teste.equipe_remover(v_novo);
     perform public.login_admin();
 
     perform public.assert(not (r_exc_vend ->> 'success')::boolean, 'T3a: vendedor não remove membro');
@@ -471,8 +471,8 @@ begin
     values (v_func, 'Diego Sem Login', 'diego.semlogin@teste.com', 'Representante', true, v_tenant_a);
 
     perform public.login_como(v_user_a, 'vendedor.a@teste.com');
-    r := public.criar_usuario_equipe('diego.semlogin@teste.com', 'senhaforte123', 'Diego Sem Login', 'Representante', 'vendedor');
-    r_de_novo := public.criar_usuario_equipe('diego.semlogin@teste.com', 'senhaforte123', 'Diego 2', 'x', 'vendedor');
+    r := crm_teste.equipe_criar('diego.semlogin@teste.com', 'senhaforte123', 'Diego Sem Login', 'Representante', 'vendedor');
+    r_de_novo := crm_teste.equipe_criar('diego.semlogin@teste.com', 'senhaforte123', 'Diego 2', 'x', 'vendedor');
     perform public.login_admin();
 
     perform public.assert((r ->> 'success')::boolean and (r ->> 'user_id')::uuid = v_func,

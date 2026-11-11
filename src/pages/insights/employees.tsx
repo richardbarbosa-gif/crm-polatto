@@ -35,6 +35,7 @@ import { percentual } from "../../lib/pipelineMetrics";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { normalizarPapel, rotuloDoPapel } from "../../lib/permissions";
+import { criarMembroEquipe, removerMembroEquipe } from "../../lib/equipe";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
 
@@ -84,11 +85,7 @@ type RespostaRpcEquipe = {
     tenant_id?: string | number;
 };
 
-/**
- * As funções criar_usuario_equipe / excluir_usuario_equipe não estão nas
- * migrations do repositório (foram criadas à mão no banco de produção).
- * Num banco novo a chamada falha com uma mensagem técnica em inglês.
- */
+/** Erros das chamadas diretas ao banco nesta tela (funcionários, metas, papel). */
 const mensagemDeErroDaEquipe = (error: unknown, padrao: string): string => {
     const texto = String((error as { message?: unknown })?.message ?? "");
     const codigo = String((error as { code?: unknown })?.code ?? "");
@@ -257,15 +254,9 @@ export const InsightsEmployeesPage = () => {
         if (!deletingEmployee) return;
         setIsDeleting(true);
         try {
-            const { data, error } = await supabaseClient.rpc("excluir_usuario_equipe", {
-                p_user_id: deletingEmployee.id,
-            });
-
-            if (error) throw error;
-
-            const result = (data ?? {}) as RespostaRpcEquipe;
-            if (!result?.success) {
-                message.error(result?.error || "Não foi possível excluir.");
+            const result = await removerMembroEquipe(deletingEmployee.id);
+            if (!result.success) {
+                message.error(result.error || "Não foi possível excluir.");
                 return;
             }
 
@@ -327,19 +318,15 @@ export const InsightsEmployeesPage = () => {
 
             if (isCreating) {
                 // ========== CRIAR NOVO MEMBRO COM LOGIN ==========
-                const { data, error } = await supabaseClient.rpc("criar_usuario_equipe", {
-                    p_email: values.email.trim(),
-                    p_senha: values.senha?.trim() || "",
-                    p_nome: values.full_name.trim(),
-                    p_cargo: values.cargo || values.role || "vendedor",
-                    p_role: values.role || "vendedor",
+                const result = await criarMembroEquipe({
+                    email: values.email.trim(),
+                    senha: values.senha?.trim() || "",
+                    nome: values.full_name.trim(),
+                    cargo: values.cargo || values.role || "vendedor",
+                    papel: values.role || "vendedor",
                 });
-
-                if (error) throw error;
-
-                const result = (data ?? {}) as RespostaRpcEquipe;
-                if (!result?.success) {
-                    message.error(result?.error || "Não foi possível criar o usuário.");
+                if (!result.success) {
+                    message.error(result.error || "Não foi possível criar o usuário.");
                     return;
                 }
 

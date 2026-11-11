@@ -922,7 +922,6 @@ export const ClienteList = () => {
         const leadId = String(leadArrastado.id);
         const nextStage = stageById.get(novoStageId);
         const nextStageName = nextStage?.nome || "Sem etapa";
-        const fromStageName = resolveLeadStageName(leadArrastado);
         // Flags da etapa primeiro; o nome é só o fallback (etapa "Contrato
         // assinado" marcada como ganho também fecha o negócio).
         const isGanho = Boolean(nextStage?.ganho) || textoIndicaGanho(nextStageName);
@@ -961,8 +960,6 @@ export const ClienteList = () => {
             const historicoGravado = await registrarMudancaDeEtapa({
                 leadId: leadArrastado.id,
                 tenantId,
-                de: fromStageName,
-                para: nextStageName,
                 motivoPerda,
                 autor: ownerDisplayName,
             });

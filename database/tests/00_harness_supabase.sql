@@ -57,7 +57,7 @@ create table if not exists auth.users (
     email text unique
 );
 
--- Colunas reais do auth.users do Supabase usadas por criar_usuario_equipe
+-- Colunas reais do auth.users do Supabase usadas pelo cadastro de equipe (simulacro crm_teste.equipe_criar)
 alter table auth.users add column if not exists instance_id uuid;
 alter table auth.users add column if not exists aud text;
 alter table auth.users add column if not exists role text;
@@ -136,3 +136,68 @@ alter default privileges in schema public
 -- subia. Agora quem as cria é a migration 00 — e este arquivo simula
 -- apenas o que o Supabase fornece (auth, storage, roles, privilégios).
 -- ---------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------
+-- Simulacro da Edge Function `equipe-usuarios` (supabase/functions).
+-- Em produção quem cria/apaga o login é a API de administração do Auth,
+-- com a service_role; aqui o SECURITY DEFINER faz esse papel. O JWT do
+-- chamador (auth.uid()) continua valendo dentro das RPCs, como na função
+-- real, que as chama com o token do gerente.
+-- ---------------------------------------------------------------------
+create schema if not exists crm_teste;
+
+create or replace function crm_teste.equipe_criar(
+    p_email text, p_senha text, p_nome text, p_cargo text default null, p_role text default 'vendedor'
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    r jsonb;
+    v_user uuid := gen_random_uuid();
+begin
+    if length(coalesce(p_senha, '')) < 8 then
+        return jsonb_build_object('success', false, 'error', 'A senha precisa ter pelo menos 8 caracteres.');
+    end if;
+
+    r := public.equipe_preparar_criacao(p_email, p_nome);
+    if not (r ->> 'success')::boolean then
+        return r;
+    end if;
+
+    insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_app_meta_data, created_at)
+    values (v_user, r ->> 'email', 'hash-de-teste', now(),
+            jsonb_build_object('crm_equipe_tenant', r ->> 'tenant_id', 'crm_equipe_criado_por', auth.uid()::text),
+            now());
+
+    r := public.equipe_concluir_criacao(v_user, p_nome, p_cargo, p_role);
+    if not (r ->> 'success')::boolean then
+        delete from auth.users where id = v_user;  -- compensação da função real
+    end if;
+    return r;
+end;
+$$;
+
+create or replace function crm_teste.equipe_remover(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+    r jsonb;
+begin
+    r := public.equipe_remover_membro(p_user_id);
+    if (r ->> 'success')::boolean and (r ->> 'apagar_login')::boolean
+       and not exists (select 1 from public.utilizadores_empresas where auth_uid = p_user_id) then
+        delete from auth.users where id = p_user_id;
+    end if;
+    return r;
+end;
+$$;
+
+grant usage on schema crm_teste to authenticated, anon;
+grant execute on function crm_teste.equipe_criar(text, text, text, text, text) to authenticated;
+grant execute on function crm_teste.equipe_remover(uuid) to authenticated;

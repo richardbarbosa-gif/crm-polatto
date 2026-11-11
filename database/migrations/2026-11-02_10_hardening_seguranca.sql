@@ -1012,7 +1012,9 @@ begin
         end if;
     end loop;
 
-    -- "Já isolada" = existe policy filtrando por tenant_filter(). Não dá
+    -- "Já isolada" = existe policy filtrando pelo tenant, no formato desta
+    -- migration (tenant_filter(tenant_id)) ou no reescrito pela migration
+    -- 18 (tenant_id = (select current_tenant_id())). Não dá
     -- para usar o nome: policy mantém o nome antigo quando a tabela é
     -- renomeada (clientes → clientes_legado na virada).
     foreach v_tabela in array array[
@@ -1022,7 +1024,7 @@ begin
         if exists (
             select 1 from pg_policies
             where schemaname = 'public' and tablename = v_tabela
-              and coalesce(qual, '') like '%tenant_filter(tenant_id)%'
+              and coalesce(qual, '') ~ 'tenant_filter\(tenant_id\)|tenant_id = \( ?SELECT (public\.)?current_tenant_id\(\)'
         ) then
             execute format('drop policy if exists %I on public.%I', v_tabela || '_authenticated_all', v_tabela);
             if v_tabela = 'clientes_legado' then
@@ -1136,7 +1138,7 @@ begin
             or not exists (
                 select 1 from pg_policies
                 where schemaname = 'public' and tablename = v_tabela
-                  and coalesce(qual, '') like '%tenant_filter(tenant_id)%'
+                  and coalesce(qual, '') ~ 'tenant_filter\(tenant_id\)|tenant_id = \( ?SELECT (public\.)?current_tenant_id\(\)'
             )
             or exists (
                 select 1 from pg_policies

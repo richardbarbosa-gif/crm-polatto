@@ -92,7 +92,7 @@ begin
 
     -- Equipe: gerente cadastra vendedor com login
     perform public.login_como(v_dono, 'dono@empresa-nova.com');
-    r_membro := public.criar_usuario_equipe('vendedor@empresa-nova.com', 'senhaforte123', 'Vendedor Novo', 'Vendedor', 'vendedor');
+    r_membro := crm_teste.equipe_criar('vendedor@empresa-nova.com', 'senhaforte123', 'Vendedor Novo', 'Vendedor', 'vendedor');
     perform public.login_admin();
     v_vendedor := (r_membro ->> 'user_id')::uuid;
     perform public.assert((r_membro ->> 'success')::boolean, 'N3: gerente cadastra vendedor com login');
