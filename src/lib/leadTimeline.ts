@@ -341,48 +341,6 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export const ehIdDoModeloNovo = (id: unknown): boolean =>
     typeof id === "string" && UUID_RE.test(id);
 
-type MudancaDeEtapaInput = {
-    leadId: string | number | null | undefined;
-    tenantId?: string | null;
-    motivoPerda?: string;
-    autor?: string;
-};
-
-/**
- * Complementa o histórico de uma mudança de etapa.
- *
- * Quem registra a movimentação é o BANCO: o trigger registrar_mudanca_stage
- * grava cliente_status_history e a linha da timeline a cada troca de etapa,
- * com data e autor do servidor. A API nem tem permissão de escrita em
- * cliente_status_history (migration 18): gravar daqui duplicava a
- * movimentação e deixava data e autor nas mãos do navegador. Aqui só entra
- * o que o trigger não sabe: o motivo da perda.
- *
- * Devolve false quando o motivo não pôde ser gravado.
- */
-export const registrarMudancaDeEtapa = async ({
-    leadId,
-    tenantId,
-    motivoPerda,
-    autor,
-}: MudancaDeEtapaInput): Promise<boolean> => {
-    if (leadId === null || leadId === undefined || leadId === "" || !motivoPerda) return true;
-
-    try {
-        await addLeadActivity({
-            leadId,
-            tenantId,
-            activityType: "perda",
-            title: "Motivo da perda",
-            description: motivoPerda,
-            author: autor,
-        });
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 const sanitizeFileName = (fileName: string): string => {
     return fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
 };
@@ -416,7 +374,6 @@ export const uploadLeadPdf = async (params: {
         params.file,
         params.kind,
         params.tenantId,
-        params.author,
         params.onStatusChange,
     );
     const path = result.path;
@@ -460,7 +417,6 @@ export const uploadNewLeadDocument = async (
     file: File,
     tipo: LeadDocumentType,
     tenantId?: string | null,
-    enviadoPor?: string,
     onStatusChange?: (status: LeadUploadProgressStatus) => void,
 ): Promise<UploadNewLeadDocumentResult> => {
     const isPdf =
@@ -488,29 +444,6 @@ export const uploadNewLeadDocument = async (
     }
     const path = `${resolvedTenantId}/${String(clienteId)}/${storageFileName}`;
 
-    const { data: existingDocs, error: existingDocsError } = await supabaseClient
-        .from("documentos_lead")
-        .select("id,versao,status")
-        .eq("cliente_id", clienteId)
-        .eq("tipo", tipo);
-
-    if (existingDocsError && !isSupabaseMissingColumn(existingDocsError)) {
-        throw new Error(
-            `Falha ao validar versão de documentos existentes: ${existingDocsError.message}`,
-        );
-    }
-
-    const existingRows = (existingDocs || []) as Array<{
-        id?: string | number | null;
-        versao?: number | null;
-        status?: string | null;
-    }>;
-    const latestVersion = existingRows.reduce((max, row) => {
-        const current = typeof row.versao === "number" ? row.versao : 0;
-        return Math.max(max, current);
-    }, 0);
-    const nextVersion = latestVersion > 0 ? latestVersion + 1 : 1;
-
     onStatusChange?.("enviando");
     const { error: uploadError } = await supabaseClient.storage
         .from(LEAD_FILES_BUCKET)
@@ -525,61 +458,30 @@ export const uploadNewLeadDocument = async (
     }
 
     onStatusChange?.("processando");
-    const previousDocumentIds = existingRows
-        .filter((row) => {
-            const status = (row.status || "").toLowerCase();
-            return status !== "excluido" && status !== "substituido";
-        })
-        .map((row) => row.id)
-        .filter((value): value is string | number => value !== null && value !== undefined);
-
-    if (previousDocumentIds.length > 0) {
-        const { error: previousUpdateError } = await supabaseClient
-            .from("documentos_lead")
-            .update({ status: "substituido" })
-            .in("id", previousDocumentIds);
-
-        if (previousUpdateError && !isSupabaseMissingColumn(previousUpdateError)) {
-            await supabaseClient.storage.from(LEAD_FILES_BUCKET).remove([path]);
-            throw new Error(
-                `Arquivo enviado, mas falhou ao versionar documento anterior: ${previousUpdateError.message}`,
-            );
-        }
-    }
-
-    const payload = {
-        tenant_id: tenantId || null,
-        cliente_id: clienteId,
-        tipo,
-        nome_arquivo: file.name,
-        caminho_storage: path,
-        tamanho_bytes: file.size,
-        versao: nextVersion,
-        status: "ativo",
-        enviado_por: enviadoPor || null,
-    };
-
-    const { data: insertedData, error: documentError } = await supabaseClient
-        .from("documentos_lead")
-        .insert(payload)
-        .select("id")
-        .limit(1)
-        .maybeSingle();
+    // Versão, substituição das anteriores e registro acontecem no banco, numa
+    // transação (registrar_documento_lead). Se ele recusar, o arquivo recém-
+    // enviado é removido e o documento ativo anterior continua valendo.
+    const { data: registro, error: documentError } = await supabaseClient.rpc("registrar_documento_lead", {
+        p_cliente_id: String(clienteId),
+        p_tipo: tipo,
+        p_nome_arquivo: file.name,
+        p_caminho_storage: path,
+        p_tamanho_bytes: file.size,
+    });
 
     if (documentError) {
         await supabaseClient.storage.from(LEAD_FILES_BUCKET).remove([path]);
-        throw new Error(
-            `Arquivo enviado, mas falhou ao registrar em documentos_lead: ${documentError.message}`,
-        );
+        throw new Error(`Não foi possível registrar o documento: ${documentError.message}`);
     }
+    const registrado = (registro ?? {}) as { id?: string; versao?: number };
 
     onStatusChange?.("concluido");
 
     return {
         success: true,
         path,
-        documentId: insertedData?.id ? String(insertedData.id) : undefined,
-        version: nextVersion,
+        documentId: registrado.id ? String(registrado.id) : undefined,
+        version: typeof registrado.versao === "number" ? registrado.versao : 1,
         status: "ativo",
     };
 };

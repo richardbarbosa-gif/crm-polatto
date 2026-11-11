@@ -168,6 +168,9 @@ psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/tests/13_preparo_estado_antigo
 psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/migrations/2026-11-10_18_equipe_historico_rls.sql" >/dev/null 2>&1
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/13_teste_equipe_historico_rls.sql"
 
+echo "==> Suíte 14: datas e autoria do servidor, RPCs transacionais, metas únicas e auditoria (migration 19)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/14_teste_integridade_transacional.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

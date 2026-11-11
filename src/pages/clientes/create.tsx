@@ -117,11 +117,9 @@ export const ClienteCreate = () => {
     const pendingFilesRef = useRef<{
         propostaFile: File | null;
         contaLuzFile: File | null;
-        enviadoPor?: string;
     }>({
         propostaFile: null,
         contaLuzFile: null,
-        enviadoPor: undefined,
     });
 
     const [listaResponsaveis, setListaResponsaveis] = useState<{ label: string; value: string }[]>([]);
@@ -156,13 +154,13 @@ export const ClienteCreate = () => {
 
                 if (createdId && pendingFiles.propostaFile) {
                     uploadJobs.push(
-                        uploadNewLeadDocument(createdId, pendingFiles.propostaFile, "proposta", tenantId, pendingFiles.enviadoPor),
+                        uploadNewLeadDocument(createdId, pendingFiles.propostaFile, "proposta", tenantId),
                     );
                 }
 
                 if (createdId && pendingFiles.contaLuzFile) {
                     uploadJobs.push(
-                        uploadNewLeadDocument(createdId, pendingFiles.contaLuzFile, "conta_luz", tenantId, pendingFiles.enviadoPor),
+                        uploadNewLeadDocument(createdId, pendingFiles.contaLuzFile, "conta_luz", tenantId),
                     );
                 }
 
@@ -183,7 +181,7 @@ export const ClienteCreate = () => {
                 message.error(`Lead criado, mas houve falha no envio dos documentos: ${errorMessage}`);
             } finally {
                 setIsUploadingFiles(false);
-                pendingFilesRef.current = { propostaFile: null, contaLuzFile: null, enviadoPor: undefined };
+                pendingFilesRef.current = { propostaFile: null, contaLuzFile: null };
                 setPropostaFile(null);
                 setContaLuzFile(null);
             }
@@ -387,7 +385,7 @@ export const ClienteCreate = () => {
             const responsavelSelecionado = responsavelOptions.find((opt) => opt.value === responsavel_id);
             const responsavelNome = responsavelSelecionado ? responsavelSelecionado.label : ownerDisplayName;
 
-            pendingFilesRef.current = { propostaFile, contaLuzFile, enviadoPor: responsavelNome };
+            pendingFilesRef.current = { propostaFile, contaLuzFile };
 
             // Carimba o funil da etapa escolhida: sem pipeline_id o lead nasce
             // fora de qualquer funil.

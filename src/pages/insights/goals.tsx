@@ -24,7 +24,6 @@ import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { propsMoeda } from "../../lib/moedaInput";
 import { supabaseClient } from "../../utility";
 import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
-import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { rotuloDoPapel } from "../../lib/permissions";
 
@@ -51,7 +50,6 @@ type EmployeePerformanceRow = {
 
 export const InsightsGoalsPage = () => {
     const { isGerente } = useCrmAccess();
-    const { tenantId } = useTenant();
     const [form] = Form.useForm();
     const [monthRef, setMonthRef] = useState<Dayjs>(dayjs().startOf("month"));
     const [viewMode, setViewMode] = useState<GoalViewMode>("valor");
@@ -182,37 +180,19 @@ export const InsightsGoalsPage = () => {
             const values = await form.validateFields();
             const monthStart = monthRef.startOf("month").format("YYYY-MM-DD");
 
-            // Atualiza a meta do mês de cada vendedor ou cria se não existir.
-            // O upsert anterior usava onConflict (tenant_id, funcionario_id,
-            // mes_referencia), mas não existe índice único nessas colunas nas
-            // migrations: o Postgres respondia "there is no unique or exclusion
-            // constraint matching the ON CONFLICT specification" e "Salvar
-            // metas" falhava SEMPRE num banco criado pelas migrations.
+            // Uma chamada, uma transação: ou todas as metas do mês são gravadas,
+            // ou nenhuma (salvar_metas_mes). O índice único por funcionário/mês
+            // impede meta duplicada mesmo com duas abas salvando ao mesmo tempo.
             const metas = (values.goals ?? []) as MetaDoFormulario[];
-            for (const meta of metas) {
-                const dados = {
+            const { error: erroMetas } = await supabaseClient.rpc("salvar_metas_mes", {
+                p_mes: monthStart,
+                p_metas: metas.map((meta) => ({
+                    funcionario_id: meta.employee_id,
                     valor_meta: Number(meta.target_value) || 0,
                     target_wins: Number(meta.target_wins) || 0,
-                };
-                const { data: atualizadas, error: erroUpdate } = await supabaseClient
-                    .from("metas")
-                    .update(dados)
-                    .eq("funcionario_id", meta.employee_id)
-                    .eq("mes_referencia", monthStart)
-                    .select("id");
-                if (erroUpdate) throw erroUpdate;
-
-                const semMetaAinda = !atualizadas || atualizadas.length === 0;
-                if (semMetaAinda && (dados.valor_meta > 0 || dados.target_wins > 0)) {
-                    const { error: erroInsert } = await supabaseClient.from("metas").insert({
-                        ...dados,
-                        tenant_id: tenantId || undefined,
-                        funcionario_id: meta.employee_id,
-                        mes_referencia: monthStart,
-                    });
-                    if (erroInsert) throw erroInsert;
-                }
-            }
+                })),
+            });
+            if (erroMetas) throw erroMetas;
 
             message.success(`Metas de ${monthRef.format("MMMM")} salvas com sucesso.`);
             setIsModalOpen(false);

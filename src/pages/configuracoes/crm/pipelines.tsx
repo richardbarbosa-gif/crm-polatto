@@ -185,27 +185,21 @@ export const PipelinesConfig = () => {
     };
 
     const excluirStage = async (stage: StageRow) => {
-        // A FK de negocios.stage_id é "on delete set null": apagar etapa com
-        // negócios não dá erro — os negócios simplesmente perdem a etapa e
-        // vão para "Outros". Aqui bloqueia e orienta a mover antes (o
-        // gerenciador de colunas do Kanban faz a exclusão com destino).
-        const { count, error: erroContagem } = await supabaseClient
-            .from("clientes")
-            .select("id", { count: "exact", head: true })
-            .eq("stage_id", String(stage.id));
-        if (!erroContagem && (count ?? 0) > 0) {
+        // excluir_etapa trava a etapa e recusa se houver negócio nela (a FK é
+        // "on delete set null": apagar direto deixaria os negócios sem etapa).
+        // Contar antes e apagar depois, em duas chamadas, deixava passar o
+        // negócio que entrasse na etapa nesse intervalo.
+        const { error } = await supabaseClient.rpc("excluir_etapa", { p_stage_id: stage.id, p_destino_id: null });
+        if (error) {
             message.warning(
-                `A etapa "${stage.nome}" tem ${count} negócio(s). Mova-os antes de excluir (Kanban > Gerenciar colunas).`,
+                /ainda tem negócios/i.test(error.message)
+                    ? `A etapa "${stage.nome}" tem negócios. Mova-os antes de excluir (Kanban > Gerenciar colunas).`
+                    : error.message || "Não foi possível remover a etapa.",
             );
             return;
         }
-        try {
-            await deleteRecord({ resource: "pipeline_stages", id: stage.id });
-            message.success("Etapa removida.");
-            await stagesQuery?.refetch?.();
-        } catch {
-            message.error("Não foi possível remover a etapa (verifique se há negócios nela).");
-        }
+        message.success("Etapa removida.");
+        await stagesQuery?.refetch?.();
     };
 
     if (pipelinesQuery?.isLoading || stagesQuery?.isLoading) {

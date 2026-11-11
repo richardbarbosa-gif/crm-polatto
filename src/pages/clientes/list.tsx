@@ -18,7 +18,6 @@ import {
     isSupabaseMissingRelation,
     isSupabasePolicyRecursion,
 } from "../../lib/supabaseErrors";
-import { registrarMudancaDeEtapa } from "../../lib/leadTimeline";
 import { filtrosDeSaude, ORDENACAO_KANBAN, RECURSO_SAUDE, type FiltroSaude } from "../../lib/saudeNegocio";
 import { type LeadTemperatureTag } from "../../lib/leadTemperature";
 import {
@@ -736,37 +735,24 @@ export const ClienteList = () => {
 
         setIsDeletingStage(true);
         try {
-            // Move sempre que houver destino: não depende de a contagem estar
-            // certa (mover zero negócios é inofensivo; apagar a etapa com
-            // negócios dentro os deixaria sem etapa).
-            if (deleteDestinationStage && deleteDestinationStage !== String(stagePendingDelete.id)) {
-                const destinationStage = stageById.get(deleteDestinationStage);
-                const { error: moveError } = await supabaseClient
-                    .from("clientes")
-                    .update({
-                        tenant_id: tenantId || undefined,
-                        stage_id: deleteDestinationStage,
-                        status: destinationStage?.nome || undefined,
-                        ...(destinationStage?.pipeline_id
-                            ? { pipeline_id: destinationStage.pipeline_id }
-                            : {}),
-                    })
-                    .eq("stage_id", String(stagePendingDelete.id));
-                if (moveError) throw moveError;
-            }
-
-            const { error: deleteError } = await supabaseClient
-                .from("pipeline_stages")
-                .delete()
-                .eq("id", stagePendingDelete.id);
+            // Move os negócios e apaga a etapa numa transação (excluir_etapa): um
+            // negócio que entre na etapa no meio do caminho não fica sem etapa.
+            const destino =
+                deleteDestinationStage && deleteDestinationStage !== String(stagePendingDelete.id)
+                    ? deleteDestinationStage
+                    : null;
+            const { error: deleteError } = await supabaseClient.rpc("excluir_etapa", {
+                p_stage_id: stagePendingDelete.id,
+                p_destino_id: destino,
+            });
             if (deleteError) throw deleteError;
 
             message.success(`Coluna "${stagePendingDelete.nome}" excluída.`);
             cancelDeleteStage();
             await stagesQuery?.refetch?.();
             kpiQuery?.refetch?.();
-        } catch {
-            message.error("Não foi possível excluir a coluna.");
+        } catch (error) {
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível excluir a coluna.");
         } finally {
             setIsDeletingStage(false);
         }
@@ -936,6 +922,8 @@ export const ClienteList = () => {
                     tenant_id: tenantId || undefined,
                     stage_id: novoStageId,
                     status: nextStage?.nome || undefined,
+                    // Só sinaliza fechado/aberto: QUANDO fechou é carimbado pelo
+                    // banco (o valor enviado é ignorado; ninguém antedata uma venda).
                     data_fechamento: isTerminal ? new Date().toISOString() : null,
                     // Carimba o funil da etapa destino: sem isto o lead ficaria
                     // sem pipeline_id e sumiria do filtro por funil.
@@ -957,15 +945,8 @@ export const ClienteList = () => {
                 }),
             });
 
-            const historicoGravado = await registrarMudancaDeEtapa({
-                leadId: leadArrastado.id,
-                tenantId,
-                motivoPerda,
-                autor: ownerDisplayName,
-            });
-            if (!historicoGravado) {
-                message.warning("Etapa atualizada, mas não foi possível registrar no histórico.");
-            }
+            // Histórico da movimentação e "Motivo da perda" são gravados pelo
+            // banco, na mesma transação deste update (triggers em negocios).
             // O update vai para "clientes"; as colunas podem estar lendo a
             // view de saúde, que o Refine não invalida sozinho.
             if (saudeDisponivel) {

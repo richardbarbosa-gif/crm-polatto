@@ -387,7 +387,7 @@ export const salvarPdfNoLead = async (params: {
     autor?: string;
 }): Promise<void> => {
     const arquivo = new File([params.blob], params.nomeArquivo, { type: "application/pdf" });
-    const resultado = await uploadNewLeadDocument(params.negocioId, arquivo, "proposta", params.tenantId, params.autor);
+    const resultado = await uploadNewLeadDocument(params.negocioId, arquivo, "proposta", params.tenantId);
     await addLeadActivity({
         leadId: params.negocioId,
         tenantId: params.tenantId,

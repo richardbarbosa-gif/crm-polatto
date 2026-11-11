@@ -77,14 +77,6 @@ type PerformanceRow = {
     vendas_qtd?: number | string | null;
     vendas_valor?: number | string | null;
 };
-type RespostaRpcEquipe = {
-    success?: boolean;
-    error?: string;
-    message?: string;
-    user_id?: string;
-    tenant_id?: string | number;
-};
-
 /** Erros das chamadas diretas ao banco nesta tela (funcionários, metas, papel). */
 const mensagemDeErroDaEquipe = (error: unknown, padrao: string): string => {
     const texto = String((error as { message?: unknown })?.message ?? "");
@@ -330,77 +322,40 @@ export const InsightsEmployeesPage = () => {
                     return;
                 }
 
-                // Salva a meta se definida
+                // A meta é um dado à parte do login: se ela for recusada, o membro
+                // já existe e o gerente precisa saber que falta definir a meta.
+                let avisoMeta: string | null = null;
                 if (values.monthly_goal_value && values.monthly_goal_value > 0 && result.user_id) {
-                    const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
-                    await supabaseClient.from("metas").insert({
-                        funcionario_id: result.user_id,
-                        mes_referencia: monthStart,
-                        valor_meta: Number(values.monthly_goal_value),
-                        tenant_id: result.tenant_id?.toString() || undefined,
+                    const { error: erroMeta } = await supabaseClient.rpc("salvar_metas_mes", {
+                        p_mes: dayjs().startOf("month").format("YYYY-MM-DD"),
+                        p_metas: [{ funcionario_id: result.user_id, valor_meta: Number(values.monthly_goal_value) }],
                     });
+                    if (erroMeta) {
+                        avisoMeta = `A meta não foi salva: ${mensagemDeErroDaEquipe(erroMeta, "tente definir de novo.")}`;
+                    }
                 }
 
                 message.success("Membro criado com sucesso! Ele já pode fazer login.");
+                if (avisoMeta) message.warning(avisoMeta);
             } else {
                 // ========== EDITAR MEMBRO EXISTENTE ==========
-                const { error: updateError } = await supabaseClient
-                    .from("funcionarios")
-                    .update({
-                        nome: values.full_name.trim(),
-                        email: values.email?.trim() || null,
-                        cargo: values.cargo || values.role || null,
-                        ativo: values.active !== false,
-                    })
-                    .eq("id", editingEmployee!.id);
-
-                if (updateError) throw updateError;
-
-                // Atualiza meta
-                if (editingEmployee!.id) {
-                    const monthStart = dayjs().startOf("month").format("YYYY-MM-DD");
-                    const { data: existingMeta } = await supabaseClient
-                        .from("metas")
-                        .select("id")
-                        .eq("funcionario_id", editingEmployee!.id)
-                        .eq("mes_referencia", monthStart)
-                        .maybeSingle();
-
-                    if (existingMeta?.id) {
-                        await supabaseClient
-                            .from("metas")
-                            .update({ valor_meta: Number(values.monthly_goal_value || 0) })
-                            .eq("id", existingMeta.id);
-                    } else if (values.monthly_goal_value && values.monthly_goal_value > 0) {
-                        await supabaseClient.from("metas").insert({
-                            funcionario_id: editingEmployee!.id,
-                            mes_referencia: monthStart,
-                            valor_meta: Number(values.monthly_goal_value),
-                        });
-                    }
-                }
-
-                // Papel: RPC alterar_papel_membro (só gerente, nunca o próprio, a
-                // empresa nunca fica sem gerente). Antes era um update direto que a
-                // RLS ignorava em silêncio.
-                const papelNovo = values.role ? normalizarPapel(values.role) : null;
-                const authUid = editingEmployee!.auth_uid;
-                let avisoPapel: string | null = null;
-                if (editingEmployee!.has_login && authUid && papelNovo && papelNovo !== normalizarPapel(editingEmployee!.role)) {
-                    const { data: resultado, error: papelError } = await supabaseClient.rpc("alterar_papel_membro", {
-                        p_user_id: authUid,
-                        p_papel: papelNovo,
-                    });
-                    const resposta = (resultado ?? {}) as RespostaRpcEquipe;
-                    if (papelError || !resposta.success) {
-                        avisoPapel = papelError?.message || resposta.error || "O nível de acesso não foi alterado.";
-                    }
-                }
+                // Dados, papel e meta do mês numa transação (salvar_membro_equipe):
+                // se o banco recusa uma parte — por exemplo, a empresa ficaria sem
+                // gerente — nada é gravado e a mensagem dele aparece aqui.
+                const papelNovo =
+                    editingEmployee!.has_login && values.role ? normalizarPapel(values.role) : null;
+                const { error: erroSalvar } = await supabaseClient.rpc("salvar_membro_equipe", {
+                    p_funcionario_id: editingEmployee!.id,
+                    p_nome: values.full_name.trim(),
+                    p_email: values.email?.trim() || null,
+                    p_cargo: values.cargo || values.role || null,
+                    p_ativo: values.active !== false,
+                    p_papel: papelNovo,
+                    p_meta_mensal: Number(values.monthly_goal_value || 0),
+                });
+                if (erroSalvar) throw erroSalvar;
 
                 message.success("Membro atualizado.");
-                if (avisoPapel) {
-                    message.warning(avisoPapel);
-                }
             }
 
             setIsModalOpen(false);
