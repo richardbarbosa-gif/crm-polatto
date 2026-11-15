@@ -400,7 +400,7 @@ begin
           and p.proname in (
               'provisionar_tenant', 'log_acesso_titular', 'lgpd_exportar_dados_titular',
               'lgpd_apagar_dados_titular', 'get_tenant_segmento', 'uso_do_tenant',
-              'restaurar_registro', 'registrar_erro_cliente', 'enforce_rate_limit',
+              'restaurar_registro', 'registrar_erro_cliente',
               'eh_admin_do_tenant', 'equipe_preparar_criacao', 'equipe_concluir_criacao',
               'equipe_remover_membro'
           )
@@ -1001,9 +1001,19 @@ begin
     perform public.login_admin();
 
     -- (a) a chave pública não lê nada
+    -- Desde a migration 20 a chave pública nem tem privilégio na tabela
+    -- (antes só a RLS a barrava): "permission denied" também é "não lê nada".
     perform public.login_anon();
-    select count(*) into v_vinculos_anon from public.utilizadores_empresas;
-    select count(*) into v_empresas_anon from public.empresas;
+    begin
+        select count(*) into v_vinculos_anon from public.utilizadores_empresas;
+    exception when insufficient_privilege then
+        v_vinculos_anon := 0;
+    end;
+    begin
+        select count(*) into v_empresas_anon from public.empresas;
+    exception when insufficient_privilege then
+        v_empresas_anon := 0;
+    end;
     perform public.login_admin();
 
     perform public.assert(v_nomes_multi = 2, 'H17b: seletor — usuário de 2 empresas lê o nome das duas');

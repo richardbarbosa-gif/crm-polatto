@@ -412,6 +412,16 @@ export const uploadLeadPdf = async (params: {
     };
 };
 
+/**
+ * Todo PDF começa com "%PDF-". Extensão e tipo MIME vêm do navegador e são
+ * triviais de trocar: sem isto um executável renomeado para .pdf iria para o
+ * bucket (que confia no content-type declarado no upload).
+ */
+export const temAssinaturaPdf = async (file: Blob): Promise<boolean> => {
+    const inicio = new Uint8Array(await file.slice(0, 5).arrayBuffer());
+    return String.fromCharCode(...inicio) === "%PDF-";
+};
+
 export const uploadNewLeadDocument = async (
     clienteId: string | number,
     file: File,
@@ -421,7 +431,7 @@ export const uploadNewLeadDocument = async (
 ): Promise<UploadNewLeadDocumentResult> => {
     const isPdf =
         file.type === "application/pdf" || file.name.toLowerCase().trim().endsWith(".pdf");
-    if (!isPdf) {
+    if (!isPdf || !(await temAssinaturaPdf(file))) {
         throw new Error("Apenas arquivos PDF são permitidos para documentos do lead.");
     }
 

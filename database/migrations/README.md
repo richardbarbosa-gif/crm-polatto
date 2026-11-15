@@ -24,6 +24,7 @@ Executar no SQL Editor do Supabase, **em ordem numérica**. Todos os arquivos s�
 | `2026-11-06_17_automacoes.sql` | **Automações do funil** ("quando X, se Y, então Z"): `automacoes` (gatilho + parâmetros + condições opcionais de funil, temperatura, valor mínimo e origem; colunas tipadas com CHECK), `automacoes_acoes` (lista ordenada validada por CHECK: criar tarefa, mudar temperatura, atribuir responsável fixo ou por rodízio, avisar o gerente), `automacoes_execucoes` (log ok/erro + mensagem, chave de idempotência UNIQUE) e `automacoes_rodizio` (estado do round-robin). Leitura do tenant, escrita só gerente (RLS + WITH CHECK), nada para anon, FKs compostas `(tenant_id, id)` para etapa, funil, origem, tipo e usuário. Gatilhos 1–5 (criado, entrou na etapa, ganho, perdido, temperatura) pelo trigger `zz_automacoes` em `negocios` (a view `clientes` não muda); 6–7 (parado, proposta sem resposta há N dias) por `executar_automacoes_agendadas()` (só cron/admin), agendada de hora em hora no `pg_cron` **se a extensão existir** (senão só WARNING). Motor SECURITY DEFINER (search_path fixo, sem EXECUTE para a API), sempre no tenant do negócio, ações em contexto de sistema, sem laço (ação de automação não dispara automação) e com falha isolada (erro vai para o log; o usuário salva/move o card normalmente). "Avisar o gerente" = tarefa do gerente vencendo na hora (sino e Meu dia). `salvar_automacao()` (SECURITY INVOKER) grava regra + ações numa transação. 6 modelos prontos por empresa, **desativados**, semeados uma vez (`crm_seeds_aplicados`), ligados à etapa pelo nome quando ela existe (inclusive etapa criada depois). Redefine `provisionar_defaults_pacote` e `vw_negocios_saude` (registro de automação não conta como contato): **se a 15 ou a 16 forem reexecutadas, rode a 17 de novo**. Rodar depois da 16. |
 | `2026-11-10_18_equipe_historico_rls.sql` | **Equipe sem tocar em `auth.users`, cadastro fechado, histórico inviolável e RLS que usa índice**: remove `criar_usuario_equipe`/`excluir_usuario_equipe` (gravavam direto nas tabelas internas do Auth) e cria `equipe_preparar_criacao`, `equipe_concluir_criacao` e `equipe_remover_membro`, usadas pela Edge Function `equipe-usuarios` (`supabase/functions`), que cria/apaga o login pela API de administração do Auth (a `service_role` nunca vai ao navegador; o login só é aceito se foi criado pela função, para a empresa e pelo gerente da chamada, nos últimos 10 minutos); `plataforma_config.cadastro_aberto` (**false por padrão**: a API não cria empresa nova até o operador abrir); `cliente_status_history` só leitura pela API; `atividades_lead.created_by` carimbado pelo banco (linha do sistema é imutável, anotação manual só o autor ou o gerente altera/apaga); `otimizar_policies_rls()` reescreve toda policy de `tenant_filter(tenant_id)` para `tenant_id = (select current_tenant_id())` (mesma regra, avaliada uma vez por consulta e usando o índice) e `separar_policies_de_escrita()` desfaz os pares leitura + `FOR ALL`. **Rodar sempre por último**: qualquer migration antiga reexecutada recria as policies no formato lento — rode a 18 de novo (ou `select public.otimizar_policies_rls();`). |
 | `2026-11-11_19_integridade_transacional.sql` | **Relógio do servidor e operações numa transação**: `negocios.fechado_em` carimbado pelo banco (o navegador só diz se fechou, nunca quando; a data original é mantida em edições e só muda quando o desfecho muda), `atividades_lead` com data e autor do servidor, "Motivo da perda" gravado na timeline por trigger na mesma transação que move o card, `deleted_at` da lixeira com hora do servidor; RPCs `SECURITY INVOKER` `salvar_membro_equipe` (dados + papel + meta do mês), `salvar_metas_mes` (lote tudo-ou-nada), `registrar_documento_lead` (versão com trava + substituição + registro) e `excluir_etapa` (move os negócios e apaga, sem órfãos); índice único `uq_metas_funcionario_mes` (deduplica antes); `audit_log` em `tarefas`, `negocios_pessoas`, `consentimentos`, `orcamento_itens` e nas alterações de `atividades_lead`; jobs `crm_limpeza_tecnica` e `crm_retencao_lgpd` no `pg_cron` (se instalado). Só cria objetos novos: pode ser reexecutada em qualquer ordem depois da 18. |
+| `2026-11-15_20_privilegios_indices_storage.sql` | **Privilégios mínimos, índices e arquivos**: `anon` perde todo privilégio de tabela, sequência e função em `public` (inclusive nos privilégios padrão: objeto novo já nasce fechado para a chave pública); `authenticated` perde `TRUNCATE`/`REFERENCES`/`TRIGGER`; `enforce_rate_limit` e `registro_eh_do_usuario` saem da API (só rodam dentro de funções `SECURITY DEFINER`); índice de `tenant_id` em toda tabela que o tem e índice de cobertura para toda chave estrangeira (laços genéricos: reexecutar cobre tabelas novas); no bucket `lead-files`, apagar/sobrescrever arquivo exige ser quem enviou ou gerente (policies **restritivas**, não desfeitas por reexecução de migration antiga); `relatorio_privilegios()` — linter para rodar com `relatorio_rls()`, objetivo zero linhas. Reexecutável a qualquer momento depois da 19. |
 
 ## Testes automatizados
 
@@ -42,7 +43,7 @@ O runner: recria o banco, carrega `database/tests/00_harness_supabase.sql`
 migrations em ordem, **repete a execução para provar idempotência** e roda as
 suítes de asserção (01 isolamento, 02 virada, 03 correções do PR #1, 04
 endurecimento, 05 religar referências, 07 orçamentos, 09 proposta travada e
-nova versão, 10 saúde do funil e modelos de mensagem, 11 origem, primeiro acesso e perfil, 12 automações do funil, 13 equipe sem `auth.users`, cadastro fechado, histórico inviolável e RLS com índice, 14 relógio do servidor, RPCs transacionais, metas únicas e auditoria). A Suíte 7b abre várias
+nova versão, 10 saúde do funil e modelos de mensagem, 11 origem, primeiro acesso e perfil, 12 automações do funil, 13 equipe sem `auth.users`, cadastro fechado, histórico inviolável e RLS com índice, 14 relógio do servidor, RPCs transacionais, metas únicas e auditoria, 15 privilégios mínimos, índices, arquivos do lead e linter). A Suíte 7b abre várias
 conexões em paralelo (inclusive transações que desistem com ROLLBACK) e prova
 que a numeração de orçamentos sai sem buraco e sem duplicata. A Suíte 9b
 grava um item no exato instante em que outra conexão envia a proposta e
@@ -61,7 +62,7 @@ Para um projeto Supabase vazio — inclusive a reconstrução da produção de
 2. `alter table public.clientes rename to clientes_legado;` (a 00 cria a tabela legada vazia).
 3. Rodar de novo a **01** e, depois, todas a partir da **10** (10, 11, 12, …). A 01
    cria a view `clientes` do modelo novo; as demais reaplicam as travas sobre ela.
-4. `select * from public.relatorio_rls();` — nenhuma linha CRÍTICA.
+4. `select * from public.relatorio_rls();` — nenhuma linha CRÍTICA — e `select * from public.relatorio_privilegios();` — nenhuma linha.
 5. Publicar a Edge Function `equipe-usuarios` (ver "Edge Functions" abaixo).
 6. O cadastro de empresas nasce **fechado**. Para o primeiro acesso, abra-o
    (`update public.plataforma_config set cadastro_aberto = true;`), cadastre-se
@@ -118,14 +119,6 @@ Usa só as variáveis que o Supabase já injeta (`SUPABASE_URL`,
 `CRM_ORIGENS_PERMITIDAS` (domínios do CRM separados por vírgula) restringe o
 CORS. A função nunca decide permissão: chama `equipe_preparar_criacao`,
 `equipe_concluir_criacao` e `equipe_remover_membro` com o token do gerente.
-
-## Scripts avulsos em `database/*.sql`
-
-`fix_rls_policy_recursion_utilizadores_empresas.sql`, `insights_schema.sql` e
-`supabase_phase34_repair.sql` são **históricos e não devem ser executados**:
-recriam policies `using(true)`, storage sem prefixo de tenant e
-auto-vínculo a qualquer empresa. Cada um aborta logo na primeira linha. Se
-algum deles já rodou em produção, a migration 10 desfaz o estrago.
 
 ## Pós-virada
 

@@ -366,8 +366,7 @@ begin
         select p.oid::regprocedure as fn
         from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
         where ns.nspname = 'public'
-          and p.proname in ('alterar_papel_membro',
-                            'check_feature', 'registro_eh_do_usuario', 'restaurar_registro')
+          and p.proname in ('alterar_papel_membro', 'check_feature', 'restaurar_registro')
     loop
         execute format('revoke execute on function %s from public', r.fn);
         if exists (select 1 from pg_roles where rolname = 'anon') then
@@ -380,6 +379,19 @@ begin
             execute format('grant execute on function %s to service_role', r.fn);
         end if;
     end loop;
+end $$;
+
+-- registro_eh_do_usuario é interna (só fn_guarda_exclusao, SECURITY DEFINER,
+-- a chama): nem a chave pública nem o usuário logado a executam pela API.
+revoke execute on function public.registro_eh_do_usuario(jsonb) from public;
+do $$
+begin
+    if exists (select 1 from pg_roles where rolname = 'anon') then
+        revoke execute on function public.registro_eh_do_usuario(jsonb) from anon;
+    end if;
+    if exists (select 1 from pg_roles where rolname = 'authenticated') then
+        revoke execute on function public.registro_eh_do_usuario(jsonb) from authenticated;
+    end if;
 end $$;
 
 -- ---------------------------------------------------------------------

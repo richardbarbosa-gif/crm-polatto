@@ -171,6 +171,11 @@ psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/13_teste_equipe_historico_r
 echo "==> Suíte 14: datas e autoria do servidor, RPCs transacionais, metas únicas e auditoria (migration 19)"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/14_teste_integridade_transacional.sql"
 
+echo "==> Suíte 15: privilégios mínimos, funções internas fora da API, índices e arquivos do lead (migration 20)"
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/tests/15_preparo_privilegios_frouxos.sql" >/dev/null
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/migrations/2026-11-15_20_privilegios_indices_storage.sql" >/dev/null 2>&1
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/15_teste_privilegios_indices_storage.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

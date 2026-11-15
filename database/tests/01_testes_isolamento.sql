@@ -442,12 +442,13 @@ declare
     v_bloqueou boolean := false;
     i integer;
 begin
-    perform public.login_como((select valor from crm_teste.ctx where chave = 'user_a'), 'vendedor.a@teste.com');
+    -- Contexto administrativo: a função é interna (sem EXECUTE para a API,
+    -- migration 20). Só o estouro do limite (P0001) conta como bloqueio.
     begin
         for i in 1..5 loop
             perform public.enforce_rate_limit('teste_limite', 3, interval '1 hour');
         end loop;
-    exception when others then
+    exception when sqlstate 'P0001' then
         v_bloqueou := true;
     end;
     perform public.login_admin();

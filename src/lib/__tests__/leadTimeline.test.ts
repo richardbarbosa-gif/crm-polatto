@@ -47,7 +47,7 @@ vi.mock("../../utility", () => ({
     },
 }));
 
-import { ehIdDoModeloNovo, fetchLeadTimeline, toTimelineType } from "../leadTimeline";
+import { ehIdDoModeloNovo, fetchLeadTimeline, temAssinaturaPdf, toTimelineType } from "../leadTimeline";
 
 const UUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
@@ -101,5 +101,16 @@ describe("fetchLeadTimeline", () => {
         const timeline = await fetchLeadTimeline(7);
         expect(timeline).toHaveLength(2);
         expect(timeline[0].toStatus).toBe("Visita");
+    });
+});
+
+describe("temAssinaturaPdf", () => {
+    it("aceita um arquivo que começa com %PDF-", async () => {
+        expect(await temAssinaturaPdf(new Blob(["%PDF-1.7\n..."]))).toBe(true);
+    });
+
+    it("recusa outro conteúdo com extensão/tipo de PDF", async () => {
+        expect(await temAssinaturaPdf(new Blob(["MZ\u0090\u0000 executável"], { type: "application/pdf" }))).toBe(false);
+        expect(await temAssinaturaPdf(new Blob([]))).toBe(false);
     });
 });

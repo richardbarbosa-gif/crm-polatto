@@ -805,14 +805,16 @@ declare
         'backfill_tenant_dados_legados', 'aplicar_rls_estrita_pipeline_stages',
         'backfill_tenant_legado', 'diagnostico_tenant_legado', 'aplicar_rls_legado',
         'aplicar_politica_retencao', 'limpar_erros_antigos',
-        'relatorio_rls', 'testar_isolamento_tenant'
+        'relatorio_rls', 'testar_isolamento_tenant',
+        -- interna: só é chamada de dentro de funções SECURITY DEFINER; pela
+        -- API servia para encher rate_limit_hits (migration 20)
+        'enforce_rate_limit'
     ];
     v_usuario text[] := array[
         'provisionar_tenant', 'log_acesso_titular',
         'lgpd_exportar_dados_titular', 'lgpd_apagar_dados_titular',
         'get_tenant_segmento', 'uso_do_tenant', 'restaurar_registro',
-        'registrar_erro_cliente', 'enforce_rate_limit', 'eh_admin_do_tenant',
-        'criar_usuario_equipe', 'excluir_usuario_equipe', 'check_feature'
+        'registrar_erro_cliente', 'eh_admin_do_tenant', 'check_feature'
     ];
     v_anon boolean := exists (select 1 from pg_roles where rolname = 'anon');
     v_auth boolean := exists (select 1 from pg_roles where rolname = 'authenticated');
