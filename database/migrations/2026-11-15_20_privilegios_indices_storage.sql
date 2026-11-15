@@ -57,14 +57,19 @@ begin
     -- Tira de PUBLIC e de anon; quem já executava como authenticated ou
     -- service_role continua executando, agora por concessão explícita.
     for r in
-        select p.oid, p.oid::regprocedure as fn
+        select p.oid, p.oid::regprocedure as fn, p.prorettype = 'trigger'::regtype as eh_trigger
         from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
         where ns.nspname = 'public'
           and p.prokind in ('f', 'p')
           -- funções de extensão (pg_trgm etc.) não são nossas
           and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
     loop
-        v_tinha_auth := v_auth and has_function_privilege('authenticated', r.oid, 'execute');
+        -- Função de trigger é disparada pelo banco (o privilégio é conferido
+        -- ao criar o trigger, não a cada disparo): ninguém a chama pela API.
+        if r.eh_trigger and v_auth then
+            execute format('revoke execute on function %s from authenticated', r.fn);
+        end if;
+        v_tinha_auth := v_auth and not r.eh_trigger and has_function_privilege('authenticated', r.oid, 'execute');
         v_tinha_service := v_service and has_function_privilege('service_role', r.oid, 'execute');
 
         execute format('revoke execute on function %s from public', r.fn);
@@ -239,7 +244,9 @@ as $$
     union all
     select p.oid::regprocedure::text, 'função interna exposta à API (authenticated)', 'MEDIA'
     from pg_proc p join pg_namespace ns on ns.oid = p.pronamespace
-    where ns.nspname = 'public' and p.proname in ('enforce_rate_limit', 'registro_eh_do_usuario')
+    where ns.nspname = 'public'
+      and (p.proname in ('enforce_rate_limit', 'registro_eh_do_usuario') or p.prorettype = 'trigger'::regtype)
+      and not exists (select 1 from pg_depend d where d.objid = p.oid and d.deptype = 'e')
       and exists (select 1 from pg_roles where rolname = 'authenticated')
       and has_function_privilege('authenticated', p.oid, 'execute')
 
