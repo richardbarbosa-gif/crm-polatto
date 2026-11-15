@@ -1,7 +1,6 @@
 import { useGetIdentity } from "@refinedev/core";
 import { Button, Form, Input, Modal, Result, Select, Spin, message } from "antd";
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { isSupabaseMissingColumn, isSupabaseMissingRelation } from "../lib/supabaseErrors";
 import type { UsuarioEmpresa } from "../types/db";
 import { supabaseClient } from "../utility";
 
@@ -48,13 +47,15 @@ const firstString = (...values: unknown[]): string | null => {
     return null;
 };
 
-const mapMembership = (row: Record<string, unknown>): UsuarioEmpresa => {
-    const tenantId = firstString(row.empresa_id, row.tenant_id, row.company_id, row.id_empresa);
-    const role = firstString(row.role, row.perfil, row.cargo, row.tipo);
-    const userId = firstString(row.auth_uid, row.user_id, row.usuario_id);
-    const rawId = firstString(row.id, row.uuid) || "membership";
-    return { id: rawId, tenant_id: tenantId, role, user_id: userId, email: null, raw: row };
-};
+// Colunas reais de utilizadores_empresas (migration 00).
+const mapMembership = (row: Record<string, unknown>): UsuarioEmpresa => ({
+    id: firstString(row.id) || "membership",
+    tenant_id: firstString(row.empresa_id),
+    role: firstString(row.role),
+    user_id: firstString(row.auth_uid),
+    email: null,
+    raw: row,
+});
 
 /**
  * Busca TODOS os vínculos do usuário em utilizadores_empresas.
@@ -69,13 +70,13 @@ const fetchMemberships = async (userId?: string | null): Promise<UsuarioEmpresa[
 
     const { data, error } = await supabaseClient
         .from("utilizadores_empresas")
-        .select("*")
+        .select("id,auth_uid,empresa_id,role")
         .eq("auth_uid", normalizedUserId);
 
-    if (error) {
-        if (isSupabaseMissingRelation(error) || isSupabaseMissingColumn(error)) return [];
-        throw error;
-    }
+    // Qualquer falha sobe para a tela ("Falha ao carregar vínculo"). Devolver
+    // lista vazia aqui fazia um banco com problema parecer "usuário sem
+    // empresa" — e o app oferecia criar uma empresa nova.
+    if (error) throw error;
 
     return ((data as Record<string, unknown>[]) || [])
         .map(mapMembership)
@@ -120,8 +121,8 @@ const checkIsSystemAdmin = async (email?: string | null): Promise<boolean> => {
             .limit(1)
             .maybeSingle();
 
+        // Falha na consulta = não é superadmin (fecha, nunca abre).
         if (error) {
-            if (isSupabaseMissingRelation(error)) return false;
             console.warn("Erro ao verificar system_admins:", error.message);
             return false;
         }
