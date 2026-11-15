@@ -6,6 +6,7 @@ import { type ReactNode, useMemo, useRef, useState } from "react";
 import { Button, EmptyState } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
 import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
+import { getSupabaseErrorMessage } from "../../../lib/supabaseErrors";
 
 export type ConfigRecord = { id: string | number; [key: string]: unknown };
 
@@ -110,8 +111,8 @@ export function ConfigCrudTable<T extends ConfigRecord>({
             await deleteRecord({ resource, id: record.id });
             message.success(`${titulo}: registro removido.`);
             await query?.refetch?.();
-        } catch {
-            message.error("Não foi possível remover o registro.");
+        } catch (error) {
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível remover o registro.");
         }
     };
 

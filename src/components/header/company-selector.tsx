@@ -1,7 +1,8 @@
 import { SwapOutlined, ShopOutlined } from "@ant-design/icons";
-import { Select, Spin, Typography, Tooltip } from "antd";
+import { Select, Spin, Typography, Tooltip, message } from "antd";
 import { useState } from "react";
 import { useTenant } from "../../contexts/tenant";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 const { Text } = Typography;
 
@@ -28,8 +29,9 @@ export const CompanySelector = () => {
             await refresh();
             // Reload para limpar os caches de query do Refine
             window.location.reload();
-        } catch {
+        } catch (error) {
             setIsSwitching(false);
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível trocar de empresa. Tente novamente.");
         }
     };
 

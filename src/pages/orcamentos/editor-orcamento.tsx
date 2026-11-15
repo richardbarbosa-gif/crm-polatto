@@ -162,7 +162,7 @@ export const EditorOrcamento = ({ negocioId, orcamentoId, clienteNome, onFechar,
         ])
             .then(([produtos, identidade, orcamento, funcionario]) => {
                 if (!ativo) return;
-                const telefone = funcionario?.raw?.telefone;
+                const telefone = funcionario?.telefone;
                 form.setFieldsValue(
                     valoresIniciais(orcamento, identidade, {
                         nome: funcionario?.nome || nomeUsuario,

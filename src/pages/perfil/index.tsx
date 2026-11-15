@@ -32,7 +32,7 @@ export const PerfilPage = () => {
     const [salvandoPerfil, setSalvandoPerfil] = useState(false);
     const [salvandoSenha, setSalvandoSenha] = useState(false);
 
-    const telefoneAtual = typeof employee?.raw?.telefone === "string" ? employee.raw.telefone : "";
+    const telefoneAtual = employee?.telefone ?? "";
 
     useEffect(() => {
         if (employee) formPerfil.setFieldsValue({ nome: employee.nome, telefone: telefoneAtual });

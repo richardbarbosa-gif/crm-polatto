@@ -1,4 +1,3 @@
-import { isSupabaseMissingColumn, isSupabaseMissingRelation } from "./supabaseErrors";
 import type { DocumentoLeadRecord } from "../types/db";
 import { supabaseClient } from "../utility";
 
@@ -50,16 +49,11 @@ export type LeadUploadProgressStatus = "enviando" | "processando" | "concluido";
 
 type ActivityInsertInput = {
     leadId: string | number;
-    tenantId?: string | null;
     activityType: string;
     title?: string;
     description?: string;
-    author?: string;
-    fromStatus?: string;
-    toStatus?: string;
     fileName?: string;
     filePath?: string;
-    fileUrl?: string;
 };
 
 const asString = (value: unknown): string | undefined => {
@@ -129,207 +123,93 @@ const toTimelineTitle = (
     return "Atividade registrada";
 };
 
-const parseActivityRow = (row: Record<string, unknown>, prefix: string): LeadTimelineEntry => {
-    const fromStatus = firstString(row.de_status, row.status_de, row.from_status);
-    const toStatus = firstString(row.para_status, row.status_para, row.to_status);
-    const rawType = firstString(row.tipo, row.activity_type, row.type, row.evento);
-    const type = toTimelineType(rawType, fromStatus, toStatus);
-    const rawTitle = firstString(row.titulo, row.title, row.nome);
-    const createdAt = firstString(
-        row.created_at,
-        row.criado_em,
-        row.data_atividade,
-        row.movido_em,
-        row.updated_at,
-    );
-    const fileName = firstString(row.arquivo_nome, row.file_name, row.nome_arquivo);
-    const filePath = firstString(row.arquivo_path, row.storage_path, row.file_path);
-    const fileUrl = firstString(row.arquivo_url, row.file_url, row.url, row.public_url, row.signed_url);
+// Colunas reais de atividades_lead (migration 00). A tabela guarda cada
+// campo em português e em inglês — herança de versões antigas: as linhas
+// gravadas pelos triggers preenchem as duas, as gravadas daqui só as em
+// português. A leitura aceita qualquer uma.
+const COLUNAS_ATIVIDADE =
+    "id,tipo,activity_type,titulo,title,descricao,notes,criado_por,author," +
+    "de_status,from_status,para_status,to_status,arquivo_nome,file_name,arquivo_path,file_path,created_at";
+
+const parseActivityRow = (row: Record<string, unknown>): LeadTimelineEntry => {
+    const fromStatus = firstString(row.de_status, row.from_status);
+    const toStatus = firstString(row.para_status, row.to_status);
+    const type = toTimelineType(firstString(row.tipo, row.activity_type), fromStatus, toStatus);
 
     return {
-        id: `${prefix}-${String(row.id || createdAt || Math.random().toString(16).slice(2))}`,
+        id: `atividade-${String(row.id)}`,
         type,
-        title: toTimelineTitle(type, fromStatus, toStatus, rawTitle),
-        description: firstString(row.descricao, row.notes, row.nota, row.observacao),
-        createdAt,
-        author: firstString(row.criado_por, row.movido_por, row.author, row.usuario, row.user_email),
+        title: toTimelineTitle(type, fromStatus, toStatus, firstString(row.titulo, row.title)),
+        description: firstString(row.descricao, row.notes),
+        createdAt: firstString(row.created_at),
+        author: firstString(row.criado_por, row.author),
         fromStatus,
         toStatus,
-        fileName,
-        filePath,
-        fileUrl,
+        fileName: firstString(row.arquivo_nome, row.file_name),
+        filePath: firstString(row.arquivo_path, row.file_path),
     };
 };
 
-const sortEntriesByDateDesc = (entries: LeadTimelineEntry[]): LeadTimelineEntry[] => {
-    return [...entries].sort((a, b) => {
-        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-        return bTime - aTime;
+const VALIDADE_LINK_SEGUNDOS = 60 * 60;
+
+/**
+ * O link do arquivo é assinado na hora de exibir. Antes a URL assinada era
+ * gravada no banco junto com a atividade — e ela vence: no dia seguinte o
+ * "Abrir arquivo" da timeline dava erro. Sem link (arquivo removido ou
+ * falha ao assinar) a entrada continua aparecendo, com o caminho.
+ */
+const assinarArquivos = async (entries: LeadTimelineEntry[]): Promise<LeadTimelineEntry[]> => {
+    const caminhos = [...new Set(entries.map((entry) => entry.filePath).filter((c): c is string => Boolean(c)))];
+    if (caminhos.length === 0) return entries;
+
+    const { data, error } = await supabaseClient.storage
+        .from(LEAD_FILES_BUCKET)
+        .createSignedUrls(caminhos, VALIDADE_LINK_SEGUNDOS);
+    if (error || !data) return entries;
+
+    const urlPorCaminho = new Map<string, string>();
+    data.forEach((item) => {
+        if (item.path && item.signedUrl && !item.error) urlPorCaminho.set(item.path, item.signedUrl);
     });
+    return entries.map((entry) =>
+        entry.filePath ? { ...entry, fileUrl: urlPorCaminho.get(entry.filePath) } : entry,
+    );
 };
 
-const selectActivitiesByColumn = async (
-    leadId: string | number,
-    column: "cliente_id" | "lead_id",
-): Promise<{
-    rows: Record<string, unknown>[];
-    tableMissing: boolean;
-    columnMissing: boolean;
-}> => {
-    const { data, error } = await supabaseClient.from("atividades_lead").select("*").eq(column, leadId);
-
-    if (error) {
-        if (isSupabaseMissingRelation(error)) {
-            return { rows: [], tableMissing: true, columnMissing: false };
-        }
-        if (isSupabaseMissingColumn(error)) {
-            return { rows: [], tableMissing: false, columnMissing: true };
-        }
-        throw error;
-    }
-
-    return {
-        rows: (data || []) as Record<string, unknown>[],
-        tableMissing: false,
-        columnMissing: false,
-    };
-};
-
-const fetchActivities = async (leadId: string | number): Promise<LeadTimelineEntry[]> => {
-    const byClienteId = await selectActivitiesByColumn(leadId, "cliente_id");
-    if (!byClienteId.tableMissing && !byClienteId.columnMissing) {
-        return byClienteId.rows.map((row) => parseActivityRow(row, "atividade"));
-    }
-
-    if (byClienteId.tableMissing) {
-        return [];
-    }
-
-    const byLeadId = await selectActivitiesByColumn(leadId, "lead_id");
-    if (byLeadId.tableMissing || byLeadId.columnMissing) {
-        return [];
-    }
-
-    return byLeadId.rows.map((row) => parseActivityRow(row, "atividade"));
-};
-
-const fetchStatusHistory = async (leadId: string | number): Promise<LeadTimelineEntry[]> => {
-    // cliente_status_history.cliente_id é bigint (id da tabela antiga). Com
-    // o id UUID do modelo novo a consulta falhava ("invalid input syntax for
-    // type bigint") e, por estar num Promise.all, derrubava a timeline
-    // inteira do lead. No modelo novo as mudanças de etapa já chegam pela
-    // atividades_lead (trigger registrar_mudanca_stage).
-    if (!/^\d+$/.test(String(leadId))) return [];
-
-    const { data, error } = await supabaseClient
-        .from("cliente_status_history")
-        .select("*")
-        .eq("cliente_id", leadId);
-
-    if (error) {
-        if (isSupabaseMissingRelation(error)) {
-            return [];
-        }
-        throw error;
-    }
-
-    const rows = (data || []) as Record<string, unknown>[];
-    return rows.map((row) => parseActivityRow(row, "status-history"));
-};
-
+/**
+ * Timeline do lead, da mais recente para a mais antiga. As mudanças de
+ * etapa e de temperatura chegam pela própria atividades_lead (triggers do
+ * banco); não há segunda fonte para juntar.
+ */
 export const fetchLeadTimeline = async (leadId: string | number): Promise<LeadTimelineEntry[]> => {
-    const [activities, statusHistory] = await Promise.all([
-        fetchActivities(leadId),
-        // O histórico de etapas é complementar: se falhar, a timeline de
-        // atividades continua aparecendo.
-        fetchStatusHistory(leadId).catch(() => [] as LeadTimelineEntry[]),
-    ]);
+    const { data, error } = await supabaseClient
+        .from("atividades_lead")
+        .select(COLUNAS_ATIVIDADE)
+        .eq("cliente_id", String(leadId))
+        .order("created_at", { ascending: false });
+    if (error) throw error;
 
-    return sortEntriesByDateDesc([...activities, ...statusHistory]);
+    // "as unknown": com a lista de colunas montada por concatenação o
+    // supabase-js não infere o tipo da linha.
+    const rows = (data ?? []) as unknown as Record<string, unknown>[];
+    return assinarArquivos(rows.map(parseActivityRow));
 };
 
-const compactPayload = (payload: Record<string, unknown>): Record<string, unknown> => {
-    return Object.entries(payload).reduce<Record<string, unknown>>((acc, [key, value]) => {
-        if (value !== undefined) {
-            acc[key] = value;
-        }
-        return acc;
-    }, {});
-};
-
-export const addLeadActivity = async (input: ActivityInsertInput): Promise<boolean> => {
-    const now = new Date().toISOString();
-    const baseDescription = input.description || "";
-    const baseTitle = input.title || input.activityType;
-
-    const payloads: Array<Record<string, unknown>> = [
-        {
-            tenant_id: input.tenantId || undefined,
-            cliente_id: input.leadId,
-            tipo: input.activityType,
-            titulo: baseTitle,
-            descricao: baseDescription,
-            criado_por: input.author,
-            de_status: input.fromStatus,
-            para_status: input.toStatus,
-            arquivo_nome: input.fileName,
-            arquivo_path: input.filePath,
-            arquivo_url: input.fileUrl,
-            created_at: now,
-        },
-        {
-            tenant_id: input.tenantId || undefined,
-            cliente_id: input.leadId,
-            tipo: input.activityType,
-            titulo: baseTitle,
-            descricao: baseDescription,
-            data_atividade: now,
-        },
-        {
-            tenant_id: input.tenantId || undefined,
-            lead_id: input.leadId,
-            tipo: input.activityType,
-            titulo: baseTitle,
-            descricao: baseDescription,
-            created_at: now,
-        },
-        {
-            tenant_id: input.tenantId || undefined,
-            lead_id: input.leadId,
-            activity_type: input.activityType,
-            title: baseTitle,
-            notes: baseDescription,
-            author: input.author,
-            from_status: input.fromStatus,
-            to_status: input.toStatus,
-            file_name: input.fileName,
-            file_path: input.filePath,
-            file_url: input.fileUrl,
-            created_at: now,
-        },
-    ];
-
-    for (const rawPayload of payloads) {
-        const payload = compactPayload(rawPayload);
-        const { error } = await supabaseClient.from("atividades_lead").insert(payload);
-
-        if (!error) {
-            return true;
-        }
-
-        if (isSupabaseMissingRelation(error)) {
-            return false;
-        }
-
-        if (isSupabaseMissingColumn(error)) {
-            continue;
-        }
-
-        throw error;
-    }
-
-    return false;
+/**
+ * Registra uma atividade manual (nota, ligação, envio de arquivo).
+ * Data, autor e empresa são carimbados pelo banco (migrations 18 e 19) —
+ * por isso não são enviados. Lança o erro do banco se a gravação falhar.
+ */
+export const addLeadActivity = async (input: ActivityInsertInput): Promise<void> => {
+    const { error } = await supabaseClient.from("atividades_lead").insert({
+        cliente_id: String(input.leadId),
+        tipo: input.activityType,
+        titulo: input.title || input.activityType,
+        descricao: input.description || "",
+        ...(input.fileName ? { arquivo_nome: input.fileName } : {}),
+        ...(input.filePath ? { arquivo_path: input.filePath } : {}),
+    });
+    if (error) throw error;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -386,14 +266,11 @@ export const uploadLeadPdf = async (params: {
 
     await addLeadActivity({
         leadId: params.leadId,
-        tenantId: params.tenantId,
         activityType: `upload_${params.kind}`,
         title: `Upload de ${params.kind === "proposta" ? "proposta" : "conta de luz"}`,
         description: `Arquivo enviado: ${params.file.name}`,
-        author: params.author,
         fileName: params.file.name,
         filePath: path,
-        fileUrl: url,
     });
 
     return {
@@ -503,12 +380,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
         .eq("cliente_id", leadId)
         .order("created_at", { ascending: false });
 
-    if (error) {
-        if (isSupabaseMissingRelation(error)) {
-            return [];
-        }
-        throw error;
-    }
+    if (error) throw error;
 
     const rows = (data || []) as DocumentoLeadRecord[];
     const visibleRows = rows.filter((row) => {

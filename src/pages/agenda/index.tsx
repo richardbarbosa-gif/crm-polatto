@@ -678,8 +678,10 @@ export const AgendaPage = () => {
                                                         } as TarefaRecord);
 
                                                     } catch (error) {
-                                                        console.error("Erro ao atualizar o status:", error);
-                                                        message.error("Não foi possível salvar o status no banco de dados.");
+                                                        message.error(
+                                                            getSupabaseErrorMessage(error) ||
+                                                                "Não foi possível salvar o status da atividade.",
+                                                        );
                                                     }
                                                 }}
                                             />

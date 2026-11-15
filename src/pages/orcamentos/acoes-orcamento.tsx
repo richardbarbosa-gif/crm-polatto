@@ -74,7 +74,7 @@ export const AcoesOrcamento = ({
     onArquivoSalvo,
 }: Props) => {
     const { message, modal } = App.useApp();
-    const { tenantId, identityEmail } = useTenant();
+    const { tenantId } = useTenant();
     const invalidate = useInvalidate();
     const [ocupado, setOcupado] = useState<Ocupado>(null);
     const [compartilhar, setCompartilhar] = useState<Canal | null>(null);
@@ -119,7 +119,6 @@ export const AcoesOrcamento = ({
                 nomeArquivo: proposta.nomeArquivo,
                 numero: proposta.orcamento.numero,
                 total: formatCurrencyBRL(proposta.orcamento.total),
-                autor: identityEmail ?? undefined,
             });
             message.success("PDF salvo nos documentos do lead.");
             onArquivoSalvo?.();

@@ -48,6 +48,7 @@ import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields
 import { CampoOrigem } from "../../components/origem/campo-origem";
 import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
 import { origemParaDadosExtras } from "../../lib/origemLead";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 type ClienteCreateFormValues = {
     nome: string;
@@ -238,7 +239,7 @@ export const ClienteCreate = () => {
     useEffect(() => {
         let ativo = true;
         fetchEmployeesDirectory()
-            .then(({ employees }) => {
+            .then((employees) => {
                 if (!ativo) return;
                 setListaResponsaveis(
                     employees
@@ -246,8 +247,12 @@ export const ClienteCreate = () => {
                         .map((emp) => ({ label: emp.nome, value: String(emp.id) })),
                 );
             })
-            .catch(() => {
-                if (ativo) setListaResponsaveis([]);
+            .catch((error: unknown) => {
+                if (!ativo) return;
+                setListaResponsaveis([]);
+                message.warning(
+                    `Não foi possível carregar a lista de responsáveis: ${getSupabaseErrorMessage(error) || "tente recarregar a página."}`,
+                );
             });
         return () => {
             ativo = false;

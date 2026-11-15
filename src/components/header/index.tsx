@@ -10,6 +10,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { supabaseClient } from "../../utility";
 import { GlobalSearch } from "../global-search";
 import { CompanySelector } from "./company-selector";
+import { reportError } from "../../utility/errorMonitoring";
 
 const { Text } = Typography;
 
@@ -48,15 +49,15 @@ const NotificationBell = () => {
                 .order("data_vencimento", { ascending: true })
                 .limit(20);
 
-            if (error) {
-                setHidden(true);
-                return;
-            }
+            if (error) throw error;
 
             setHidden(false);
             setTarefas((data as TarefaPendente[]) || []);
-        } catch {
+        } catch (error) {
+            // O sino some quando a consulta falha (não mostra contagem errada),
+            // mas a causa fica registrada.
             setHidden(true);
+            reportError(error, "manual", { componente: "sino_de_tarefas" });
         }
     }, []);
 

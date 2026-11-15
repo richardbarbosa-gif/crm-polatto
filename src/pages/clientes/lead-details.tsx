@@ -52,6 +52,7 @@ import { EscolherModelo } from "../../components/escolher-modelo";
 import { useRemetente } from "../../hooks/useRemetente";
 import { emailValido, montarDadosModelo, telefoneWhatsApp, type CanalModelo } from "../../lib/modelosMensagem";
 import { origemDoLead } from "../../lib/origemLead";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 const { Title, Text } = Typography;
 
@@ -261,8 +262,8 @@ export const LeadDetails = ({
                 await updateLeadTemperature(record.id, value);
                 // O banco registra a mudança na timeline (trigger); mostra já.
                 await loadTimeline();
-            } catch {
-                message.error("Falha ao salvar temperatura do lead.");
+            } catch (error) {
+                message.error(getSupabaseErrorMessage(error) || "Falha ao salvar temperatura do lead.");
             }
         }
     };
@@ -279,22 +280,13 @@ export const LeadDetails = ({
 
         setIsSavingActivity(true);
         try {
-            const persisted = await addLeadActivity({
+            await addLeadActivity({
                 leadId: record.id,
-                tenantId,
                 activityType: activityType,
                 title: activityType === "ligacao" ? "Ligação com o lead" : "Nota",
                 description: activityText.trim(),
-                author: currentUserLabel,
             });
-
-            if (!persisted) {
-                message.warning(
-                    "A atividade não foi salva: a tabela de histórico não existe neste banco.",
-                );
-            } else {
-                message.success("Atividade registrada no histórico.");
-            }
+            message.success("Atividade registrada no histórico.");
 
             setActivityText("");
             await loadTimeline();

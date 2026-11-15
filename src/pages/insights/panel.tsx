@@ -35,7 +35,8 @@ import {
     resolveTaskExecutionStatus,
     subscribeTaskExecutionStatusUpdates,
 } from "../../lib/taskExecutionStatus";
-import { supabaseClient } from "../../utility";
+import { fetchMudancasDeEtapa } from "../../lib/mudancasDeEtapa";
+import { reportError } from "../../utility/errorMonitoring";
 import { InsightsHeader, IntroCard } from "./shared";
 import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
 
@@ -65,21 +66,14 @@ export const InsightsPanelPage = () => {
         setIsLoadingHistory(true);
 
         try {
-            const { data, error } = await supabaseClient
-                .from("cliente_status_history")
-                .select("id,cliente_id,de_status,para_status,movido_em,movido_por")
-                .order("movido_em", { ascending: false })
-                // O painel mostra os 12 eventos mais recentes: não há por que
-                // baixar o histórico inteiro.
-                .limit(50);
-
-            if (error) {
-                throw error;
-            }
-
-            setHistoryItems((data || []) as InsightStatusHistoryRecord[]);
-        } catch {
+            // O painel mostra os 12 eventos mais recentes: não há por que
+            // baixar o histórico inteiro.
+            setHistoryItems(await fetchMudancasDeEtapa(50));
+        } catch (error) {
+            // Bloco complementar do painel: sem ele a tela continua útil, mas
+            // a falha não pode passar em branco.
             setHistoryItems([]);
+            reportError(error, "manual", { tela: "insights/painel", bloco: "mudancas_de_etapa" });
         } finally {
             setIsLoadingHistory(false);
         }

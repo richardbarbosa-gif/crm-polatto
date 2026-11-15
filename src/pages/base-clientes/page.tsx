@@ -70,7 +70,13 @@ export const BaseClientesPage = () => {
 
         try {
             // Etapas marcadas como ganho (podem não ter "fechado" no nome).
-            const { data: etapas } = await supabaseClient.from("pipeline_stages").select("id,ganho").eq("ganho", true);
+            const { data: etapas, error: erroEtapas } = await supabaseClient
+                .from("pipeline_stages")
+                .select("id,ganho")
+                .eq("ganho", true);
+            // Sem as etapas de ganho o filtro abaixo deixaria de fora clientes
+            // fechados em etapa de outro nome: melhor avisar do que listar pela metade.
+            if (erroEtapas) throw erroEtapas;
             const idsGanho = ((etapas ?? []) as Array<{ id: string | number }>).map((e) => String(e.id));
             const filtroGanho = [
                 "status.ilike.%fechado%",

@@ -8,6 +8,7 @@ import { formatCurrencyBRL } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
 import { valorDoLead } from "../../lib/pipelineMetrics";
 import { supabaseClient } from "../../utility";
+import { reportError } from "../../utility/errorMonitoring";
 
 const { Text } = Typography;
 
@@ -72,14 +73,16 @@ export const ListView: React.FC<ListViewProps> = ({
                     .select("id,nome")
                     .order("ordem");
 
-                if (!active || error || !Array.isArray(data)) {
+                if (error) throw error;
+                if (!active || !Array.isArray(data)) {
                     return;
                 }
                 setFallbackStages(
                     (data as ListViewStageOption[]).filter((s) => s && s.nome),
                 );
-            } catch {
-                return;
+            } catch (error) {
+                // Sem as etapas o seletor "mover para" fica vazio: registra a causa.
+                reportError(error, "manual", { tela: "kanban/lista", bloco: "etapas" });
             }
         };
 

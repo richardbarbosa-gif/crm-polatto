@@ -1,31 +1,31 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Supabase falso: registra inserts e responde selects por tabela. Uma
- * consulta em cliente_status_history com cliente_id não numérico falha
- * como no Postgres real (coluna bigint).
+ * Supabase falso: registra inserts, responde selects por tabela e assina
+ * caminhos do Storage (o arquivo "apagado.pdf" não existe mais).
  */
+type ErroFalso = { code: string; message: string } | null;
+
 const inserts: Array<{ tabela: string; payload: Record<string, unknown> }> = [];
 const linhasPorTabela: Record<string, Record<string, unknown>[]> = {};
+const tabelasConsultadas: string[] = [];
+let erroDaConsulta: ErroFalso = null;
+let erroDoInsert: ErroFalso = null;
 
 const consulta = (tabela: string) => {
     const filtros: Array<[string, unknown]> = [];
     const builder = {
-        select: () => builder,
+        select: () => {
+            tabelasConsultadas.push(tabela);
+            return builder;
+        },
         eq: (coluna: string, valor: unknown) => {
             filtros.push([coluna, valor]);
             return builder;
         },
+        order: () => builder,
         then: (resolve: (r: unknown) => unknown) => {
-            const bigintInvalido =
-                tabela === "cliente_status_history" &&
-                filtros.some(([c, v]) => c === "cliente_id" && !/^\d+$/.test(String(v)));
-            if (bigintInvalido) {
-                return Promise.resolve({
-                    data: null,
-                    error: { code: "22P02", message: 'invalid input syntax for type bigint' },
-                }).then(resolve);
-            }
+            if (erroDaConsulta) return Promise.resolve({ data: null, error: erroDaConsulta }).then(resolve);
             const linhas = (linhasPorTabela[tabela] ?? []).filter((linha) =>
                 filtros.every(([c, v]) => String(linha[c]) === String(v)),
             );
@@ -40,19 +40,35 @@ vi.mock("../../utility", () => ({
         from: (tabela: string) => ({
             ...consulta(tabela),
             insert: async (payload: Record<string, unknown>) => {
+                if (erroDoInsert) return { error: erroDoInsert };
                 inserts.push({ tabela, payload });
                 return { error: null };
             },
         }),
+        storage: {
+            from: () => ({
+                createSignedUrls: async (caminhos: string[]) => ({
+                    data: caminhos.map((path) =>
+                        path.endsWith("apagado.pdf")
+                            ? { path, signedUrl: "", error: "Object not found" }
+                            : { path, signedUrl: `https://assinada.example/${path}`, error: null },
+                    ),
+                    error: null,
+                }),
+            }),
+        },
     },
 }));
 
-import { ehIdDoModeloNovo, fetchLeadTimeline, temAssinaturaPdf, toTimelineType } from "../leadTimeline";
+import { addLeadActivity, ehIdDoModeloNovo, fetchLeadTimeline, temAssinaturaPdf, toTimelineType } from "../leadTimeline";
 
 const UUID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 
 beforeEach(() => {
     inserts.length = 0;
+    tabelasConsultadas.length = 0;
+    erroDaConsulta = null;
+    erroDoInsert = null;
     Object.keys(linhasPorTabela).forEach((k) => delete linhasPorTabela[k]);
 });
 
@@ -85,22 +101,59 @@ describe("ehIdDoModeloNovo", () => {
 
 describe("fetchLeadTimeline", () => {
     it("REGRESSÃO: lead com id UUID carrega a timeline em vez de falhar", async () => {
+        // o banco devolve já ordenado (order created_at desc)
         linhasPorTabela.atividades_lead = [
-            { id: 1, cliente_id: UUID, tipo: "nota", titulo: "Ligou", created_at: "2026-11-01T10:00:00Z" },
             { id: 2, cliente_id: UUID, tipo: "status", de_status: "A", para_status: "B", created_at: "2026-11-02T10:00:00Z" },
+            { id: 1, cliente_id: UUID, tipo: "nota", titulo: "Ligou", created_at: "2026-11-01T10:00:00Z" },
         ];
         const timeline = await fetchLeadTimeline(UUID);
         expect(timeline.map((e) => e.type)).toEqual(["status", "nota"]);
     });
 
-    it("lead antigo junta atividades e histórico de etapas", async () => {
-        linhasPorTabela.atividades_lead = [{ id: 1, cliente_id: "7", tipo: "nota", created_at: "2026-11-01T10:00:00Z" }];
-        linhasPorTabela.cliente_status_history = [
-            { id: 9, cliente_id: 7, de_status: "Novo", para_status: "Visita", movido_em: "2026-11-03T10:00:00Z" },
+    it("não consulta cliente_status_history: a etapa já vem pela atividades_lead (trigger do banco)", async () => {
+        linhasPorTabela.atividades_lead = [{ id: 1, cliente_id: UUID, tipo: "nota", created_at: "2026-11-01T10:00:00Z" }];
+        linhasPorTabela.cliente_status_history = [{ id: 9, cliente_id: UUID, de_status: "Novo", para_status: "Visita" }];
+        const timeline = await fetchLeadTimeline(UUID);
+        expect(timeline).toHaveLength(1);
+        expect(tabelasConsultadas).toEqual(["atividades_lead"]);
+    });
+
+    it("assina o link do arquivo na hora de exibir e ignora a URL antiga gravada no banco", async () => {
+        linhasPorTabela.atividades_lead = [
+            {
+                id: 3,
+                cliente_id: UUID,
+                tipo: "upload_proposta",
+                arquivo_nome: "proposta.pdf",
+                arquivo_path: "tenant/lead/proposta.pdf",
+                arquivo_url: "https://vencida.example/assinada",
+                created_at: "2026-11-01T10:00:00Z",
+            },
+            { id: 4, cliente_id: UUID, tipo: "upload_proposta", arquivo_path: "tenant/lead/apagado.pdf", created_at: "2026-10-01T10:00:00Z" },
         ];
-        const timeline = await fetchLeadTimeline(7);
-        expect(timeline).toHaveLength(2);
-        expect(timeline[0].toStatus).toBe("Visita");
+        const timeline = await fetchLeadTimeline(UUID);
+        expect(timeline[0].fileUrl).toBe("https://assinada.example/tenant/lead/proposta.pdf");
+        expect(timeline[1].fileUrl).toBeUndefined();
+        expect(timeline[1].filePath).toBe("tenant/lead/apagado.pdf");
+    });
+
+    it("propaga o erro do banco em vez de devolver timeline vazia", async () => {
+        erroDaConsulta = { code: "42703", message: 'column "x" does not exist' };
+        await expect(fetchLeadTimeline(UUID)).rejects.toMatchObject({ code: "42703" });
+    });
+});
+
+describe("addLeadActivity", () => {
+    it("grava um único formato, sem data, autor nem empresa (o banco carimba)", async () => {
+        await addLeadActivity({ leadId: UUID, activityType: "nota", title: "Nota", description: "Ligou" });
+        expect(inserts).toEqual([
+            { tabela: "atividades_lead", payload: { cliente_id: UUID, tipo: "nota", titulo: "Nota", descricao: "Ligou" } },
+        ]);
+    });
+
+    it("propaga o erro do banco (antes tentava outros formatos e engolia a falha)", async () => {
+        erroDoInsert = { code: "42501", message: "permission denied" };
+        await expect(addLeadActivity({ leadId: UUID, activityType: "nota" })).rejects.toMatchObject({ code: "42501" });
     });
 });
 

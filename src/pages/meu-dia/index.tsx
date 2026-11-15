@@ -23,6 +23,7 @@ import {
     rotuloParado,
     rotuloSemContato,
 } from "../../lib/saudeNegocio";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 const { Title, Text } = Typography;
 
@@ -141,8 +142,8 @@ export const MeuDiaPage = () => {
             message.success("Atividade concluída.");
             await tarefasQuery.refetch();
             void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list"] });
-        } catch {
-            message.error("Não foi possível concluir a atividade.");
+        } catch (error) {
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível concluir a atividade.");
         } finally {
             setConcluindoId(null);
         }

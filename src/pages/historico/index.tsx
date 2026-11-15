@@ -188,8 +188,8 @@ export const HistoricoPage = () => {
                     });
                     message.success("Negócio reaberto no funil.");
                     await Promise.all([listQuery?.refetch?.(), kpiQuery?.refetch?.()]);
-                } catch {
-                    message.error("Não foi possível reabrir o negócio.");
+                } catch (error) {
+                    message.error(getSupabaseErrorMessage(error) || "Não foi possível reabrir o negócio.");
                 }
             },
         });

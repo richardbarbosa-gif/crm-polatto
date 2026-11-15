@@ -23,6 +23,7 @@ import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
 import { rotuloPrazoEtapa } from "../../../lib/saudeNegocio";
 import { supabaseClient } from "../../../utility";
 import type { PipelineRecord, PipelineStageRecord } from "../../../types/db";
+import { getSupabaseErrorMessage } from "../../../lib/supabaseErrors";
 
 const { Text } = Typography;
 
@@ -179,8 +180,8 @@ export const PipelinesConfig = () => {
             await deleteRecord({ resource: "pipelines", id: pipeline.id });
             message.success("Funil removido.");
             await pipelinesQuery?.refetch?.();
-        } catch {
-            message.error("Não foi possível remover o funil.");
+        } catch (error) {
+            message.error(getSupabaseErrorMessage(error) || "Não foi possível remover o funil.");
         }
     };
 

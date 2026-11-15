@@ -15,8 +15,7 @@ import {
     type InsightTaskRecord,
 } from "../../lib/insights";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
-import { supabaseClient } from "../../utility";
+import { fetchMudancasDeEtapa } from "../../lib/mudancasDeEtapa";
 import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 
@@ -44,7 +43,6 @@ export const InsightsActivityLogPage = () => {
     const [objectFilter, setObjectFilter] = useState<string>("todos");
     const [historyItems, setHistoryItems] = useState<InsightStatusHistoryRecord[]>([]);
     const [historyError, setHistoryError] = useState<{ message?: string } | null>(null);
-    const [isHistoryUnavailable, setIsHistoryUnavailable] = useState(false);
     const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
 
     // O registro mostra os eventos mais recentes: limita no servidor em vez
@@ -62,28 +60,10 @@ export const InsightsActivityLogPage = () => {
     const loadHistory = useCallback(async () => {
         setIsLoadingHistory(true);
         setHistoryError(null);
-        setIsHistoryUnavailable(false);
 
         try {
-            const { data, error } = await supabaseClient
-                .from("cliente_status_history")
-                .select("id,cliente_id,de_status,para_status,movido_em,movido_por")
-                .order("movido_em", { ascending: false })
-                .limit(LIMITE_EVENTOS);
-
-            if (error) {
-                throw error;
-            }
-
-            setHistoryItems((data || []) as InsightStatusHistoryRecord[]);
+            setHistoryItems(await fetchMudancasDeEtapa(LIMITE_EVENTOS));
         } catch (error: unknown) {
-            if (isSupabaseMissingRelation(error)) {
-                setHistoryItems([]);
-                setHistoryError(null);
-                setIsHistoryUnavailable(true);
-                return;
-            }
-
             setHistoryItems([]);
             setHistoryError(error as { message?: string });
         } finally {
@@ -206,19 +186,8 @@ export const InsightsActivityLogPage = () => {
                     style={{ marginBottom: 12 }}
                     message="Não foi possível consultar o histórico de etapas."
                     description={
-                        historyError?.message ||
-                        "Verifique se a tabela cliente_status_history existe no banco."
+                        historyError?.message || "Tente recarregar a página."
                     }
-                />
-            ) : null}
-
-            {isHistoryUnavailable ? (
-                <Alert
-                    type="info"
-                    showIcon
-                    style={{ marginBottom: 12 }}
-                    message="Histórico de etapas ainda não configurado no banco."
-                    description="Enquanto isso, o registro segue mostrando os eventos de atividades."
                 />
             ) : null}
 

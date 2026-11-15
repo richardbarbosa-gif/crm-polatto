@@ -3,7 +3,7 @@ import { CustomFieldsForm } from "../../components/custom-fields";
 import { dadosExtrasParaFormulario } from "../../lib/camposCustomizados";
 import { extrairDadosExtras, useCustomFields } from "../../hooks/useCustomFields";
 import { useList, type HttpError } from "@refinedev/core";
-import { Alert, Col, Form, Input, InputNumber, Row, Select, Spin } from "antd";
+import { Alert, Col, Form, Input, InputNumber, Row, Select, Spin, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
@@ -32,6 +32,7 @@ import { CampoOrigem } from "../../components/origem/campo-origem";
 import { useCanaisOrigem } from "../../hooks/useCanaisOrigem";
 import { origemDoLead, origemParaDadosExtras } from "../../lib/origemLead";
 import type { ClienteRecord, PipelineRecord, PipelineStageRecord } from "../../types/db";
+import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 
 type ClienteEditFormValues = {
     nome: string;
@@ -97,7 +98,7 @@ export const ClienteEdit = () => {
     useEffect(() => {
         let ativo = true;
         fetchEmployeesDirectory()
-            .then(({ employees }) => {
+            .then((employees) => {
                 if (!ativo) return;
                 setListaResponsaveis(
                     employees
@@ -105,8 +106,12 @@ export const ClienteEdit = () => {
                         .map((emp) => ({ label: emp.nome, value: String(emp.id) })),
                 );
             })
-            .catch(() => {
-                if (ativo) setListaResponsaveis([]);
+            .catch((error: unknown) => {
+                if (!ativo) return;
+                setListaResponsaveis([]);
+                message.warning(
+                    `Não foi possível carregar a lista de responsáveis: ${getSupabaseErrorMessage(error) || "tente recarregar a página."}`,
+                );
             });
         return () => {
             ativo = false;
