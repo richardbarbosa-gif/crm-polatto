@@ -560,27 +560,6 @@ export const ClienteList = () => {
     }, [selectedLeadId]);
 
     // ---- Realtime ----
-    // Toast do lead novo pela tabela legada (enquanto "clientes" for tabela).
-    useEffect(() => {
-        const channel = supabaseClient
-            .channel("crm-leads-realtime-notifications")
-            .on(
-                "postgres_changes",
-                { event: "INSERT", schema: "public", table: "clientes" },
-                (payload) => {
-                    const leadName = (payload.new as Record<string, unknown>)?.nome;
-                    message.info(
-                        `Novo lead recebido: ${typeof leadName === "string" ? leadName : "Sem nome"}`,
-                    );
-                },
-            )
-            .subscribe();
-
-        return () => {
-            supabaseClient.removeChannel(channel);
-        };
-    }, []);
-
     // Depois da virada, "clientes" é uma view e o Supabase não emite evento
     // para views — o liveMode do Refine pararia de atualizar a tela sozinho.
     // Este hook escuta a tabela real e revalida os recursos da página.
@@ -900,6 +879,8 @@ export const ClienteList = () => {
         if (activeDropColumn !== stageId) setActiveDropColumn(stageId);
     };
 
+    const leadsEmMovimento = useRef(new Set<string>());
+
     const moverLeadParaStage = async (
         leadArrastado: KanbanLead,
         novoStageId: string,
@@ -913,6 +894,12 @@ export const ClienteList = () => {
         const isGanho = Boolean(nextStage?.ganho) || textoIndicaGanho(nextStageName);
         const isPerda = Boolean(nextStage?.perdido) || textoIndicaPerda(nextStageName);
         const isTerminal = isGanho || isPerda;
+
+        // Um movimento por vez para cada card: soltar duas vezes rápido (ou
+        // arrastar enquanto o anterior ainda grava) disparava dois updates
+        // concorrentes e duas linhas de histórico.
+        if (leadsEmMovimento.current.has(leadId)) return;
+        leadsEmMovimento.current.add(leadId);
 
         try {
             await updateLead({
@@ -954,6 +941,8 @@ export const ClienteList = () => {
             }
         } catch {
             // A notificação de erro da mudança de etapa é exibida pelo Refine.
+        } finally {
+            leadsEmMovimento.current.delete(leadId);
         }
     };
 

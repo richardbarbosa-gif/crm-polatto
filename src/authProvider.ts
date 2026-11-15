@@ -88,7 +88,21 @@ const authProvider: AuthProvider = {
         };
       }
 
-      if (data) {
+      // Com a confirmação de e-mail ligada o Supabase cria a conta SEM
+      // sessão: redirecionar para "/" devolvia a pessoa à tela de login sem
+      // nenhuma explicação.
+      if (data.user && !data.session) {
+        return {
+          success: true,
+          redirectTo: "/login",
+          successNotification: {
+            message: "Confirme seu e-mail",
+            description: "Enviamos um link de confirmação. Abra-o para ativar a conta e depois entre com seu e-mail e senha.",
+          },
+        };
+      }
+
+      if (data.session) {
         return {
           success: true,
           redirectTo: "/",

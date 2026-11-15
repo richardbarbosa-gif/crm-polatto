@@ -176,6 +176,37 @@ psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/tests/15_preparo_privilegios_f
 psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/migrations/2026-11-15_20_privilegios_indices_storage.sql" >/dev/null 2>&1
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/15_teste_privilegios_indices_storage.sql"
 
+echo "==> Suíte 16: importação de leads com deduplicação no banco (migration 21)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/16_teste_importacao_leads.sql"
+
+echo "==> Suíte 16b: duas importações da mesma planilha ao mesmo tempo"
+# Duas conexões importam os MESMOS 40 leads simultaneamente. Sem a trava
+# por empresa, as duas conferem "não existe" antes de qualquer uma gravar
+# e a base fica com 80. Esperado: 40.
+USER_A="$(ctx user_a)"; TENANT_A="$(ctx tenant_a)"
+importar_planilha() {
+    psql -v ON_ERROR_STOP=1 -q >/dev/null <<SQL
+select public.login_como('$USER_A', 'vendedor.a@teste.com');
+select public.importar_leads((
+    select jsonb_agg(jsonb_build_object(
+        'linha', g, 'nome', 'Corrida ' || g, 'telefone', '(21) 90000-' || lpad(g::text, 4, '0'),
+        'telefones', jsonb_build_array('(21) 90000-' || lpad(g::text, 4, '0'))))
+    from generate_series(1, 40) g));
+SQL
+}
+importar_planilha & pid_a=$!
+importar_planilha & pid_b=$!
+wait "$pid_a" || { echo "FALHOU: importação A abortou"; exit 1; }
+wait "$pid_b" || { echo "FALHOU: importação B abortou"; exit 1; }
+psql -v ON_ERROR_STOP=1 -q <<SQL
+do \$\$
+begin
+    perform public.assert(
+        (select count(*) from public.negocios where tenant_id = '$TENANT_A' and titulo like 'Corrida %') = 40,
+        'IM7: duas importações simultâneas da mesma planilha gravam cada lead uma vez só');
+end \$\$;
+SQL
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

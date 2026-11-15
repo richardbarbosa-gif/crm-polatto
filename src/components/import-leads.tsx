@@ -6,7 +6,6 @@ import Papa from "papaparse";
 
 import { useCrmAccess } from "../hooks/useCrmAccess";
 import {
-    chavesDeIdentidade,
     emLotesDe,
     mapearLinha,
     separarDuplicadasNaPlanilha,
@@ -18,40 +17,15 @@ import { supabaseClient } from "../utility";
 
 type Etapa = { id: string | number; nome?: string | null; pipeline_id?: string | null };
 
-/** Lotes pequenos: a lista de valores vai na URL (GET) e há limite de tamanho. */
-const LOTE_CONSULTA = 80;
-const LOTE_INSERCAO = 50;
+/** O banco aceita até 500 por chamada (importar_leads); lote menor = progresso mais fino. */
+const LOTE_IMPORTACAO = 200;
 
 const normalizar = (v: unknown) => String(v ?? "").trim().toLowerCase();
 
-/**
- * Já cadastrados (telefone, e-mail ou documento), em lotes. Antes as três
- * consultas iam com TODOS os valores da planilha numa única URL; acima de
- * algumas centenas de linhas a requisição falhava, o erro era ignorado e a
- * deduplicação era desligada em silêncio.
- */
-const buscarChavesExistentes = async (linhas: LinhaImportada[]): Promise<Set<string>> => {
-    const existentes = new Set<string>();
-    const telefones = Array.from(new Set(linhas.flatMap((l) => variantesTelefone(l.telefone))));
-    const emails = Array.from(new Set(linhas.map((l) => l.email?.trim()).filter((e): e is string => Boolean(e))));
-    const documentos = Array.from(new Set(linhas.flatMap((l) => variantesDocumento(l.cpf_cnpj))));
-
-    const consultar = async (coluna: "telefone" | "email" | "cpf_cnpj", valores: string[]) => {
-        for (const lote of emLotesDe(valores, LOTE_CONSULTA)) {
-            const { data, error } = await supabaseClient.from("clientes").select("telefone,email,cpf_cnpj").in(coluna, lote);
-            if (error) throw new Error(`Falha ao verificar duplicatas (${coluna}): ${error.message}`);
-            ((data ?? []) as Array<{ telefone?: string | null; email?: string | null; cpf_cnpj?: string | null }>).forEach((r) =>
-                chavesDeIdentidade({ telefone: r.telefone ?? "", email: r.email ?? null, cpf_cnpj: r.cpf_cnpj ?? null }).forEach(
-                    (chave) => existentes.add(chave),
-                ),
-            );
-        }
-    };
-
-    await consultar("telefone", telefones);
-    await consultar("email", emails);
-    await consultar("cpf_cnpj", documentos);
-    return existentes;
+type RespostaImportacao = {
+    importadas?: number;
+    ja_existiam?: number;
+    erros?: Array<{ linha?: number; motivo?: string }>;
 };
 
 export const ImportLeadsButton = () => {
@@ -65,10 +39,11 @@ export const ImportLeadsButton = () => {
 
         // Etapas do funil para converter o texto do status em stage_id. Sem
         // isso o lead importado nasce sem etapa e cai na coluna "Outros".
-        const { data: etapasData } = await supabaseClient
+        const { data: etapasData, error: erroEtapas } = await supabaseClient
             .from("pipeline_stages")
             .select("id,nome,ordem,pipeline_id")
             .order("ordem", { ascending: true });
+        if (erroEtapas) throw new Error(`Não foi possível ler as etapas do funil: ${erroEtapas.message}`);
         const etapas = (etapasData ?? []) as Etapa[];
         let funilAtivo: string | null = null;
         try {
@@ -94,43 +69,48 @@ export const ImportLeadsButton = () => {
         // 2. Repetidas dentro da própria planilha
         const { unicas, repetidas } = separarDuplicadasNaPlanilha(validas);
 
-        // 3. Já cadastradas no CRM
-        const existentes = await buscarChavesExistentes(unicas);
-        const novas = unicas.filter((l) => !chavesDeIdentidade(l).some((chave) => existentes.has(chave)));
-        const jaCadastradas = unicas.length - novas.length;
-
-        // 4. Inserção em lotes; se um lote falha, tenta linha a linha para
-        //    importar as boas e apontar exatamente quais falharam.
-        const paraInserir = (linha: LinhaImportada) => {
+        // 3. Duplicatas contra o CRM e inserção acontecem NO BANCO (importar_leads):
+        //    uma importação por empresa de cada vez, linha a linha. Conferir aqui
+        //    e inserir depois deixava duas importações simultâneas duplicarem tudo.
+        const paraImportar = (linha: LinhaImportada) => {
             const etapa = (linha.status && etapaPorNome.get(normalizar(linha.status))) || etapaPadrao;
             return {
+                linha: linha.linha,
+                // Só tem efeito para o administrador da plataforma operando em
+                // outra empresa; para os demais o banco usa a empresa do login.
                 tenant_id: tenantId || undefined,
                 nome: linha.nome,
                 email: linha.email,
                 telefone: linha.telefone,
                 cpf_cnpj: linha.cpf_cnpj,
+                telefones: variantesTelefone(linha.telefone),
+                documentos: variantesDocumento(linha.cpf_cnpj),
                 responsavel: linha.responsavel || ownerDisplayName,
                 conta_energia_media: linha.conta_energia_media,
                 valor: linha.valor,
                 status: etapa?.nome || linha.status || "Novo Lead",
                 stage_id: etapa?.id ?? null,
-                ...(etapa?.pipeline_id ? { pipeline_id: etapa.pipeline_id } : {}),
+                pipeline_id: etapa?.pipeline_id ?? null,
                 temperatura: linha.temperatura,
             };
         };
 
         let importadas = 0;
-        for (const lote of emLotesDe(novas, LOTE_INSERCAO)) {
-            const { error } = await supabaseClient.from("clientes").insert(lote.map(paraInserir));
-            if (!error) {
-                importadas += lote.length;
+        let jaCadastradas = 0;
+        for (const lote of emLotesDe(unicas, LOTE_IMPORTACAO)) {
+            const { data, error } = await supabaseClient.rpc("importar_leads", { p_linhas: lote.map(paraImportar) });
+            if (error) {
+                // O lote inteiro foi recusado (rede, permissão, limite do plano):
+                // nenhuma linha dele entrou. Aponta todas, com o motivo real.
+                lote.forEach((linha) => erros.push({ linha: linha.linha, motivo: error.message }));
                 continue;
             }
-            for (const linha of lote) {
-                const { error: erroLinha } = await supabaseClient.from("clientes").insert(paraInserir(linha));
-                if (erroLinha) erros.push({ linha: linha.linha, motivo: erroLinha.message });
-                else importadas += 1;
-            }
+            const resposta = (data ?? {}) as RespostaImportacao;
+            importadas += resposta.importadas ?? 0;
+            jaCadastradas += resposta.ja_existiam ?? 0;
+            (resposta.erros ?? []).forEach((erro) =>
+                erros.push({ linha: erro.linha ?? 0, motivo: erro.motivo || "Erro ao importar a linha." }),
+            );
         }
 
         message.destroy("import-status");
