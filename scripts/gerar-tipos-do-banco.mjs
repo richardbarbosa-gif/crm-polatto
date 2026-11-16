@@ -185,10 +185,18 @@ const assinaturaDeFuncao = (f) => {
 };
 
 const gerar = () => {
-    const bruto = execFileSync("psql", ["-X", "-At", "-v", "ON_ERROR_STOP=1", "-c", CONSULTA], {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-    });
+    let bruto;
+    try {
+        bruto = execFileSync("psql", ["-X", "-At", "-v", "ON_ERROR_STOP=1", "-c", CONSULTA], {
+            encoding: "utf8",
+            maxBuffer: 64 * 1024 * 1024,
+            stdio: ["ignore", "pipe", "pipe"],
+        });
+    } catch (erro) {
+        const motivo = String(erro?.stderr || erro?.message || erro).trim().split("\n")[0];
+        console.error(`Não foi possível ler o schema do banco (confira PGHOST/PGPORT/PGUSER/PGDATABASE): ${motivo}`);
+        process.exit(2);
+    }
     const { tabelas, funcoes } = JSON.parse(bruto);
 
     const porNome = new Map();
