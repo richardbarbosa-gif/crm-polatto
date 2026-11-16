@@ -207,6 +207,9 @@ begin
 end \$\$;
 SQL
 
+echo "==> Suíte 17: lista e resumo de orçamentos no banco (migration 22)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/17_teste_orcamentos_lista_resumo.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

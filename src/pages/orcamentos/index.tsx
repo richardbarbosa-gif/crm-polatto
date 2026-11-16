@@ -1,5 +1,5 @@
 import { FileTextOutlined, SearchOutlined } from "@ant-design/icons";
-import { useList } from "@refinedev/core";
+import { useList, type CrudFilter } from "@refinedev/core";
 import { Alert, Col, Input, Row, Select, Skeleton, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
@@ -7,12 +7,14 @@ import { Link } from "react-router";
 import { EmptyState, StatCard } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
-import { formatCurrencyBRL, normalizeText } from "../../lib/formatters";
+import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
+import { formatCurrencyBRL } from "../../lib/formatters";
 import { buscarClientesDosNegocios } from "../../lib/orcamentos/api";
 import { ROTULO_STATUS, STATUS_ORCAMENTO, formatarDataIso, type StatusOrcamento } from "../../lib/orcamentos/formato";
 import { rotuloRevisao } from "../../lib/orcamentos/regras";
 import { paraOrcamento, type ClienteDoNegocio, type Orcamento } from "../../lib/orcamentos/tipos";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
+import type { Linha } from "../../types/database.generated";
 import { AcoesOrcamento } from "./acoes-orcamento";
 import { EditorOrcamento } from "./editor-orcamento";
 import { StatusOrcamentoTag } from "./status-orcamento";
@@ -21,6 +23,12 @@ import "./orcamentos.css";
 const { Title, Text } = Typography;
 
 const SEM_RESPONSAVEL = "__sem_responsavel__";
+const TAMANHO_DA_PAGINA = 20;
+
+// Em view o banco não informa quais colunas aceitam nulo; o id do orçamento
+// nunca é nulo (chave primária de orcamentos).
+type LinhaDaLista = Omit<Linha<"vw_orcamentos_lista">, "id"> & { id: string };
+type LinhaDoResumo = Linha<"vw_orcamentos_resumo">;
 
 /** Nome do cliente de cada negócio (view clientes), em lotes, com cancelamento. */
 const useClientesDosNegocios = (ids: string[]) => {
@@ -53,55 +61,91 @@ export const OrcamentosPage = () => {
     const [responsavel, setResponsavel] = useState<string | undefined>(undefined);
     const [editando, setEditando] = useState<{ id: string; negocioId: string } | null>(null);
 
-    const { query } = useList({
-        resource: "orcamentos",
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+    // Paginação, busca e filtros no banco (vw_orcamentos_lista traz o nome do
+    // cliente junto); os cartões do topo e o filtro de responsável vêm de
+    // vw_orcamentos_resumo. Antes a tela baixava todos os orçamentos da
+    // empresa para somar, filtrar e buscar no navegador.
+    const [pagina, setPagina] = useState(1);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, ["numero", "titulo", "cliente_nome"]);
+    const chaveDosFiltros = `${termo}|${status.join(",")}|${responsavel ?? ""}`;
+    useEffect(() => setPagina(1), [chaveDosFiltros]);
+
+    const filtros = useMemo<CrudFilter[]>(() => {
+        const lista: CrudFilter[] = [...filtrosDaBusca];
+        if (status.length) lista.push({ field: "status", operator: "in", value: status });
+        if (responsavel === SEM_RESPONSAVEL) {
+            lista.push({
+                operator: "or",
+                value: [
+                    { field: "responsavel_nome", operator: "null", value: true },
+                    { field: "responsavel_nome", operator: "eq", value: "" },
+                ],
+            });
+        } else if (responsavel) {
+            lista.push({ field: "responsavel_nome", operator: "eq", value: responsavel });
+        }
+        return lista;
+    }, [filtrosDaBusca, responsavel, status]);
+
+    const { query } = useList<LinhaDaLista>({
+        resource: "vw_orcamentos_lista",
+        filters: filtros,
         sorters: [{ field: "created_at", order: "desc" }],
+        pagination: { currentPage: pagina, pageSize: TAMANHO_DA_PAGINA },
+    });
+    const { query: resumoQuery } = useList<LinhaDoResumo>({
+        resource: "vw_orcamentos_resumo",
         pagination: { mode: "off" },
     });
 
+    const recarregar = () => {
+        void query.refetch();
+        void resumoQuery.refetch();
+    };
+
     // Mesma regra dos leads (Richard, 2026-11-03): todo vendedor vê os
     // orçamentos da empresa; excluir é só de quem criou ou do gerente.
-    const visiveis = useMemo(
-        () => ((query.data?.data ?? []) as Record<string, unknown>[]).map(paraOrcamento),
-        [query.data?.data],
+    const linhas = useMemo(() => query.data?.data ?? [], [query.data?.data]);
+    const visiveis = useMemo(() => linhas.map((linha) => paraOrcamento(linha as Record<string, unknown>)), [linhas]);
+    const total = query.data?.total ?? visiveis.length;
+    const nomeDoCliente = useMemo(
+        () => new Map(linhas.map((linha) => [String(linha.negocio_id), linha.cliente_nome ?? ""])),
+        [linhas],
     );
 
-    const { mapa: clientes, carregando: carregandoClientes } = useClientesDosNegocios(visiveis.map((o) => o.negocio_id));
+    // Dados completos do cliente (documento, endereço) para gerar o PDF: só os
+    // dos orçamentos da página exibida.
+    const { mapa: clientes } = useClientesDosNegocios(visiveis.map((o) => o.negocio_id));
 
-    const responsaveis = useMemo(
-        () =>
-            [...new Set(visiveis.map((o) => o.responsavel_nome?.trim() || SEM_RESPONSAVEL))]
-                .sort((a, b) => a.localeCompare(b, "pt-BR"))
-                .map((nome) => ({ value: nome, label: nome === SEM_RESPONSAVEL ? "Sem responsável" : nome })),
-        [visiveis],
-    );
-
-    const filtrados = useMemo(() => {
-        const termo = normalizeText(busca);
-        return visiveis.filter((o) => {
-            if (status.length && !status.includes(o.status)) return false;
-            if (responsavel && (o.responsavel_nome?.trim() || SEM_RESPONSAVEL) !== responsavel) return false;
-            if (!termo) return true;
-            const cliente = clientes.get(o.negocio_id)?.nome ?? "";
-            return [o.numero, o.titulo ?? "", cliente].some((campo) => normalizeText(campo).includes(termo));
-        });
-    }, [busca, clientes, responsavel, status, visiveis]);
-
+    // Normalmente uma linha (a empresa do usuário); o administrador da
+    // plataforma enxerga uma por empresa, e a tela soma.
     const resumo = useMemo(() => {
-        // Proposta com revisão em andamento conta uma vez só (pela revisão).
-        const revisadas = new Set(visiveis.map((o) => o.versao_de).filter(Boolean));
-        const abertos = visiveis.filter((o) => (o.status === "rascunho" || o.status === "enviado") && !revisadas.has(o.id));
-        const aceitos = visiveis.filter((o) => o.status === "aceito");
-        const decididos = visiveis.filter((o) => o.status === "aceito" || o.status === "recusado").length;
+        const linhasDoResumo = resumoQuery.data?.data ?? [];
+        const soma = (campo: "abertos" | "valor_aberto" | "aceitos" | "valor_aceito" | "decididos") =>
+            linhasDoResumo.reduce((acc, linha) => acc + Number(linha[campo] ?? 0), 0);
+        const aceitos = soma("aceitos");
+        const decididos = soma("decididos");
         return {
-            abertos: abertos.length,
-            valorAberto: abertos.reduce((s, o) => s + o.total, 0),
-            aceitos: aceitos.length,
-            valorAceito: aceitos.reduce((s, o) => s + o.total, 0),
-            taxaAceite: decididos ? (aceitos.length / decididos) * 100 : null,
+            abertos: soma("abertos"),
+            valorAberto: soma("valor_aberto"),
+            aceitos,
+            valorAceito: soma("valor_aceito"),
+            taxaAceite: decididos ? (aceitos / decididos) * 100 : null,
+            semNenhum: linhasDoResumo.length === 0,
         };
-    }, [visiveis]);
+    }, [resumoQuery.data?.data]);
+
+    const responsaveis = useMemo(() => {
+        const linhasDoResumo = resumoQuery.data?.data ?? [];
+        const nomes = [...new Set(linhasDoResumo.flatMap((linha) => linha.responsaveis ?? []))].sort((a, b) =>
+            a.localeCompare(b, "pt-BR"),
+        );
+        const opcoes = nomes.map((nome) => ({ value: nome, label: nome }));
+        if (linhasDoResumo.some((linha) => linha.tem_sem_responsavel)) {
+            opcoes.push({ value: SEM_RESPONSAVEL, label: "Sem responsável" });
+        }
+        return opcoes;
+    }, [resumoQuery.data?.data]);
 
     const colunas: ColumnsType<Orcamento> = [
         {
@@ -131,7 +175,7 @@ export const OrcamentosPage = () => {
             render: (_, o) => (
                 <div style={{ minWidth: 160 }}>
                     <Link to={`/clientes/show/${o.negocio_id}`}>
-                        {clientes.get(o.negocio_id)?.nome ?? (carregandoClientes ? "Carregando..." : "Negócio")}
+                        {nomeDoCliente.get(o.negocio_id) || "Negócio"}
                     </Link>
                     {o.titulo ? (
                         <Text type="secondary" style={{ display: "block", fontSize: 12 }}>
@@ -183,7 +227,7 @@ export const OrcamentosPage = () => {
                     podeExcluir={ehAdmin || o.created_by === identityUserId}
                     onAbrir={() => setEditando({ id: o.id, negocioId: o.negocio_id })}
                     onNovaVersao={(id) => setEditando({ id, negocioId: o.negocio_id })}
-                    onAlterado={() => void query.refetch()}
+                    onAlterado={recarregar}
                 />
             ),
         },
@@ -280,7 +324,7 @@ export const OrcamentosPage = () => {
                         <Skeleton active paragraph={{ rows: 6 }} />
                     ) : query.error ? (
                         <Alert type="error" showIcon message="Não foi possível carregar os orçamentos." />
-                    ) : visiveis.length === 0 ? (
+                    ) : resumo.semNenhum && !resumoQuery.isLoading ? (
                         <EmptyState
                             title="Nenhum orçamento por aqui"
                             description="Abra um negócio em Oportunidades e crie o orçamento na seção Orçamentos."
@@ -288,10 +332,18 @@ export const OrcamentosPage = () => {
                     ) : (
                         <Table<Orcamento>
                             rowKey="id"
-                            dataSource={filtrados}
+                            dataSource={visiveis}
                             columns={colunas}
                             size="middle"
-                            pagination={{ pageSize: 20, showSizeChanger: false, hideOnSinglePage: true }}
+                            loading={query.isFetching}
+                            pagination={{
+                                current: pagina,
+                                pageSize: TAMANHO_DA_PAGINA,
+                                total,
+                                showSizeChanger: false,
+                                hideOnSinglePage: true,
+                                onChange: setPagina,
+                            }}
                             scroll={{ x: 720 }}
                             locale={{ emptyText: "Nenhum orçamento com esses filtros." }}
                         />
@@ -304,15 +356,15 @@ export const OrcamentosPage = () => {
                     key={editando.id}
                     negocioId={editando.negocioId}
                     orcamentoId={editando.id}
-                    clienteNome={clientes.get(editando.negocioId)?.nome}
+                    clienteNome={nomeDoCliente.get(editando.negocioId) || undefined}
                     onFechar={() => setEditando(null)}
                     onSalvo={() => {
                         setEditando(null);
-                        void query.refetch();
+                        recarregar();
                     }}
                     onNovaVersao={(id) => {
                         setEditando({ id, negocioId: editando.negocioId });
-                        void query.refetch();
+                        recarregar();
                     }}
                 />
             ) : null}

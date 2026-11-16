@@ -1903,6 +1903,51 @@ export type Database = {
                 };
                 Relationships: [];
             };
+            vw_orcamentos_lista: {
+                Row: {
+                    cliente_nome: string | null;
+                    condicoes_pagamento: string | null;
+                    created_at: string | null;
+                    created_by: string | null;
+                    data_emissao: string | null;
+                    deleted_at: string | null;
+                    desconto_tipo: string | null;
+                    desconto_total: number | null;
+                    desconto_valor: number | null;
+                    id: string | null;
+                    negocio_id: string | null;
+                    numero: string | null;
+                    numero_original: string | null;
+                    observacoes: string | null;
+                    responsavel_email: string | null;
+                    responsavel_id: string | null;
+                    responsavel_nome: string | null;
+                    responsavel_telefone: string | null;
+                    revisao: number | null;
+                    status: string | null;
+                    subtotal: number | null;
+                    tenant_id: string | null;
+                    titulo: string | null;
+                    total: number | null;
+                    updated_at: string | null;
+                    valido_ate: string | null;
+                    versao_de: string | null;
+                };
+                Relationships: [];
+            };
+            vw_orcamentos_resumo: {
+                Row: {
+                    abertos: number | null;
+                    aceitos: number | null;
+                    decididos: number | null;
+                    responsaveis: string[] | null;
+                    tem_sem_responsavel: boolean | null;
+                    tenant_id: string | null;
+                    valor_aberto: number | null;
+                    valor_aceito: number | null;
+                };
+                Relationships: [];
+            };
             vw_performance_vendedores: {
                 Row: {
                     funcionario_id: string | null;

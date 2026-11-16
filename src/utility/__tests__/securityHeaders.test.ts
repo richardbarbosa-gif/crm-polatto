@@ -3,9 +3,9 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Os cabeçalhos de segurança vivem em dois arquivos (serve.json para o
- * container, .htaccess para a Hostinger). Este teste impede que um seja
- * alterado sem o outro e trava os pontos que não podem regredir na CSP.
+ * Os cabeçalhos de segurança vivem em três arquivos (serve.json para o
+ * container, vercel.json para a Vercel e .htaccess para Apache/LiteSpeed).
+ * Este teste impede que um seja alterado sem os outros e trava os pontos que não podem regredir na CSP.
  */
 const raiz = path.resolve(__dirname, "../../..");
 
@@ -27,6 +27,19 @@ const doHtaccess = (): Record<string, string> => {
     return Object.fromEntries(pares.map((m) => [m[1], m[2]]));
 };
 
+const doVercelJson = (): Record<string, string> => {
+    const config = JSON.parse(readFileSync(path.join(raiz, "vercel.json"), "utf8")) as {
+        rewrites: Array<{ source: string; destination: string }>;
+        headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
+    };
+    const global = config.headers.find((r) => r.source === "/(.*)");
+    return Object.fromEntries(
+        (global?.headers ?? [])
+            .filter((h) => h.key !== "Cache-Control")
+            .map((h) => [h.key, h.value]),
+    );
+};
+
 const diretivas = (csp: string) =>
     Object.fromEntries(
         csp
@@ -42,6 +55,14 @@ const diretivas = (csp: string) =>
 describe("cabeçalhos de segurança de produção", () => {
     it("serve.json e .htaccess definem exatamente os mesmos cabeçalhos", () => {
         expect(doHtaccess()).toEqual(doServeJson());
+    });
+
+    it("vercel.json (deploy na Vercel) define os mesmos cabeçalhos e devolve o index.html para as rotas do app", () => {
+        expect(doVercelJson()).toEqual(doServeJson());
+        const config = JSON.parse(readFileSync(path.join(raiz, "vercel.json"), "utf8")) as {
+            rewrites: Array<{ source: string; destination: string }>;
+        };
+        expect(config.rewrites).toContainEqual({ source: "/(.*)", destination: "/index.html" });
     });
 
     it("CSP bloqueia script inline/eval, iframe externo e embutir o CRM em outro site", () => {
