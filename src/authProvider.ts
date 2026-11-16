@@ -1,5 +1,6 @@
 import { AuthProvider } from "@refinedev/core";
 import { supabaseClient } from "./utility";
+import { traduzirErroDeAuth } from "./lib/errosDeAutenticacao";
 
 /**
  * Estado do app no navegador que não pode passar de um usuário para o
@@ -28,7 +29,7 @@ const authProvider: AuthProvider = {
         if (error) {
           return {
             success: false,
-            error,
+            error: traduzirErroDeAuth(error, "Não foi possível entrar"),
           };
         }
 
@@ -49,7 +50,7 @@ const authProvider: AuthProvider = {
       if (error) {
         return {
           success: false,
-          error,
+          error: traduzirErroDeAuth(error, "Não foi possível entrar"),
         };
       }
 
@@ -62,15 +63,15 @@ const authProvider: AuthProvider = {
     } catch (error) {
       return {
         success: false,
-        error: error as Error,
+        error: traduzirErroDeAuth(error, "Não foi possível entrar"),
       };
     }
 
     return {
       success: false,
       error: {
-        message: "Login failed",
-        name: "Invalid email or password",
+        name: "Não foi possível entrar",
+        message: "Não foi possível concluir. Tente novamente em instantes.",
       },
     };
   },
@@ -84,7 +85,7 @@ const authProvider: AuthProvider = {
       if (error) {
         return {
           success: false,
-          error,
+          error: traduzirErroDeAuth(error, "Não foi possível criar a conta"),
         };
       }
 
@@ -111,15 +112,15 @@ const authProvider: AuthProvider = {
     } catch (error) {
       return {
         success: false,
-        error: error as Error,
+        error: traduzirErroDeAuth(error, "Não foi possível criar a conta"),
       };
     }
 
     return {
       success: false,
       error: {
-        message: "Register failed",
-        name: "Invalid email or password",
+        name: "Não foi possível criar a conta",
+        message: "Não foi possível concluir. Tente novamente em instantes.",
       },
     };
   },
@@ -135,7 +136,7 @@ const authProvider: AuthProvider = {
       if (error) {
         return {
           success: false,
-          error,
+          error: traduzirErroDeAuth(error, "Não foi possível enviar o link"),
         };
       }
 
@@ -147,15 +148,15 @@ const authProvider: AuthProvider = {
     } catch (error) {
       return {
         success: false,
-        error: error as Error,
+        error: traduzirErroDeAuth(error, "Não foi possível enviar o link"),
       };
     }
 
     return {
       success: false,
       error: {
-        message: "Forgot password failed",
-        name: "Invalid email",
+        name: "Não foi possível enviar o link",
+        message: "Não foi possível concluir. Tente novamente em instantes.",
       },
     };
   },
@@ -168,7 +169,7 @@ const authProvider: AuthProvider = {
       if (error) {
         return {
           success: false,
-          error,
+          error: traduzirErroDeAuth(error, "Não foi possível trocar a senha"),
         };
       }
 
@@ -181,14 +182,14 @@ const authProvider: AuthProvider = {
     } catch (error) {
       return {
         success: false,
-        error: error as Error,
+        error: traduzirErroDeAuth(error, "Não foi possível trocar a senha"),
       };
     }
     return {
       success: false,
       error: {
-        message: "Update password failed",
-        name: "Invalid password",
+        name: "Não foi possível trocar a senha",
+        message: "Não foi possível concluir. Tente novamente em instantes.",
       },
     };
   },
@@ -198,7 +199,7 @@ const authProvider: AuthProvider = {
     if (error) {
       return {
         success: false,
-        error: error as Error,
+        error: traduzirErroDeAuth(error, "Não foi possível sair"),
       };
     }
 
