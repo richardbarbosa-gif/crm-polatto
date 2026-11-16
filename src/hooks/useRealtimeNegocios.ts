@@ -34,7 +34,9 @@ export const useRealtimeNegocios = (
                 { event: "*", schema: "public", table: "negocios", filter: `tenant_id=eq.${tenantId}` },
                 (payload) => {
                     lista.forEach((resource) => {
-                        void invalidate({ resource, invalidates: ["list", "many"] });
+                        // "resourceAll": inclui as colunas do Kanban, que são
+                        // consultas infinitas e não entram em "list"/"many".
+                        void invalidate({ resource, invalidates: ["resourceAll"] });
                     });
 
                     if (payload.eventType === "INSERT" && onInsert) {

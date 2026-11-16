@@ -31,6 +31,10 @@ declare
     v_importadas integer := 0;
     v_existentes integer := 0;
     v_erros jsonb := '[]'::jsonb;
+    v_etapa_padrao bigint;
+    v_funil_padrao uuid;
+    v_etapa bigint;
+    v_funil uuid;
 begin
     if v_tenant is null then
         raise exception 'Empresa não identificada.' using errcode = '42501';
@@ -41,6 +45,16 @@ begin
     if jsonb_array_length(p_linhas) > c_maximo then
         raise exception 'Envie no máximo % leads por chamada.', c_maximo using errcode = 'P0001';
     end if;
+
+    -- Lead sem etapa não aparece em nenhuma coluna do Kanban. Linha que não
+    -- informa etapa entra na primeira etapa aberta do primeiro funil.
+    select s.id, s.pipeline_id into v_etapa_padrao, v_funil_padrao
+    from public.pipeline_stages s
+    left join public.pipelines p on p.id = s.pipeline_id
+    where s.tenant_id = v_tenant
+      and not coalesce(s.ganho, false) and not coalesce(s.perdido, false)
+    order by p.ordem nulls last, s.ordem, s.id
+    limit 1;
 
     -- Uma importação por empresa de cada vez.
     perform pg_advisory_xact_lock(hashtextextended('importar_leads|' || v_tenant::text, 0));
@@ -61,6 +75,13 @@ begin
         end if;
 
         begin
+            v_etapa := coalesce(nullif(v_item ->> 'stage_id', '')::bigint, v_etapa_padrao);
+            v_funil := coalesce(
+                nullif(v_item ->> 'pipeline_id', '')::uuid,
+                (select s.pipeline_id from public.pipeline_stages s where s.id = v_etapa),
+                v_funil_padrao
+            );
+
             insert into public.clientes (
                 tenant_id, nome, email, telefone, cpf_cnpj, responsavel,
                 conta_energia_media, valor, status, stage_id, pipeline_id, temperatura
@@ -74,8 +95,8 @@ begin
                 public.to_numeric_seguro(v_item ->> 'conta_energia_media'),
                 public.to_numeric_seguro(v_item ->> 'valor'),
                 coalesce(nullif(v_item ->> 'status', ''), 'Novo Lead'),
-                nullif(v_item ->> 'stage_id', '')::bigint,
-                nullif(v_item ->> 'pipeline_id', '')::uuid,
+                v_etapa,
+                v_funil,
                 nullif(v_item ->> 'temperatura', '')
             );
             v_importadas := v_importadas + 1;

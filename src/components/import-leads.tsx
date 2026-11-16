@@ -146,8 +146,11 @@ export const ImportLeadsButton = () => {
         });
 
         if (importadas) {
-            void invalidate({ resource: "clientes", invalidates: ["list"] });
-            void invalidate({ resource: "vw_kanban_kpis", invalidates: ["list"] });
+            // "resourceAll": as colunas do Kanban são consultas infinitas e não
+            // entram em "list" — os leads importados só apareciam ao recarregar.
+            ["clientes", "vw_kanban_kpis", "vw_negocios_saude"].forEach((resource) => {
+                void invalidate({ resource, invalidates: ["resourceAll"] });
+            });
         }
     };
 

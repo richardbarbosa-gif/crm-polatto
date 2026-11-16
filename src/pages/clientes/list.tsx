@@ -882,6 +882,19 @@ export const ClienteList = () => {
 
     const leadsEmMovimento = useRef(new Set<string>());
 
+    /**
+     * Recarrega cards, totais e lista do Kanban. As colunas são consultas
+     * "infinitas" (carregar mais): invalidar só "list"/"many" NÃO as atinge —
+     * o card movido continuava desenhado na coluna antiga enquanto o total
+     * da coluna (que vem de outra consulta) já mudava. "resourceAll" pega
+     * todas as consultas do recurso.
+     */
+    const recarregarKanban = () => {
+        [fonteKanban.resource, "clientes", "vw_kanban_kpis"].forEach((resource) => {
+            void invalidate({ resource, invalidates: ["resourceAll"] });
+        });
+    };
+
     const moverLeadParaStage = async (
         leadArrastado: KanbanLead,
         novoStageId: string,
@@ -935,11 +948,7 @@ export const ClienteList = () => {
 
             // Histórico da movimentação e "Motivo da perda" são gravados pelo
             // banco, na mesma transação deste update (triggers em negocios).
-            // O update vai para "clientes"; as colunas podem estar lendo a
-            // view de saúde, que o Refine não invalida sozinho.
-            if (saudeDisponivel) {
-                void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
-            }
+            recarregarKanban();
         } catch {
             // A notificação de erro da mudança de etapa é exibida pelo Refine.
         } finally {
@@ -1033,9 +1042,7 @@ export const ClienteList = () => {
         setIsLeadDrawerOpen(false);
         setSelectedLeadId(null);
         // Temperatura, notas e tarefas mexidas no drawer mudam a saúde do card
-        if (saudeDisponivel) {
-            void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
-        }
+        recarregarKanban();
     };
 
     const openTaskModal = (contextData: TaskContextData) => {
@@ -1326,11 +1333,7 @@ export const ClienteList = () => {
                 open={isTaskModalOpen}
                 onClose={closeTaskModal}
                 contextData={taskContextData}
-                onSuccess={() => {
-                    if (saudeDisponivel) {
-                        void invalidate({ resource: RECURSO_SAUDE, invalidates: ["list", "many"] });
-                    }
-                }}
+                onSuccess={recarregarKanban}
             />
 
             <EscolherModelo

@@ -59,6 +59,11 @@ begin
         and not exists (select 1 from public.negocios n where n.titulo in ('Importado Um de novo', 'Linha Quebrada')),
         'IM3: os leads importados caem na empresa do usuário, um de cada');
     perform public.assert(v_grande, 'IM4: lote acima de 500 linhas é recusado');
+    perform public.assert(
+        (select count(*) from public.negocios n
+          where n.tenant_id = v_tenant_a and n.titulo in ('Importado Um', 'Importado Dois')
+            and n.stage_id is not null and n.pipeline_id is not null) = 2,
+        'IM4b: linha sem etapa entra na primeira etapa aberta do funil (não some do Kanban)');
 
     -- outra empresa importa o MESMO telefone: não é duplicata para ela, e não vaza
     perform public.login_como(v_user_b, 'vendedor.b@teste.com', v_tenant_a);
