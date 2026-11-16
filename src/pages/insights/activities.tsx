@@ -89,10 +89,22 @@ export const InsightsActivitiesPage = () => {
         });
     }, []);
 
+    // O banco devolve só as tarefas do período escolhido (antes: todas as da
+    // empresa). O recorte fino por data e tipo continua abaixo.
+    const inicioDoPeriodo = useMemo(() => dayjs().subtract(periodDays, "day").toISOString(), [periodDays]);
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        filters: [
+            { field: "deleted_at", operator: "null", value: true },
+            {
+                operator: "or",
+                value: [
+                    { field: "data_vencimento", operator: "gte", value: inicioDoPeriodo },
+                    { field: "created_at", operator: "gte", value: inicioDoPeriodo },
+                ],
+            },
+        ],
         sorters: [{ field: "data_vencimento", order: "asc" }],
     });
     const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);

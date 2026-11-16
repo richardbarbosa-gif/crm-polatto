@@ -109,7 +109,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         pagination: { currentPage: 1, pageSize: KANBAN_PAGE_SIZE },
         filters: columnFilters,
         sorters: fonte.sorters,
-        liveMode: "auto",
+        // Sem liveMode: a fonte é uma VIEW e o Realtime não emite evento de
+        // view — cada coluna abria um canal que nunca recebia nada. Quem
+        // atualiza o board é useRealtimeNegocios (um canal só, na tabela).
         queryOptions: { enabled: consultaHabilitada },
     });
 

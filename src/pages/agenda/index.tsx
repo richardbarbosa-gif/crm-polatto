@@ -77,7 +77,7 @@ const TASK_EXECUTION_STATUS_COLORS: Record<TaskExecutionStatus, string> = {
 export const AgendaPage = () => {
     const invalidate = useInvalidate();
     const { mutateAsync: atualizarTarefa } = useUpdate();
-    const { podeExcluir } = useCrmAccess();
+    const { podeExcluir, tenantId } = useCrmAccess();
 
     /**
      * Concluir/reabrir agendamento.
@@ -158,7 +158,6 @@ export const AgendaPage = () => {
         resource: "tarefas",
         pagination: { mode: "off" },
         sorters: [{ field: "data_vencimento", order: "asc" }],
-        liveMode: "auto",
         filters: [
             { field: "deleted_at", operator: "null", value: true },
             {
@@ -178,26 +177,32 @@ export const AgendaPage = () => {
     const { data, isLoading, isError, error, refetch } = query;
     const tarefas = useMemo<TarefaRecord[]>(() => data?.data ?? [], [data?.data]);
 
+    // Um canal só para a agenda (antes eram dois na mesma tabela: este e o
+    // liveMode da consulta). Qualquer mudança recarrega a lista; só a criação
+    // avisa na tela.
     useEffect(() => {
+        if (!tenantId) return;
         const channel = supabaseClient
-            .channel("crm-tasks-realtime-notifications")
+            .channel(`crm-tarefas-realtime-${tenantId}`)
             .on(
                 "postgres_changes",
-                { event: "INSERT", schema: "public", table: "tarefas" },
+                { event: "*", schema: "public", table: "tarefas", filter: `tenant_id=eq.${tenantId}` },
                 (payload) => {
-                    const titulo = (payload.new as Record<string, unknown>)?.titulo;
-                    message.info(
-                        `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem título"}`,
-                    );
-                    refetch?.();
+                    if (payload.eventType === "INSERT") {
+                        const titulo = (payload.new as Record<string, unknown>)?.titulo;
+                        message.info(
+                            `Novo agendamento: ${typeof titulo === "string" ? titulo : "Tarefa sem título"}`,
+                        );
+                    }
+                    void refetch?.();
                 },
             )
             .subscribe();
 
         return () => {
-            supabaseClient.removeChannel(channel);
+            void supabaseClient.removeChannel(channel);
         };
-    }, [refetch]);
+    }, [refetch, tenantId]);
 
     // Só os nomes dos clientes que aparecem na agenda (antes: a base inteira).
     const idsDosClientes = useMemo(() => tarefas.map((tarefa) => tarefa.cliente_id), [tarefas]);

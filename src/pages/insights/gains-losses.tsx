@@ -34,9 +34,26 @@ const PERIOD_OPTIONS = [
 export const InsightsGainsLossesPage = () => {
     const [periodDays, setPeriodDays] = useState<number>(180);
 
+    // O banco devolve só a janela usada pela tela: o período escolhido ou os
+    // 6 meses do gráfico de tendência, o que for mais antigo (antes: todos os
+    // leads da empresa). O recorte por data de decisão continua abaixo.
+    const inicioDaJanela = useMemo(() => {
+        const periodo = dayjs().subtract(periodDays, "day");
+        const tendencia = dayjs().subtract(5, "month").startOf("month");
+        return (periodo.isBefore(tendencia) ? periodo : tendencia).toISOString();
+    }, [periodDays]);
     const { query: clientesQuery } = useList<InsightClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
+        filters: [
+            {
+                operator: "or",
+                value: [
+                    { field: "data_fechamento", operator: "gte", value: inicioDaJanela },
+                    { field: "created_at", operator: "gte", value: inicioDaJanela },
+                ],
+            },
+        ],
         meta: { select: COLUNAS_INSIGHT_CLIENTE },
     });
     const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({

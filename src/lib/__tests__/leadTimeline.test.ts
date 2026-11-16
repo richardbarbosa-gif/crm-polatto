@@ -24,6 +24,7 @@ const consulta = (tabela: string) => {
             return builder;
         },
         order: () => builder,
+        limit: () => builder,
         then: (resolve: (r: unknown) => unknown) => {
             if (erroDaConsulta) return Promise.resolve({ data: null, error: erroDaConsulta }).then(resolve);
             const linhas = (linhasPorTabela[tabela] ?? []).filter((linha) =>

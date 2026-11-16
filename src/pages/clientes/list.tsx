@@ -198,7 +198,10 @@ export const ClienteList = () => {
             .select("id")
             .limit(1)
             .then(({ error }) => {
-                if (ativo) setSaudeStatus(error ? "indisponivel" : "disponivel");
+                // Só "view não existe" (banco sem a migration 15) liga o modo
+                // antigo. Uma falha passageira de rede não pode rebaixar o
+                // board pela sessão inteira: as consultas mostram o erro delas.
+                if (ativo) setSaudeStatus(isSupabaseMissingRelation(error) ? "indisponivel" : "disponivel");
             });
         return () => {
             ativo = false;
@@ -426,7 +429,6 @@ export const ClienteList = () => {
         resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
         filters: kpiFilters,
-        liveMode: "auto",
     });
 
     const kpiRows = useMemo<KpiRow[]>(() => kpiQuery?.data?.data ?? [], [kpiQuery?.data?.data]);
@@ -522,7 +524,6 @@ export const ClienteList = () => {
         resource: "clientes",
         pagination: { currentPage: listPage, pageSize: 12 },
         filters: serverFilters,
-        liveMode: "auto",
         queryOptions: { enabled: viewType === "list" },
     });
 

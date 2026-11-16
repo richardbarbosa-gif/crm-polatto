@@ -14,7 +14,6 @@ import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
-    buildOwnerPerformance,
     dataDeDecisao,
     getTaskSituation,
     isDateInMonth,
@@ -27,10 +26,12 @@ import {
 import {
     classificarDesfecho,
     indexarEtapas,
-    taxaDeConversao,
+    resumirFunil,
     valorDoLead,
     type EtapaFunil,
+    type LinhaKpi,
 } from "../../lib/pipelineMetrics";
+import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import {
     resolveTaskExecutionStatus,
     subscribeTaskExecutionStatusUpdates,
@@ -83,17 +84,14 @@ export const InsightsPanelPage = () => {
         loadHistory();
     }, [loadHistory]);
 
-    const { query: clientesQuery } = useList<InsightClienteRecord>({
-        resource: "clientes",
+    // Nada aqui baixa a base inteira: os totais vêm AGREGADOS do banco
+    // (vw_kanban_kpis, a mesma fonte do Kanban e do Dashboard) e as listas
+    // são consultas limitadas. Antes a tela carregava todos os leads e todas
+    // as tarefas da empresa para somar no navegador.
+    const { query: kpiQuery } = useList<LinhaKpi>({
+        resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
-        meta: { select: COLUNAS_INSIGHT_CLIENTE },
-    });
-    const { query: tarefasQuery } = useList<InsightTaskRecord>({
-        resource: "tarefas",
-        pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
-        sorters: [{ field: "data_vencimento", order: "asc" }],
-        meta: { select: "id,cliente_id,titulo,tipo,data_vencimento,created_at,responsavel,concluido,execucao_status" },
+        queryOptions: { retry: false },
     });
     const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({
         resource: "pipeline_stages",
@@ -101,80 +99,125 @@ export const InsightsPanelPage = () => {
         queryOptions: { retry: false },
     });
 
-    const clientes = useMemo(() => clientesQuery?.data?.data ?? [], [clientesQuery?.data?.data]);
-    const tarefas = useMemo(() => tarefasQuery?.data?.data ?? [], [tarefasQuery?.data?.data]);
-    const etapasPorId = useMemo(() => indexarEtapas(stagesQuery?.data?.data), [stagesQuery?.data?.data]);
+    // "Fechado no mês" depende da data: só os negócios criados ou fechados
+    // neste mês (um punhado), filtrados de novo abaixo pela data de decisão.
+    const inicioDoMes = useMemo(() => dayjs().startOf("month").toISOString(), []);
+    const { query: fechadosNoMesQuery } = useList<InsightClienteRecord>({
+        resource: "clientes",
+        pagination: { mode: "off" },
+        filters: [
+            {
+                operator: "or",
+                value: [
+                    { field: "data_fechamento", operator: "gte", value: inicioDoMes },
+                    { field: "created_at", operator: "gte", value: inicioDoMes },
+                ],
+            },
+        ],
+        meta: { select: COLUNAS_INSIGHT_CLIENTE },
+    });
+
+    const COLUNAS_TAREFA = "id,cliente_id,titulo,tipo,data_vencimento,created_at,responsavel,concluido,execucao_status";
+    const fimDeHoje = useMemo(() => dayjs().endOf("day").toISOString(), []);
+    // Em aberto e vencendo até hoje: base de "atrasadas" e "do dia".
+    const { query: tarefasAteHojeQuery } = useList<InsightTaskRecord>({
+        resource: "tarefas",
+        pagination: { mode: "off" },
+        filters: [
+            { field: "deleted_at", operator: "null", value: true },
+            { field: "concluido", operator: "eq", value: false },
+            { field: "data_vencimento", operator: "lte", value: fimDeHoje },
+        ],
+        meta: { select: COLUNAS_TAREFA },
+    });
+    const agora = useMemo(() => new Date().toISOString(), []);
+    const { query: proximasTarefasQuery } = useList<InsightTaskRecord>({
+        resource: "tarefas",
+        pagination: { currentPage: 1, pageSize: 8 },
+        filters: [
+            { field: "deleted_at", operator: "null", value: true },
+            { field: "concluido", operator: "eq", value: false },
+            { field: "data_vencimento", operator: "gt", value: agora },
+        ],
+        sorters: [{ field: "data_vencimento", order: "asc" }],
+        meta: { select: COLUNAS_TAREFA },
+    });
+    const { query: tarefasRecentesQuery } = useList<InsightTaskRecord>({
+        resource: "tarefas",
+        pagination: { currentPage: 1, pageSize: 12 },
+        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        sorters: [{ field: "created_at", order: "desc" }],
+        meta: { select: COLUNAS_TAREFA },
+    });
+
+    const etapas = stagesQuery?.data?.data;
+    const etapasPorId = useMemo(() => indexarEtapas(etapas), [etapas]);
+    const resumo = useMemo(() => resumirFunil(kpiQuery?.data?.data, etapas), [kpiQuery?.data?.data, etapas]);
+    const fechadosNoMes = useMemo(() => fechadosNoMesQuery?.data?.data ?? [], [fechadosNoMesQuery?.data?.data]);
+    const tarefasAteHoje = useMemo(() => tarefasAteHojeQuery?.data?.data ?? [], [tarefasAteHojeQuery?.data?.data]);
+    const upcomingTasks = useMemo(() => proximasTarefasQuery?.data?.data ?? [], [proximasTarefasQuery?.data?.data]);
+    const tarefasRecentes = useMemo(() => tarefasRecentesQuery?.data?.data ?? [], [tarefasRecentesQuery?.data?.data]);
 
     const isLoading = Boolean(
-        isLoadingHistory || clientesQuery?.isLoading || tarefasQuery?.isLoading,
+        isLoadingHistory ||
+            kpiQuery?.isLoading ||
+            fechadosNoMesQuery?.isLoading ||
+            tarefasAteHojeQuery?.isLoading ||
+            proximasTarefasQuery?.isLoading ||
+            tarefasRecentesQuery?.isLoading,
     );
 
-    const clienteNamesById = useMemo(() => {
-        const map = new Map<string, string>();
-        clientes.forEach((cliente) => {
-            map.set(String(cliente.id), cliente.nome?.trim() || `Cliente #${cliente.id}`);
-        });
-        return map;
-    }, [clientes]);
+    // Só os nomes dos clientes das tarefas exibidas.
+    const idsDosClientes = useMemo(() => upcomingTasks.map((task) => task.cliente_id), [upcomingTasks]);
+    const clienteNamesById = useNomesDeClientes(idsDosClientes);
 
     const metrics = useMemo(() => {
         const nowRef = dayjs();
-        const desfechos = clientes.map((cliente) => classificarDesfecho(cliente, etapasPorId));
-        // Pipeline aberto = nem ganho nem perdido, pelos flags da etapa. Antes
-        // só contavam etapas cujo nome tinha "novo", "visita", "proposta"...
-        const pipelineValue = clientes.reduce(
-            (acc, cliente, i) => (desfechos[i] === "aberto" ? acc + valorDoLead(cliente) : acc),
-            0,
-        );
-        // "Fechado no mês" pela DATA DE FECHAMENTO. Antes filtrava pela data
-        // de criação: um negócio criado em março e ganho hoje não aparecia.
-        const closedThisMonthValue = clientes.reduce(
-            (acc, cliente, i) =>
-                desfechos[i] === "ganho" && isDateInMonth(dataDeDecisao(cliente), nowRef)
+        // "Fechado no mês" pela DATA DE FECHAMENTO, não pela de criação.
+        const closedThisMonthValue = fechadosNoMes.reduce(
+            (acc, cliente) =>
+                classificarDesfecho(cliente, etapasPorId) === "ganho" && isDateInMonth(dataDeDecisao(cliente), nowRef)
                     ? acc + valorDoLead(cliente)
                     : acc,
             0,
         );
-        const closed = desfechos.filter((d) => d === "ganho").length;
-        const lost = desfechos.filter((d) => d === "perdido").length;
-        const conversion = Number(taxaDeConversao(closed, lost).toFixed(1));
-        const lateTasks = tarefas.filter(
+        const lateTasks = tarefasAteHoje.filter(
             (task) =>
                 getTaskSituation(task.data_vencimento, nowRef, resolveTaskExecutionStatus(task)) === "atrasada",
         ).length;
-        const todayTasks = tarefas.filter((task) => {
-            if (task.concluido) return false;
+        const todayTasks = tarefasAteHoje.filter((task) => {
             const due = toSafeDayjs(task.data_vencimento);
             return due ? due.isSame(nowRef, "day") : false;
         }).length;
 
         return {
-            pipelineValue,
+            pipelineValue: resumo.valorAberto,
             closedThisMonthValue,
-            conversion,
-            ganhos: closed,
-            encerrados: closed + lost,
+            conversion: Number(resumo.conversao.toFixed(1)),
+            ganhos: resumo.ganhos,
+            encerrados: resumo.encerrados,
             lateTasks,
             todayTasks,
-            totalClientes: clientes.length,
+            totalClientes: resumo.totalLeads,
         };
-    }, [clientes, etapasPorId, tarefas]);
+    }, [etapasPorId, fechadosNoMes, resumo, tarefasAteHoje]);
 
     const ownerPerformance = useMemo(
-        () => buildOwnerPerformance(clientes, etapasPorId).slice(0, 8),
-        [clientes, etapasPorId],
+        () =>
+            [...resumo.porResponsavel]
+                .sort((a, b) => b.valor - a.valor)
+                .slice(0, 8)
+                .map((linha) => ({
+                    owner: linha.nome,
+                    total: linha.total,
+                    ativos: linha.abertos,
+                    ganhos: linha.ganhos,
+                    perdas: linha.perdidos,
+                    valor: linha.valor,
+                    valorGanho: linha.valorGanho,
+                })),
+        [resumo.porResponsavel],
     );
-
-    const upcomingTasks = useMemo(() => {
-        const now = new Date();
-        return tarefas
-            .filter((task) => {
-                if (task.concluido) return false;
-                const due = toSafeDayjs(task.data_vencimento);
-                return due ? due.isAfter(now) : false;
-            })
-            .slice(0, 8);
-    }, [tarefas]);
 
     const recentEvents = useMemo(() => {
         const statusEvents: RecentEvent[] = historyItems.map((item) => ({
@@ -187,7 +230,7 @@ export const InsightsPanelPage = () => {
             after: item.para_status || "-",
         }));
 
-        const taskEvents: RecentEvent[] = tarefas.map((task) => ({
+        const taskEvents: RecentEvent[] = tarefasRecentes.map((task) => ({
             id: `task-${task.id}`,
             when: task.created_at || task.data_vencimento,
             user: task.responsavel || "Time comercial",
@@ -198,7 +241,7 @@ export const InsightsPanelPage = () => {
         }));
 
         return sortByDateDesc([...statusEvents, ...taskEvents], (event) => event.when).slice(0, 12);
-    }, [historyItems, tarefas]);
+    }, [historyItems, tarefasRecentes]);
 
     if (isLoading) {
         return <Skeleton active />;

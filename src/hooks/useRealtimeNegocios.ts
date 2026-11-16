@@ -1,5 +1,6 @@
 import { useInvalidate } from "@refinedev/core";
 import { useEffect } from "react";
+import { useTenant } from "../contexts/tenant";
 import { supabaseClient } from "../utility";
 
 /**
@@ -17,16 +18,20 @@ export const useRealtimeNegocios = (
     onInsert?: (registro: Record<string, unknown>) => void,
 ) => {
     const invalidate = useInvalidate();
+    const { tenantId } = useTenant();
     const chave = resources.join(",");
 
     useEffect(() => {
+        if (!tenantId) return;
         const lista = chave.split(",").filter(Boolean);
 
         const channel = supabaseClient
-            .channel(`crm-negocios-realtime-${chave}`)
+            .channel(`crm-negocios-realtime-${tenantId}-${chave}`)
             .on(
                 "postgres_changes",
-                { event: "*", schema: "public", table: "negocios" },
+                // O filtro por empresa poupa o servidor de avaliar (e descartar
+                // pela RLS) os eventos de todas as outras empresas.
+                { event: "*", schema: "public", table: "negocios", filter: `tenant_id=eq.${tenantId}` },
                 (payload) => {
                     lista.forEach((resource) => {
                         void invalidate({ resource, invalidates: ["list", "many"] });
@@ -45,5 +50,5 @@ export const useRealtimeNegocios = (
         // onInsert é intencionalmente omitido: recriar o canal a cada render
         // derrubaria a inscrição do realtime.
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [chave, invalidate]);
+    }, [chave, invalidate, tenantId]);
 };

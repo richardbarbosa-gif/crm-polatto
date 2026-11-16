@@ -8,6 +8,7 @@ import {
 } from "@ant-design/icons";
 import { useList } from "@refinedev/core";
 import { Col, InputNumber, Row, Select, Skeleton, Space, Table, Typography } from "antd";
+import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Button, Card, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
@@ -33,15 +34,29 @@ export const InsightsROIPage = () => {
     const [costPerLead, setCostPerLead] = useState<number>(85);
     const [costPerActivity, setCostPerActivity] = useState<number>(18);
 
+    // O banco devolve só o período escolhido (antes: todos os leads e todas
+    // as tarefas da empresa, filtrados no navegador). O recorte fino por
+    // data continua abaixo, com a mesma regra de sempre.
+    const inicioDoPeriodo = useMemo(() => dayjs().subtract(periodDays, "day").toISOString(), [periodDays]);
     const { query: clientesQuery } = useList<InsightClienteRecord>({
         resource: "clientes",
         pagination: { mode: "off" },
+        filters: [{ field: "created_at", operator: "gte", value: inicioDoPeriodo }],
         meta: { select: COLUNAS_INSIGHT_CLIENTE },
     });
     const { query: tarefasQuery } = useList<InsightTaskRecord>({
         resource: "tarefas",
         pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        filters: [
+            { field: "deleted_at", operator: "null", value: true },
+            {
+                operator: "or",
+                value: [
+                    { field: "data_vencimento", operator: "gte", value: inicioDoPeriodo },
+                    { field: "created_at", operator: "gte", value: inicioDoPeriodo },
+                ],
+            },
+        ],
         meta: { select: "id,data_vencimento,created_at" },
     });
     const { query: stagesQuery } = useList<EtapaFunil & { id: string | number }>({

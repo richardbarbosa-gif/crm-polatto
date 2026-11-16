@@ -22,11 +22,12 @@ import {
     Typography,
     message,
 } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
-import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
+import { formatCpfCnpj, formatDateBR } from "../../lib/formatters";
+import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
 import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
@@ -70,6 +71,10 @@ const baixarJson = (nomeArquivo: string, conteudo: unknown) => {
     URL.revokeObjectURL(url);
 };
 
+const TAMANHO_DA_PAGINA = 12;
+/** O seletor de organização mostra os primeiros resultados; o resto aparece ao digitar. */
+const LIMITE_DO_SELETOR = 30;
+
 export const PessoasPage = () => {
     const { tenantId } = useTenant();
     const { canDeleteRecords, podeExcluir } = useCrmAccess();
@@ -80,17 +85,48 @@ export const PessoasPage = () => {
     const [editando, setEditando] = useState<PessoaRecord | null>(null);
     const [form] = Form.useForm<PessoaFormValues>();
 
+    // Paginação e busca no banco: a tela recebe só a página exibida (antes
+    // baixava todos os contatos e todas as organizações da empresa).
+    const [pagina, setPagina] = useState(1);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, ["nome", "email", "telefone", "cargo"]);
+    useEffect(() => setPagina(1), [termo]);
+
     const { query } = useList<PessoaRecord>({
         resource: "pessoas",
-        pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        pagination: { currentPage: pagina, pageSize: TAMANHO_DA_PAGINA },
+        filters: [{ field: "deleted_at", operator: "null", value: true }, ...filtrosDaBusca],
         sorters: [{ field: "created_at", order: "desc" }],
     });
 
-    const { query: organizacoesQuery } = useList<OrganizacaoRecord>({
+    // Organizações: (1) as citadas na página exibida, para mostrar o nome na
+    // tabela; (2) as que casam com o que foi digitado no seletor do formulário.
+    const idsDasOrganizacoes = useMemo(
+        () => [
+            ...new Set(
+                [...((query?.data?.data as PessoaRecord[]) || []).map((p) => p?.organizacao_id), editando?.organizacao_id]
+                    .filter((id): id is string => Boolean(id))
+                    .map(String),
+            ),
+        ],
+        [query?.data?.data, editando?.organizacao_id],
+    );
+    const { query: organizacoesDaPaginaQuery } = useList<OrganizacaoRecord>({
         resource: "organizacoes",
         pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        filters: [{ field: "id", operator: "in", value: idsDasOrganizacoes }],
+        meta: { select: "id,nome_fantasia,razao_social" },
+        queryOptions: { enabled: idsDasOrganizacoes.length > 0 },
+    });
+
+    const [buscaOrganizacao, setBuscaOrganizacao] = useState("");
+    const { filtros: filtrosDaOrganizacao } = useBuscaNoServidor(buscaOrganizacao, ["nome_fantasia", "razao_social"]);
+    const { query: organizacoesQuery } = useList<OrganizacaoRecord>({
+        resource: "organizacoes",
+        pagination: { currentPage: 1, pageSize: LIMITE_DO_SELETOR },
+        filters: [{ field: "deleted_at", operator: "null", value: true }, ...filtrosDaOrganizacao],
+        sorters: [{ field: "nome_fantasia", order: "asc" }],
+        meta: { select: "id,nome_fantasia,razao_social" },
+        queryOptions: { enabled: isModalOpen },
     });
 
     const { mutateAsync: createPessoa } = useCreate();
@@ -105,29 +141,28 @@ export const PessoasPage = () => {
 
     const organizacoesPorId = useMemo(() => {
         const mapa = new Map<string, OrganizacaoRecord>();
-        ((organizacoesQuery?.data?.data as OrganizacaoRecord[]) || []).forEach((org) => {
+        ((organizacoesDaPaginaQuery?.data?.data as OrganizacaoRecord[]) || []).forEach((org) => {
             if (org?.id) mapa.set(String(org.id), org);
         });
         return mapa;
-    }, [organizacoesQuery?.data?.data]);
+    }, [organizacoesDaPaginaQuery?.data?.data]);
 
-    const organizacaoOptions = useMemo(
-        () =>
-            Array.from(organizacoesPorId.values()).map((org) => ({
-                value: String(org.id),
-                label: org.nome_fantasia || org.razao_social || "Sem nome",
-            })),
-        [organizacoesPorId],
-    );
+    // Opções do seletor: o resultado da busca + a organização já vinculada ao
+    // contato em edição (ela pode não estar entre os primeiros resultados).
+    const organizacaoOptions = useMemo(() => {
+        const opcoes = new Map<string, OrganizacaoRecord>();
+        const atual = editando?.organizacao_id ? organizacoesPorId.get(String(editando.organizacao_id)) : undefined;
+        if (atual?.id) opcoes.set(String(atual.id), atual);
+        ((organizacoesQuery?.data?.data as OrganizacaoRecord[]) || []).forEach((org) => {
+            if (org?.id) opcoes.set(String(org.id), org);
+        });
+        return Array.from(opcoes.values()).map((org) => ({
+            value: String(org.id),
+            label: org.nome_fantasia || org.razao_social || "Sem nome",
+        }));
+    }, [editando?.organizacao_id, organizacoesPorId, organizacoesQuery?.data?.data]);
 
-    const listaFiltrada = useMemo(() => {
-        const termo = normalizeText(busca);
-        if (!termo) return pessoas;
-        return pessoas.filter((pessoa) =>
-            [pessoa.nome, pessoa.email, pessoa.telefone, pessoa.cargo]
-                .some((campo) => normalizeText(campo ? String(campo) : "").includes(termo)),
-        );
-    }, [busca, pessoas]);
+    const totalNoBanco = query?.data?.total ?? pessoas.length;
 
     const tabelaAusente = isSupabaseMissingRelation(query?.error);
 
@@ -342,7 +377,7 @@ export const PessoasPage = () => {
                     style={{ maxWidth: 420, marginBottom: 16 }}
                 />
 
-                {listaFiltrada.length === 0 && !tabelaAusente ? (
+                {pessoas.length === 0 && !termo && !query?.isLoading && !tabelaAusente ? (
                     <EmptyState
                         title="Nenhum contato cadastrado"
                         description="Cadastre pessoas e vincule às organizações para montar o relacionamento B2B."
@@ -350,8 +385,15 @@ export const PessoasPage = () => {
                 ) : (
                     <Table<PessoaRecord>
                         rowKey="id"
-                        dataSource={listaFiltrada}
-                        pagination={{ pageSize: 12, showSizeChanger: false }}
+                        dataSource={pessoas}
+                        loading={Boolean(query?.isFetching)}
+                        pagination={{
+                            current: pagina,
+                            pageSize: TAMANHO_DA_PAGINA,
+                            total: totalNoBanco,
+                            showSizeChanger: false,
+                            onChange: setPagina,
+                        }}
                         columns={[
                             {
                                 title: "Nome",
@@ -522,7 +564,10 @@ export const PessoasPage = () => {
                             options={organizacaoOptions}
                             allowClear
                             showSearch
-                            optionFilterProp="label"
+                            // A busca é feita no banco (as opções já vêm filtradas).
+                            filterOption={false}
+                            onSearch={setBuscaOrganizacao}
+                            loading={Boolean(organizacoesQuery?.isFetching)}
                             placeholder="Vincular a uma empresa (opcional)"
                         />
                     </Form.Item>

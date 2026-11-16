@@ -151,6 +151,8 @@ const parseActivityRow = (row: Record<string, unknown>): LeadTimelineEntry => {
 };
 
 const VALIDADE_LINK_SEGUNDOS = 60 * 60;
+/** As atividades mais recentes do lead; um lead muito antigo não trava a tela ao abrir. */
+const LIMITE_DA_TIMELINE = 500;
 
 /**
  * O link do arquivo é assinado na hora de exibir. Antes a URL assinada era
@@ -186,7 +188,8 @@ export const fetchLeadTimeline = async (leadId: string | number): Promise<LeadTi
         .from("atividades_lead")
         .select(COLUNAS_ATIVIDADE)
         .eq("cliente_id", String(leadId))
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(LIMITE_DA_TIMELINE);
     if (error) throw error;
 
     // "as unknown": com a lista de colunas montada por concatenação o

@@ -14,11 +14,12 @@ import {
     Typography,
     message,
 } from "antd";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Card, EmptyState } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
-import { formatCpfCnpj, formatDateBR, normalizeText } from "../../lib/formatters";
+import { formatCpfCnpj, formatDateBR } from "../../lib/formatters";
+import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
 import { regraCpfCnpj } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
@@ -50,6 +51,8 @@ const TAMANHO_OPTIONS = [
     { value: "Grande", label: "Grande" },
 ];
 
+const TAMANHO_DA_PAGINA = 12;
+
 export const OrganizacoesPage = () => {
     const { tenantId } = useTenant();
     const { podeExcluir } = useCrmAccess();
@@ -60,10 +63,21 @@ export const OrganizacoesPage = () => {
     const [editando, setEditando] = useState<OrganizacaoRecord | null>(null);
     const [form] = Form.useForm<OrganizacaoFormValues>();
 
+    // Paginação e busca no banco: a tela recebe só a página exibida (antes
+    // baixava todas as organizações e filtrava no navegador).
+    const [pagina, setPagina] = useState(1);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, [
+        "nome_fantasia",
+        "razao_social",
+        "cnpj",
+        "setor",
+    ]);
+    useEffect(() => setPagina(1), [termo]);
+
     const { query } = useList<OrganizacaoRecord>({
         resource: "organizacoes",
-        pagination: { mode: "off" },
-        filters: [{ field: "deleted_at", operator: "null", value: true }],
+        pagination: { currentPage: pagina, pageSize: TAMANHO_DA_PAGINA },
+        filters: [{ field: "deleted_at", operator: "null", value: true }, ...filtrosDaBusca],
         sorters: [{ field: "created_at", order: "desc" }],
     });
 
@@ -77,14 +91,7 @@ export const OrganizacoesPage = () => {
         [query?.data?.data],
     );
 
-    const listaFiltrada = useMemo(() => {
-        const termo = normalizeText(busca);
-        if (!termo) return organizacoes;
-        return organizacoes.filter((org) =>
-            [org.nome_fantasia, org.razao_social, org.cnpj, org.setor]
-                .some((campo) => normalizeText(campo ? String(campo) : "").includes(termo)),
-        );
-    }, [busca, organizacoes]);
+    const totalNoBanco = query?.data?.total ?? organizacoes.length;
 
     const tabelaAusente = isSupabaseMissingRelation(query?.error);
 
@@ -249,7 +256,7 @@ export const OrganizacoesPage = () => {
                     style={{ maxWidth: 420, marginBottom: 16 }}
                 />
 
-                {listaFiltrada.length === 0 && !tabelaAusente ? (
+                {organizacoes.length === 0 && !termo && !query?.isLoading && !tabelaAusente ? (
                     <EmptyState
                         title="Nenhuma organização cadastrada"
                         description="Cadastre a primeira empresa cliente para vincular contatos e negócios."
@@ -257,8 +264,15 @@ export const OrganizacoesPage = () => {
                 ) : (
                     <Table<OrganizacaoRecord>
                         rowKey="id"
-                        dataSource={listaFiltrada}
-                        pagination={{ pageSize: 12, showSizeChanger: false }}
+                        dataSource={organizacoes}
+                        loading={Boolean(query?.isFetching)}
+                        pagination={{
+                            current: pagina,
+                            pageSize: TAMANHO_DA_PAGINA,
+                            total: totalNoBanco,
+                            showSizeChanger: false,
+                            onChange: setPagina,
+                        }}
                         columns={[
                             {
                                 title: "Nome fantasia",

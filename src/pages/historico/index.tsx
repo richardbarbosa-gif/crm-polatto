@@ -9,9 +9,10 @@ import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/su
 import {
     classificarDesfecho,
     indexarEtapas,
+    resumirFunil,
     textoIndicaGanho,
     textoIndicaPerda,
-    valorDoLead,
+    type LinhaKpi,
 } from "../../lib/pipelineMetrics";
 import type { ClienteRecord, PipelineStageRecord } from "../../types/db";
 
@@ -84,14 +85,6 @@ export const HistoricoPage = () => {
         return [{ operator: "or", value: condicoes }, ...visibilityFilters];
     }, [segmento, idsEtapasGanho, idsEtapasPerda, visibilityFilters]);
 
-    const kpiFilters = useMemo<CrudFilter[]>(
-        () => [
-            { operator: "or", value: [...condicoesGanho(idsEtapasGanho), ...condicoesPerda(idsEtapasPerda)] },
-            ...visibilityFilters,
-        ],
-        [idsEtapasGanho, idsEtapasPerda, visibilityFilters],
-    );
-
     const { query: listQuery } = useList<ClienteRecord>({
         resource: "clientes",
         pagination: { currentPage: pagina, pageSize: PAGE_SIZE },
@@ -100,11 +93,13 @@ export const HistoricoPage = () => {
         queryOptions: { enabled: !isLoadingAccess && etapasProntas, retry: false },
     });
 
-    const { query: kpiQuery } = useList<ClienteRecord>({
-        resource: "clientes",
+    // Totais do topo: linhas JÁ AGREGADAS no banco (vw_kanban_kpis, a mesma
+    // fonte do Kanban e do Dashboard). Antes a tela baixava todos os negócios
+    // ganhos e perdidos da empresa só para contar e somar.
+    const { query: kpiQuery } = useList<LinhaKpi>({
+        resource: "vw_kanban_kpis",
         pagination: { mode: "off" },
-        filters: kpiFilters,
-        queryOptions: { enabled: !isLoadingAccess && etapasProntas, retry: false },
+        queryOptions: { enabled: !isLoadingAccess, retry: false },
     });
 
     // Toda linha daqui é ganho ou perdido (o filtro garante). Se a etapa
@@ -131,15 +126,9 @@ export const HistoricoPage = () => {
     const listErrorMessage = listError && !tabelaAusente ? getSupabaseErrorMessage(listError) : "";
 
     const kpis = useMemo(() => {
-        const rows = ((kpiQuery?.data?.data as ClienteRecord[]) || []).filter(Boolean);
-        const ganhos = rows.filter((r) => desfechoDe(r) === "ganho");
-        const perdidos = rows.filter((r) => desfechoDe(r) === "perdido");
-        const valorGanho = ganhos.reduce(
-            (acc, r) => acc + valorDoLead(r),
-            0,
-        );
-        return { totalGanhos: ganhos.length, totalPerdidos: perdidos.length, valorGanho };
-    }, [kpiQuery?.data?.data, desfechoDe]);
+        const resumo = resumirFunil(kpiQuery?.data?.data, etapas);
+        return { totalGanhos: resumo.ganhos, totalPerdidos: resumo.perdidos, valorGanho: resumo.valorGanho };
+    }, [kpiQuery?.data?.data, etapas]);
 
     /**
      * Primeira etapa em aberto do funil do negócio. Reabrir gravava
