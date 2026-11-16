@@ -24,6 +24,7 @@ import {
 } from "../../../lib/automacoes";
 import { supabaseClient } from "../../../utility";
 import type { Opcao, OpcaoEtapa } from "./dados";
+import { comoJson } from "../../../lib/json";
 
 const { Text } = Typography;
 
@@ -88,7 +89,11 @@ export const EditorAutomacao = ({ inicial, contexto, opcoes, onClose, onSalvo }:
         salvandoRef.current = true;
         setSalvando(true);
         try {
-            const { error } = await supabaseClient.rpc("salvar_automacao", montarPayloadSalvar(regra));
+            const payload = montarPayloadSalvar(regra);
+            const { error } = await supabaseClient.rpc("salvar_automacao", {
+                p_automacao: comoJson(payload.p_automacao),
+                p_acoes: comoJson(payload.p_acoes),
+            });
             if (error) {
                 setErros([mensagemErroAutomacao(error.message)]);
                 return;

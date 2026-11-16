@@ -7,6 +7,7 @@
  */
 import { safeReportUrl } from "./safeReportUrl";
 import { supabaseClient } from "./supabaseClient";
+import { comoJson } from "../lib/json";
 
 type ErrorOrigin = "window.onerror" | "unhandledrejection" | "error-boundary" | "manual";
 
@@ -52,7 +53,7 @@ export const reportError = (
                 p_url: safeReportUrl(window.location.href),
                 p_user_agent: navigator.userAgent,
                 p_origem: origin,
-                p_contexto: context,
+                p_contexto: comoJson(context),
             })
             .then(undefined, () => undefined);
     } catch {

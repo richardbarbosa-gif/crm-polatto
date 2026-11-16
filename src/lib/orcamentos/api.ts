@@ -20,6 +20,7 @@ import {
     paraOrcamento,
     paraProduto,
 } from "./tipos";
+import { comoJson } from "../json";
 
 export const BUCKET_EMPRESA = "empresa-assets";
 export const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -263,7 +264,7 @@ export interface DadosOrcamento {
 /** Cabeçalho + itens numa transação só (RPC salvar_orcamento, SECURITY INVOKER). */
 export const salvarOrcamento = async (dados: DadosOrcamento, itens: OrcamentoItem[]): Promise<string> => {
     const { data, error } = await supabaseClient.rpc("salvar_orcamento", {
-        p_orcamento: dados,
+        p_orcamento: comoJson(dados),
         p_itens: itens.map((item) => ({
             id: item.id ?? null,
             produto_id: item.produto_id,

@@ -57,7 +57,7 @@ export const updateLeadTemperature = async (
     const { error } = await supabaseClient
         .from("clientes")
         .update({ temperatura: temperatura || null })
-        .eq("id", leadId);
+        .eq("id", String(leadId));
     if (error) throw error;
 };
 

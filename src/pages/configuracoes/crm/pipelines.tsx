@@ -190,7 +190,7 @@ export const PipelinesConfig = () => {
         // "on delete set null": apagar direto deixaria os negócios sem etapa).
         // Contar antes e apagar depois, em duas chamadas, deixava passar o
         // negócio que entrasse na etapa nesse intervalo.
-        const { error } = await supabaseClient.rpc("excluir_etapa", { p_stage_id: stage.id, p_destino_id: null });
+        const { error } = await supabaseClient.rpc("excluir_etapa", { p_stage_id: Number(stage.id), p_destino_id: null });
         if (error) {
             message.warning(
                 /ainda tem negócios/i.test(error.message)

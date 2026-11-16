@@ -76,7 +76,8 @@ export const updateTaskExecutionStatus = async (
     const { error } = await supabaseClient
         .from("tarefas")
         .update({ execucao_status: status })
-        .eq("id", taskId);
+        // tarefas.id é bigint
+        .eq("id", Number(taskId));
     if (error) throw error;
 };
 

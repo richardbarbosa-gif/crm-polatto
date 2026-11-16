@@ -54,6 +54,21 @@ migration 10 por cima e prova, para cada correção, que o ataque falha **e**
 que o fluxo legítimo do app continua igual. Qualquer falha aborta com a
 descrição do teste. O CI roda tudo isso a cada push (job `database`).
 
+## Tipos do front (`src/types/database.generated.ts`)
+
+O cliente Supabase do front é tipado pelo schema real: tabela, coluna ou RPC
+que não existe no banco vira erro de compilação. O arquivo é **gerado** — não
+edite à mão. Depois de qualquer migration, com o banco de teste montado pelo
+runner acima:
+
+```bash
+PGHOST=/var/tmp/crmpg PGPORT=5433 PGUSER=postgres PGDATABASE=crmtest_novo npm run gerar:tipos
+```
+
+e ajuste o que o `npm run typecheck` acusar. O CI (job `database`) roda o
+gerador com `--conferir` e falha se o arquivo versionado estiver diferente do
+banco.
+
 ## Banco novo (instalação do zero)
 
 Para um projeto Supabase vazio — inclusive a reconstrução da produção de

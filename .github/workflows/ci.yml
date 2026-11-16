@@ -81,3 +81,11 @@ jobs:
 
       - name: Migrations + suítes SQL
         run: bash database/tests/run-migrations-test.sh
+
+      # O banco "crmtest_novo" que a suíte acabou de montar tem o schema que
+      # vai para produção. Se uma migration mudou tabela, coluna ou RPC e os
+      # tipos do front não foram regerados, o build para aqui.
+      - name: Tipos do front em dia com o banco
+        env:
+          PGDATABASE: crmtest_novo
+        run: node scripts/gerar-tipos-do-banco.mjs --conferir

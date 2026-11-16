@@ -224,7 +224,7 @@ export const TaskFormModal = ({
         const { data } = await supabaseClient
             .from("clientes")
             .select("endereco_instalacao")
-            .eq("id", clienteId)
+            .eq("id", String(clienteId))
             .maybeSingle();
         return String((data as { endereco_instalacao?: string | null } | null)?.endereco_instalacao ?? "").trim();
     };

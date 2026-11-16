@@ -545,7 +545,7 @@ export const ClienteList = () => {
         void supabaseClient
             .from("clientes")
             .select("*")
-            .eq("id", selectedLeadId)
+            .eq("id", String(selectedLeadId))
             .maybeSingle()
             .then(({ data, error }) => {
                 if (!ativo) return;
@@ -680,7 +680,7 @@ export const ClienteList = () => {
             void supabaseClient
                 .from("clientes")
                 .select("id", { count: "exact", head: true })
-                .eq("stage_id", String(stage.id))
+                .eq("stage_id", Number(stage.id))
                 .then(({ count, error }) => {
                     if (!error && typeof count === "number") setLeadsNaEtapaPendente(count);
                 });
@@ -722,8 +722,8 @@ export const ClienteList = () => {
                     ? deleteDestinationStage
                     : null;
             const { error: deleteError } = await supabaseClient.rpc("excluir_etapa", {
-                p_stage_id: stagePendingDelete.id,
-                p_destino_id: destino,
+                p_stage_id: Number(stagePendingDelete.id),
+                p_destino_id: destino ? Number(destino) : null,
             });
             if (deleteError) throw deleteError;
 

@@ -94,7 +94,10 @@ export const BaseClientesPage = () => {
                     .or(filtroGanho)
                     .order("created_at", { ascending: false })
                     .order("id", { ascending: true })
-                    .range(inicio, fim),
+                    .range(inicio, fim)
+                    // Colunas de view vêm todas como "pode ser nulo" nos tipos
+                    // gerados; o formato real é o de ClienteBaseRecord.
+                    .returns<ClienteBaseRecord[]>(),
             );
 
             // Antes o filtro final exigia status EXATAMENTE "fechado": clientes

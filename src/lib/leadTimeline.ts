@@ -380,7 +380,7 @@ export const listLeadFiles = async (leadId: string | number): Promise<LeadStored
     const { data, error } = await supabaseClient
         .from("documentos_lead")
         .select("*")
-        .eq("cliente_id", leadId)
+        .eq("cliente_id", String(leadId))
         .order("created_at", { ascending: false });
 
     if (error) throw error;
@@ -453,7 +453,7 @@ export const softDeleteLeadDocument = async (params: {
     const updateQuery = supabaseClient
         .from("documentos_lead")
         .update({ status: "excluido", deleted_at: new Date().toISOString() })
-        .eq("id", documentId);
+        .eq("id", String(documentId));
 
     const { error } = tenantId ? await updateQuery.eq("tenant_id", tenantId) : await updateQuery;
 

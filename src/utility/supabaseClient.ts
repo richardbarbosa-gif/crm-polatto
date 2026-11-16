@@ -1,4 +1,5 @@
 import { createClient } from "@refinedev/supabase";
+import type { Database } from "../types/database.generated";
 import { env } from "./env";
 
 // Interceptador que injeta a empresa ativa em todas as requisições.
@@ -19,7 +20,9 @@ const customFetch = (url: RequestInfo | URL, options?: RequestInit) => {
     return fetch(url, { ...options, headers });
 };
 
-export const supabaseClient = createClient(env.supabaseUrl, env.supabaseKey, {
+// Tipado pelo schema real (src/types/database.generated.ts): coluna, tabela
+// ou RPC que não existe no banco vira erro de compilação.
+export const supabaseClient = createClient<Database>(env.supabaseUrl, env.supabaseKey, {
     db: {
         schema: "public",
     },
