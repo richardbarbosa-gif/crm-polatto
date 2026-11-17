@@ -5,12 +5,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev      # Start development server
-npm run build    # Type-check and build for production (tsc && refine build)
-npm start        # Serve production build
+npm run dev        # Start development server
+npm run build      # Type-check and build for production (tsc && refine build)
+npm start          # Serve production build (same security headers as Vercel)
+npm test           # Unit tests (Vitest, src/**/__tests__)
+npm run lint       # ESLint
+npm run gerar:tipos  # Regenerate src/types/database.generated.ts from the DB
 ```
 
-There are no test commands configured in this project.
+Database tests (migrations, RLS, tenant isolation) run against a local
+Postgres: `PGHOST=... PGPORT=... PGUSER=postgres bash database/tests/run-migrations-test.sh`.
 
 ## Architecture
 
@@ -50,16 +54,28 @@ Routes are declared as Refine resources and map to page components:
 
 - Ant Design (`antd`) components throughout, configured via `ConfigProvider` in `App.tsx`
 - Custom theme tokens and `src/styles/premium-theme.css`
-- `@hello-pangea/dnd` for drag-and-drop (Kanban board on `testes-kanban` branch)
+- Kanban drag-and-drop uses native HTML5 drag events (`src/components/kanban/`)
 - `@uiw/react-md-editor` for markdown editing
+
+### Conventions that prevent regressions
+
+- `src/utility/antdReact19.ts` must stay the first import in `src/index.tsx`: without it antd's static APIs (`message.*`, `Modal.confirm`, `notification.*`) silently render nothing under React 19. Static dialogs get theme and pt-BR locale via `ConfigProvider.config({ holderRender })` in `src/contexts/color-mode/`.
+- Counts with nouns use `contar(n, "lead", "leads")` (`src/lib/formatters.ts`), never `lead(s)`.
+- Phones are displayed with `exibirTelefone()` (`src/lib/documentos.ts`).
+- A missing table/feature shows `<RecursoIndisponivel recurso="..." />` — never migration/table names to end users.
+- Infinite queries (Kanban) are not refreshed by `invalidates: ["list"]`; use `["resourceAll"]`.
+- Business rules live in the database (RLS, triggers, transactional RPCs); the frontend checks are UX only.
 
 ### Environment
 
 Requires a `.env` file:
 ```
 VITE_SUPABASE_URL=...
-VITE_SUPABASE_KEY=...
+VITE_SUPABASE_KEY=...        # public anon/publishable key only
+# VITE_CADASTRO_ABERTO=true  # optional: shows public sign-up
 ```
+
+Production is deployed on Vercel (`vercel.json`: SPA rewrite + security headers, kept in sync with `public/serve.json` by a unit test).
 
 ### Access Control
 

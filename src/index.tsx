@@ -1,3 +1,5 @@
+// Primeiro de tudo: avisos e confirmações do antd funcionando no React 19.
+import "./utility/antdReact19";
 import React from "react";
 import { createRoot } from "react-dom/client";
 import dayjs from "dayjs";

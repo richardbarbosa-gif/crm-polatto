@@ -1420,7 +1420,11 @@ html[data-theme="dark"] .ant-statistic-title {
     color: var(--crm-ink-500) !important;
 }
 
-html[data-theme="dark"] .ant-statistic-content-value {
+/* No escuro os tons de cor dos KPIs (verde, vermelho escuros) somem no
+   fundo: número e unidade ficam claros e a cor fica no ícone. O sufixo
+   ("%") acompanha o número — antes saía "-100" branco e "%" vermelho. */
+html[data-theme="dark"] .ant-statistic-content-value,
+html[data-theme="dark"] .ant-statistic-content-suffix {
     color: var(--crm-ink-900);
 }
 
@@ -1846,8 +1850,10 @@ html[data-theme="dark"] .crm-company-selector .ant-select-selector:hover {
    A elevação carrega a cor do próprio botão, que é o que dá o aspecto
    "produto caro" em vez de retângulo azul.
    ---------------------------------------------------------------------- */
+/* Perigo e desabilitado ficam de fora: antes o "Excluir" da confirmação
+   saía azul como qualquer ação, e o botão desabilitado parecia clicável. */
 .crm-button-primary,
-.ant-btn-primary {
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled) {
     background: var(--crm-grad-primary) !important;
     border: 1px solid rgba(26, 79, 196, 0.9) !important;
     box-shadow: var(--crm-shadow-primary),
@@ -1858,7 +1864,7 @@ html[data-theme="dark"] .crm-company-selector .ant-select-selector:hover {
 }
 
 .crm-button-primary:hover,
-.ant-btn-primary:hover {
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):hover {
     background: var(--crm-grad-primary-hover) !important;
     box-shadow: var(--crm-shadow-primary-hover),
         inset 0 1px 0 rgba(255, 255, 255, 0.24) !important;
@@ -1866,14 +1872,27 @@ html[data-theme="dark"] .crm-company-selector .ant-select-selector:hover {
 }
 
 .crm-button-primary:active,
-.ant-btn-primary:active {
+.ant-btn-primary:not(.ant-btn-dangerous):not(:disabled):active {
     transform: translateY(0);
     box-shadow: var(--crm-shadow-primary) !important;
 }
 
+/* Ação destrutiva confirmada (Excluir, Remover): mesmo acabamento, em vermelho */
+.ant-btn-primary.ant-btn-dangerous:not(:disabled) {
+    background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%) !important;
+    border: 1px solid rgba(185, 28, 28, 0.9) !important;
+    box-shadow: 0 1px 2px rgba(185, 28, 28, 0.25), 0 4px 12px rgba(220, 38, 38, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18) !important;
+}
+
+.ant-btn-primary.ant-btn-dangerous:not(:disabled):hover {
+    background: linear-gradient(180deg, #f05252 0%, #e02d2d 100%) !important;
+    transform: translateY(-1px);
+}
+
 /* Botão neutro: some no repouso, aparece no hover */
 .crm-button-default:hover,
-.ant-btn-default:hover {
+.ant-btn-default:not(.ant-btn-dangerous):not(:disabled):hover {
     border-color: var(--crm-border-interactive) !important;
     background: var(--crm-surface-1) !important;
     box-shadow: var(--crm-shadow-sm) !important;

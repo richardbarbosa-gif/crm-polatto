@@ -168,6 +168,19 @@ export const ColorModeContextProvider: React.FC<PropsWithChildren> = ({
     };
   }, [isDark, darkAlgorithm, defaultAlgorithm]);
 
+  // Avisos e confirmações "estáticos" (message.success, Modal.confirm) são
+  // desenhados fora desta árvore: sem isto saíam sempre claros, com o azul
+  // genérico do antd e os botões em inglês ("OK"/"Cancel").
+  useEffect(() => {
+    ConfigProvider.config({
+      holderRender: (conteudo) => (
+        <ConfigProvider theme={mergedTheme} locale={ptBR}>
+          {conteudo}
+        </ConfigProvider>
+      ),
+    });
+  }, [mergedTheme]);
+
   return (
     <ColorModeContext.Provider
       value={{ setMode, mode }}

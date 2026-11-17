@@ -3,9 +3,10 @@ import path from "path";
 import { describe, expect, it } from "vitest";
 
 /**
- * Os cabeçalhos de segurança vivem em três arquivos (serve.json para o
- * container, vercel.json para a Vercel e .htaccess para Apache/LiteSpeed).
- * Este teste impede que um seja alterado sem os outros e trava os pontos que não podem regredir na CSP.
+ * Os cabeçalhos de segurança vivem em dois arquivos: vercel.json (produção,
+ * na Vercel) e public/serve.json (`npm start`, servidor local do build).
+ * Este teste impede que um seja alterado sem o outro e trava os pontos que
+ * não podem regredir na CSP.
  */
 const raiz = path.resolve(__dirname, "../../..");
 
@@ -19,12 +20,6 @@ const doServeJson = (): Record<string, string> => {
             .filter((h) => h.key !== "Cache-Control")
             .map((h) => [h.key, h.value]),
     );
-};
-
-const doHtaccess = (): Record<string, string> => {
-    const texto = readFileSync(path.join(raiz, "public/.htaccess"), "utf8");
-    const pares = [...texto.matchAll(/^\s*Header always set ([\w-]+) "([^"]*)"/gm)];
-    return Object.fromEntries(pares.map((m) => [m[1], m[2]]));
 };
 
 const doVercelJson = (): Record<string, string> => {
@@ -53,10 +48,6 @@ const diretivas = (csp: string) =>
     );
 
 describe("cabeçalhos de segurança de produção", () => {
-    it("serve.json e .htaccess definem exatamente os mesmos cabeçalhos", () => {
-        expect(doHtaccess()).toEqual(doServeJson());
-    });
-
     it("vercel.json (deploy na Vercel) define os mesmos cabeçalhos e devolve o index.html para as rotas do app", () => {
         expect(doVercelJson()).toEqual(doServeJson());
         const config = JSON.parse(readFileSync(path.join(raiz, "vercel.json"), "utf8")) as {

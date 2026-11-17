@@ -8,7 +8,7 @@ type ServeHeaderRule = { source: string; headers: Array<{ key: string; value: st
 /**
  * Cabeçalhos de segurança de produção (CSP, X-Frame-Options...) lidos de
  * public/serve.json — a mesma fonte usada pelo container (serve) e espelhada
- * no public/.htaccess (Hostinger). O `vite preview` também os aplica, para
+ * no vercel.json (produção). O `vite preview` também os aplica, para
  * que a CSP seja testada localmente antes do deploy. O dev server NÃO usa:
  * o HMR do Vite depende de script inline.
  */
