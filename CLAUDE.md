@@ -35,13 +35,19 @@ Routes are declared as Refine resources and map to page components:
 | Path | Feature |
 |------|---------|
 | `/` | Dashboard |
-| `/clientes` | Leads/Opportunities (CRUD) |
+| `/meu-dia` | Salesperson's day (default home for vendedor) |
+| `/clientes` | Leads/Opportunities (Kanban + CRUD) |
+| `/orcamentos` | Quotes/proposals (PDF) |
 | `/agenda` | Calendar |
 | `/base-clientes` | Customer Database |
+| `/organizacoes`, `/pessoas` | Companies and contacts |
+| `/historico` | Won/lost history |
 | `/equipe` | Team/Employees |
 | `/metas` | Goals |
-| `/insights/*` | Analytics sub-pages (painel, roi, ganhos-perdas, atividades, logs) |
-| `/configuracoes` | Settings |
+| `/lixeira` | Trash (restore soft-deleted records) |
+| `/insights/*` | Analytics sub-pages (painel, roi, gains-losses, origens, activities, logs) |
+| `/perfil` | My profile |
+| `/configuracoes` | Settings (section in `?aba=`) |
 
 ### Data Layer
 
