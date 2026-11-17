@@ -8,9 +8,24 @@ import {
   useState,
 } from "react";
 
+export type ColorMode = "light" | "dark";
+
 type ColorModeContextType = {
-  mode: string;
-  setMode: (mode: string) => void;
+  mode: ColorMode;
+  setMode: (mode: ColorMode) => void;
+};
+
+const CHAVE = "colorMode";
+
+/** Preferência salva; sem ela, segue o tema do sistema operacional. */
+const modoInicial = (): ColorMode => {
+  try {
+    const salvo = window.localStorage.getItem(CHAVE);
+    if (salvo === "light" || salvo === "dark") return salvo;
+  } catch {
+    // Navegação privada pode bloquear o armazenamento: segue o tema do sistema.
+  }
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 };
 
 export const ColorModeContext = createContext<ColorModeContextType>(
@@ -43,28 +58,16 @@ const SUPERFICIE = {
 export const ColorModeContextProvider: React.FC<PropsWithChildren> = ({
   children,
 }) => {
-  const colorModeFromLocalStorage = localStorage.getItem("colorMode");
-  const isSystemPreferenceDark = window?.matchMedia(
-    "(prefers-color-scheme: dark)"
-  ).matches;
-
-  const systemPreference = isSystemPreferenceDark ? "dark" : "light";
-  const [mode, setMode] = useState(
-    colorModeFromLocalStorage || systemPreference
-  );
+  const [mode, setMode] = useState<ColorMode>(modoInicial);
 
   useEffect(() => {
-    window.localStorage.setItem("colorMode", mode);
     document.documentElement.dataset.theme = mode;
-  }, [mode]);
-
-  const setColorMode = () => {
-    if (mode === "light") {
-      setMode("dark");
-    } else {
-      setMode("light");
+    try {
+      window.localStorage.setItem(CHAVE, mode);
+    } catch {
+      // Sem armazenamento a escolha vale só até recarregar a página.
     }
-  };
+  }, [mode]);
 
   const { darkAlgorithm, defaultAlgorithm } = theme;
   const isDark = mode === "dark";
@@ -167,10 +170,7 @@ export const ColorModeContextProvider: React.FC<PropsWithChildren> = ({
 
   return (
     <ColorModeContext.Provider
-      value={{
-        setMode: setColorMode,
-        mode,
-      }}
+      value={{ setMode, mode }}
     >
       <ConfigProvider theme={mergedTheme} locale={ptBR}>
         {children}

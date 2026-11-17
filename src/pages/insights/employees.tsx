@@ -29,7 +29,7 @@ import {
 } from "antd";
 import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel, StatCard } from "../../components/ui";
 import { formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
 import { percentual } from "../../lib/pipelineMetrics";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
@@ -37,7 +37,7 @@ import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { normalizarPapel, rotuloDoPapel } from "../../lib/permissions";
 import { criarMembroEquipe, removerMembroEquipe } from "../../lib/equipe";
 import { supabaseClient } from "../../utility";
-import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
+import { InsightsHeader, IntroCard } from "./shared";
 
 const { Text } = Typography;
 
@@ -374,7 +374,7 @@ export const InsightsEmployeesPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<UsergroupAddOutlined />}
                 title="Equipe"
@@ -393,8 +393,8 @@ export const InsightsEmployeesPage = () => {
                 description="Ao criar um novo membro, o sistema gera automaticamente o login. O vendedor já pode acessar o CRM com email e senha."
             />
 
-            {schemaMissing && <MissingSchemaAlert description="Tabela de funcionários não encontrada." />}
-            {errorMessage && <MissingSchemaAlert title="Erro" description={errorMessage} />}
+            {schemaMissing && <RecursoIndisponivel recurso="Equipe" />}
+            {errorMessage && <Alert type="error" showIcon message="Não foi possível concluir" description={errorMessage} style={{ marginBottom: 16 }} />}
 
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", marginBottom: 20 }}>
                 <StatCard

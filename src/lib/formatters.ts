@@ -126,3 +126,11 @@ export const isClosedStatus = (status?: string | null): boolean => {
 /** Texto das barras de progresso em pt-BR: "32,5%", "100%" (antd mostraria "32.5%"). */
 export const formatoProgresso = (percentual?: number): string =>
     `${(Number.isFinite(percentual ?? NaN) ? (percentual as number) : 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+
+/**
+ * Quantidade com o substantivo concordando: contar(1, "lead", "leads") dá
+ * "1 lead"; contar(3, ...) dá "3 leads". Evita "1 atividades" e "lead(s)".
+ * Zero segue o plural ("0 leads"), como se fala em português.
+ */
+export const contar = (quantidade: number, singular: string, plural: string): string =>
+    `${quantidade} ${quantidade === 1 ? singular : plural}`;

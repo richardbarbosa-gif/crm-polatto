@@ -12,7 +12,7 @@ import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL, normalizeText, formatoProgresso, formatPercentBR } from "../../lib/formatters";
+import { contar, formatCurrencyBRL, normalizeText, formatoProgresso, formatPercentBR } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
@@ -162,7 +162,7 @@ export const InsightsGainsLossesPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<RiseOutlined />}
                 title="Ganhos e perdas"
@@ -230,7 +230,7 @@ export const InsightsGainsLossesPage = () => {
                         prefix={<FundProjectionScreenOutlined style={{ color: "#2563eb" }} />}
                         accentColor="#2563eb"
                         valueStyle={{ color: "#1d4ed8" }}
-                        subtitle={`${report.totalDecisoes} oportunidades decididas`}
+                        subtitle={contar(report.totalDecisoes, "oportunidade decidida", "oportunidades decididas")}
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>
@@ -241,7 +241,7 @@ export const InsightsGainsLossesPage = () => {
                         prefix={<WarningOutlined style={{ color: "#f97316" }} />}
                         accentColor="#f97316"
                         valueStyle={{ color: "#c2410c" }}
-                        subtitle="Sinal para revisar abordagem comercial"
+                        subtitle={report.perdas.length === 0 ? "Nenhuma perda no período" : "Sinal para revisar abordagem comercial"}
                     />
                 </Col>
             </Row>

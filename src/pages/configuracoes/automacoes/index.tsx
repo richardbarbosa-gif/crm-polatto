@@ -2,7 +2,7 @@ import { DeleteOutlined, EditOutlined, HistoryOutlined, PlusOutlined, Thunderbol
 import { useDelete, useUpdate } from "@refinedev/core";
 import { Alert, Button, Popconfirm, Skeleton, Switch, Tag, Tooltip, Typography, message } from "antd";
 import { useState } from "react";
-import { EmptyState } from "../../../components/ui";
+import { EmptyState, RecursoIndisponivel } from "../../../components/ui";
 import { useCrmAccess } from "../../../hooks/useCrmAccess";
 import {
     descreverAutomacao,
@@ -64,7 +64,7 @@ export const AutomacoesConfig = () => {
     };
 
     if (isSupabaseMissingRelation(erro)) {
-        return <Alert type="info" showIcon message="Automações ainda não disponíveis: aplique a migration 17 no banco." />;
+        return <RecursoIndisponivel recurso="Automações" style={{ marginBottom: 0 }} />;
     }
     if (erro) {
         return <Alert type="error" showIcon message="Não foi possível carregar as automações." description={getSupabaseErrorMessage(erro)} />;

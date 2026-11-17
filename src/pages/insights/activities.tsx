@@ -29,6 +29,7 @@ import {
 import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
+import { contar } from "../../lib/formatters";
 
 const PERIOD_OPTIONS = [
     { label: "7 dias", value: 7 },
@@ -166,7 +167,7 @@ export const InsightsActivitiesPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<CalendarOutlined />}
                 title="Relatório de atividades"
@@ -247,7 +248,7 @@ export const InsightsActivitiesPage = () => {
                         value={metrics.calls + metrics.whatsapp}
                         prefix={<MessageOutlined style={{ color: "#16a34a" }} />}
                         accentColor="#16a34a"
-                        subtitle={`${metrics.calls} ligações + ${metrics.whatsapp} WhatsApp`}
+                        subtitle={`${contar(metrics.calls, "ligação", "ligações")} + ${metrics.whatsapp} WhatsApp`}
                     />
                 </Col>
             </Row>

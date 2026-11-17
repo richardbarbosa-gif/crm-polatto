@@ -9,7 +9,6 @@ import {
 } from "@ant-design/icons";
 import { useCreate, useList, useUpdate } from "@refinedev/core";
 import {
-    Alert,
     Dropdown,
     Form,
     Input,
@@ -23,12 +22,12 @@ import {
     message,
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, EmptyState } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR } from "../../lib/formatters";
 import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
-import { regraCpfCnpj, validarTelefone } from "../../lib/documentos";
+import { exibirTelefone, regraCpfCnpj, validarTelefone } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import type { OrganizacaoRecord, PessoaRecord } from "../../types/db";
@@ -359,13 +358,7 @@ export const PessoasPage = () => {
             </div>
 
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Estrutura do banco pendente"
-                    description="A tabela pessoas ainda não existe neste ambiente. Execute as migrations em database/migrations/ no Supabase."
-                    style={{ marginBottom: 16 }}
-                />
+                <RecursoIndisponivel recurso="Contatos" />
             ) : null}
 
             <Card bordered={false} className="crm-card">
@@ -421,7 +414,7 @@ export const PessoasPage = () => {
                                 className: "crm-nowrap",
                                 dataIndex: "telefone",
                                 render: (value: string | null, pessoa) =>
-                                    value ? `${pessoa.ddi || "+55"} ${value}` : "—",
+                                    value ? `${pessoa.ddi || "+55"} ${exibirTelefone(value)}` : "—",
                             },
                             {
                                 title: "Cargo",

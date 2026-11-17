@@ -61,7 +61,7 @@ export const mensagemDeErro = (erro: unknown, padrao = "Não foi possível concl
             return e.message || padrao;
         case "42P01":
         case "PGRST205":
-            return "Módulo de orçamentos ainda não instalado neste ambiente (migration 13 pendente).";
+            return "Orçamentos indisponíveis no momento. Tente de novo em alguns minutos; se continuar, fale com o suporte.";
         default:
             return e.message || padrao;
     }

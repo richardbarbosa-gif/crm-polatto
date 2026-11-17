@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     chaveDeEtapa,
+    contar,
     formatCpfCnpj,
     formatCurrencyBRL,
     formatPercentBR,
@@ -130,5 +131,21 @@ describe("chaveDeEtapa", () => {
 
     it("normalizeText continua sensível a acento (nomes de pessoas)", () => {
         expect(normalizeText("José")).not.toBe(normalizeText("Jose"));
+    });
+});
+
+describe("contar", () => {
+    it("concorda o substantivo com a quantidade", () => {
+        expect(contar(1, "lead", "leads")).toBe("1 lead");
+        expect(contar(3, "lead", "leads")).toBe("3 leads");
+    });
+
+    it("zero usa o plural, como em português", () => {
+        expect(contar(0, "atividade", "atividades")).toBe("0 atividades");
+    });
+
+    it("aceita expressões inteiras", () => {
+        expect(contar(1, "lead movido", "leads movidos")).toBe("1 lead movido");
+        expect(contar(2, "lead movido", "leads movidos")).toBe("2 leads movidos");
     });
 });

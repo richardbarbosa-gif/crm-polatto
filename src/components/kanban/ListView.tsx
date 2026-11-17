@@ -4,7 +4,8 @@ import { DeleteOutlined, EditOutlined, EyeOutlined } from "@ant-design/icons";
 import { useDelete, useUpdate } from "@refinedev/core";
 import { Badge, Button, EmptyState, TemperatureBadge } from "../ui";
 import { getStatusTone, type KanbanLead } from "./types";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { exibirTelefone } from "../../lib/documentos";
+import { contar, formatCurrencyBRL } from "../../lib/formatters";
 import { resolveLeadTemperature } from "../../lib/leadTemperature";
 import { valorDoLead } from "../../lib/pipelineMetrics";
 import { supabaseClient } from "../../utility";
@@ -129,7 +130,7 @@ export const ListView: React.FC<ListViewProps> = ({
         const ids = [...selectedRowKeys];
         setIsBulkWorking(true);
         const hideLoading = message.loading(
-            `Movendo ${ids.length} lead(s) para ${option.stage.nome}...`,
+            `Movendo ${contar(ids.length, "lead", "leads")} para ${option.stage.nome}...`,
             0,
         );
 
@@ -161,9 +162,9 @@ export const ListView: React.FC<ListViewProps> = ({
             return;
         }
         if (failures > 0) {
-            message.warning(`${failures} lead(s) não puderam ser movidos.`);
+            message.warning(failures === 1 ? "1 lead não pôde ser movido." : `${failures} leads não puderam ser movidos.`);
         }
-        finishBulk(`${ids.length - failures} lead(s) movido(s) para ${option.stage.nome}.`);
+        finishBulk(`${contar(ids.length - failures, "lead movido", "leads movidos")} para ${option.stage.nome}.`);
     };
 
     const handleBulkDelete = () => {
@@ -181,17 +182,19 @@ export const ListView: React.FC<ListViewProps> = ({
         }
 
         Modal.confirm({
-            title: `Excluir ${ids.length} lead(s)?`,
+            title: `Excluir ${contar(ids.length, "lead", "leads")}?`,
             content:
                 "Os negócios saem do funil e dos relatórios e vão para a Lixeira, de onde podem ser restaurados." +
-                (deOutros > 0 ? ` ${deOutros} lead(s) de outros vendedores ficam de fora: só o gerente exclui.` : ""),
+                (deOutros > 0
+                    ? ` ${contar(deOutros, "lead de outro vendedor fica", "leads de outros vendedores ficam")} de fora: só o gerente exclui.`
+                    : ""),
             okText: "Excluir",
             okButtonProps: { danger: true },
             cancelText: "Cancelar",
             onOk: async () => {
                 setIsBulkWorking(true);
                 const hideLoading = message.loading(
-                    `Excluindo ${ids.length} lead(s)...`,
+                    `Excluindo ${contar(ids.length, "lead", "leads")}...`,
                     0,
                 );
 
@@ -217,9 +220,9 @@ export const ListView: React.FC<ListViewProps> = ({
                     return;
                 }
                 if (failures > 0) {
-                    message.warning(`${failures} lead(s) não puderam ser excluídos.`);
+                    message.warning(failures === 1 ? "1 lead não pôde ser excluído." : `${failures} leads não puderam ser excluídos.`);
                 }
-                finishBulk(`${ids.length - failures} lead(s) excluído(s).`);
+                finishBulk(`${contar(ids.length - failures, "lead excluído", "leads excluídos")}.`);
             },
         });
     };
@@ -229,7 +232,7 @@ export const ListView: React.FC<ListViewProps> = ({
             {listError ? (
                 <EmptyState
                     title="Erro ao carregar leads"
-                    description={listErrorMessage || "Revise as policies RLS."}
+                    description={listErrorMessage || "Tente recarregar a página."}
                 />
             ) : (
                 <>
@@ -334,7 +337,12 @@ export const ListView: React.FC<ListViewProps> = ({
                                 render: (_, record: KanbanLead) =>
                                     formatCurrencyBRL(valorDoLead(record), "R$ 0,00"),
                             },
-                            { title: "Telefone", dataIndex: "telefone", className: "crm-nowrap" },
+                            {
+                                title: "Telefone",
+                                dataIndex: "telefone",
+                                className: "crm-nowrap",
+                                render: (valor: string | null) => exibirTelefone(valor) || "-",
+                            },
                             {
                                 title: "",
                                 render: (_, record: KanbanLead) => (

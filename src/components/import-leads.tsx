@@ -205,7 +205,8 @@ export const ImportLeadsButton = () => {
                 icon={<UploadOutlined />}
                 loading={isImporting}
                 onClick={() => inputRef.current?.click()}
-                style={{ borderRadius: 8, height: 40, fontWeight: 600 }}
+                // Mesma altura e peso dos vizinhos na barra do funil (Novo Lead, Colunas).
+                style={{ borderRadius: 8, height: 32, fontSize: 12.5 }}
                 title="Colunas aceitas: nome, telefone, e-mail, CPF/CNPJ, responsável, valor, conta de luz, status/etapa, temperatura"
             >
                 Importar CSV

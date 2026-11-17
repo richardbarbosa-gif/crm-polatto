@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Button, Card, MarkdownEditor, MarkdownViewer, TemperatureBadge } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
+import { exibirTelefone } from "../../lib/documentos";
 import { valorDoLead } from "../../lib/pipelineMetrics";
 import { buildLeadStages, findLeadStageById } from "../../lib/leadStatus";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
@@ -354,7 +355,7 @@ export const LeadDetails = ({
         } catch (error: unknown) {
             message.error(
                 (error as { message?: string })?.message ||
-                    "Falha no upload. Verifique se o bucket `lead-files` existe no Supabase Storage.",
+                    "Não foi possível enviar o arquivo. Confira a conexão e tente de novo.",
             );
         } finally {
             setUploadingKind(null);
@@ -478,7 +479,7 @@ export const LeadDetails = ({
                         </Title>
                         <Space wrap style={{ marginTop: 6 }}>
                             <Text type="secondary" style={{ fontSize: 15 }}>
-                                <PhoneOutlined /> {record.ddi} {record.telefone}
+                                <PhoneOutlined /> {record.ddi} {exibirTelefone(record.telefone)}
                             </Text>
                             {telefoneWhatsApp(record.telefone, record.ddi) ? (
                                 <Button

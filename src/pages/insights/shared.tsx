@@ -1,4 +1,4 @@
-import { Alert, Typography } from "antd";
+import { Typography } from "antd";
 import type { ReactNode } from "react";
 import { Card } from "../../components/ui";
 
@@ -78,22 +78,3 @@ export const IntroCard = ({ title, description, extra }: IntroCardProps) => {
     );
 };
 
-type MissingSchemaAlertProps = {
-    title?: string;
-    description: string;
-};
-
-export const MissingSchemaAlert = ({
-    title = "Tabela de relatórios não encontrada no banco",
-    description,
-}: MissingSchemaAlertProps) => {
-    return (
-        <Alert
-            type="warning"
-            showIcon
-            message={title}
-            description={description}
-            style={{ marginBottom: 16 }}
-        />
-    );
-};

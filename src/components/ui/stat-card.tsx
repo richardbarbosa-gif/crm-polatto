@@ -28,6 +28,9 @@ export const StatCard = ({
             className="crm-stat-card"
             bodyStyle={{ padding: "16px 18px 14px" }}
             style={{
+                // Numa fileira, todos os cartões ficam da altura do mais alto
+                // (um com legenda e outro sem não desalinham a linha).
+                height: "100%",
                 border: "1px solid var(--crm-border)",
                 boxShadow: "var(--crm-shadow-xs)",
                 background: "var(--crm-surface-1)",

@@ -104,6 +104,22 @@ export const formatarTelefoneBR = (valor?: string | null): string => {
 };
 
 /**
+ * Telefone para EXIBIR em listas e cartões. O mesmo número chega gravado de
+ * jeitos diferentes (cadastro formata, planilha importada vem crua): com 10
+ * ou 11 dígitos sai sempre como (11) 99999-9999. Número com DDI ou de outro
+ * país fica como foi gravado — reformatar poderia cortar dígitos.
+ */
+export const exibirTelefone = (valor?: string | null): string => {
+    const original = (valor ?? "").trim();
+    if (!original) return "";
+    const digitos = somenteDigitos(original);
+    if (!original.startsWith("+") && (digitos.length === 10 || digitos.length === 11)) {
+        return formatarTelefoneBR(digitos);
+    }
+    return original;
+};
+
+/**
  * Formas como o mesmo telefone pode estar gravado (digitado à mão,
  * formatado pelo cadastro, importado cru). Usado na checagem de duplicata.
  */

@@ -75,6 +75,16 @@ begin
     perform public.assert(found and v_motivo.created_by is null and v_motivo.criado_por = 'Vend Catorze',
         'M1: motivo da perda entra na timeline pelo banco, na mesma transação (linha do sistema, autor real)');
 
+    perform public.assert(
+        not exists (
+            select 1 from public.atividades_lead a
+            where a.cliente_id = v_lead::text and a.tipo = 'status' and a.criado_por <> 'Vend Catorze'
+        ) and exists (
+            select 1 from public.atividades_lead a
+            where a.cliente_id = v_lead::text and a.tipo = 'status' and a.author = 'Vend Catorze'
+        ),
+        'M2: mudança de etapa sai assinada com o NOME do vendedor, não com o e-mail do login');
+
     -- reabrir limpa o fechamento
     perform public.login_como(v_v, 's14.vendedor@teste.com');
     update public.clientes set stage_id = v_aberta, status = 'Novo Lead', data_fechamento = null, motivo_perda = null where id = v_lead;

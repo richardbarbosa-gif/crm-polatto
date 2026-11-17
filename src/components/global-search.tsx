@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Input, List, Typography, Tag, Space, Skeleton } from "antd";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Modal, Input, List, Typography, Tag, Space, Skeleton, type InputRef } from "antd";
 import { BankOutlined, ContactsOutlined, RightOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
 import { useList, useGo, type CrudFilter } from "@refinedev/core";
 import { useCrmAccess } from "../hooks/useCrmAccess";
@@ -48,6 +48,15 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
     const [searchTerm, setSearchTerm] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [ativo, setAtivo] = useState(0);
+    const campoRef = useRef<InputRef>(null);
+
+    // Foco no campo assim que a janela entra na tela (o afterOpenChange do
+    // Modal repete ao fim da animação, caso o antd tenha tomado o foco).
+    useEffect(() => {
+        if (!open) return;
+        const quadro = window.requestAnimationFrame(() => campoRef.current?.focus({ cursor: "all" }));
+        return () => window.cancelAnimationFrame(quadro);
+    }, [open]);
     const go = useGo();
 
     // Nova busca: o destaque volta para o primeiro resultado
@@ -210,6 +219,12 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
             onCancel={() => setOpen(false)}
             footer={null}
             closable={false}
+            // O Modal do antd prende o foco na própria janela ao abrir, por
+            // cima do autoFocus do campo: quem apertava Ctrl+K digitava no
+            // vazio. O foco vai para o campo quando a janela termina de abrir.
+            afterOpenChange={(aberto) => {
+                if (aberto) campoRef.current?.focus({ cursor: "all" });
+            }}
             width={580}
             className="crm-busca"
             styles={{
@@ -221,7 +236,7 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
             <div className="crm-busca__topo">
                 <SearchOutlined className="crm-busca__icone" />
                 <Input
-                    autoFocus
+                    ref={campoRef}
                     aria-label="Buscar no CRM"
                     aria-controls="crm-busca-resultados"
                     placeholder="Buscar negócios, organizações e contatos..."

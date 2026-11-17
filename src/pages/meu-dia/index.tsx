@@ -175,54 +175,67 @@ export const MeuDiaPage = () => {
 
             <PrimeiroAcesso isGerente={isGerente} tenantId={tenantId} />
 
+            {/* Esquerda: o que fazer agora (atividades e negócios sem próximo
+                passo). Direita: o que está esfriando. Colunas independentes para
+                um cartão curto não deixar um buraco ao lado de três. */}
             <Row gutter={[14, 14]}>
                 <Col xs={24} lg={12}>
-                    <Card
-                        title={
-                            <Text strong style={{ fontSize: 15 }}>
-                                Atividades de hoje e atrasadas {totalTarefas > 0 ? `(${totalTarefas})` : ""}
-                            </Text>
-                        }
-                        extra={
-                            <Button size="small" onClick={() => navigate("/agenda")}>
-                                Agenda
-                            </Button>
-                        }
-                        styles={{ body: { padding: 0 } }}
-                    >
-                        {tarefasQuery.isLoading || isLoadingAccess ? (
-                            <div style={{ padding: 18 }}>
-                                <Skeleton active paragraph={{ rows: 3 }} title={false} />
-                            </div>
-                        ) : tarefasQuery.isError ? (
-                            <div style={{ padding: 18 }}>
-                                <Text type="danger">Não foi possível carregar as atividades.</Text>
-                            </div>
-                        ) : totalTarefas === 0 ? (
-                            <div style={{ padding: 24, textAlign: "center" }}>
-                                <Text type="secondary">Nada pendente para hoje. Bom trabalho!</Text>
-                            </div>
-                        ) : (
-                            <div>
-                                {[...atrasadas.map((t) => ({ t, atrasada: true })), ...hoje.map((t) => ({ t, atrasada: false }))].map(
-                                    ({ t, atrasada }) => (
-                                        <LinhaTarefa
-                                            key={String(t.id)}
-                                            tarefa={t}
-                                            atrasada={atrasada}
-                                            concluindo={concluindoId === t.id}
-                                            mostrarResponsavel={verEquipe && isGerente}
-                                            onConcluir={concluir}
-                                            onAbrirLead={abrirLead}
-                                        />
-                                    ),
-                                )}
-                            </div>
-                        )}
-                    </Card>
+                    <Space direction="vertical" size={14} style={{ display: "flex" }}>
+                        <Card
+                            title={
+                                <Text strong style={{ fontSize: 15 }}>
+                                    Atividades de hoje e atrasadas {totalTarefas > 0 ? `(${totalTarefas})` : ""}
+                                </Text>
+                            }
+                            extra={
+                                <Button size="small" onClick={() => navigate("/agenda")}>
+                                    Agenda
+                                </Button>
+                            }
+                            styles={{ body: { padding: 0 } }}
+                        >
+                            {tarefasQuery.isLoading || isLoadingAccess ? (
+                                <div style={{ padding: 18 }}>
+                                    <Skeleton active paragraph={{ rows: 3 }} title={false} />
+                                </div>
+                            ) : tarefasQuery.isError ? (
+                                <div style={{ padding: 18 }}>
+                                    <Text type="danger">Não foi possível carregar as atividades.</Text>
+                                </div>
+                            ) : totalTarefas === 0 ? (
+                                <div style={{ padding: 24, textAlign: "center" }}>
+                                    <Text type="secondary">Nada pendente para hoje. Bom trabalho!</Text>
+                                </div>
+                            ) : (
+                                <div>
+                                    {[...atrasadas.map((t) => ({ t, atrasada: true })), ...hoje.map((t) => ({ t, atrasada: false }))].map(
+                                        ({ t, atrasada }) => (
+                                            <LinhaTarefa
+                                                key={String(t.id)}
+                                                tarefa={t}
+                                                atrasada={atrasada}
+                                                concluindo={concluindoId === t.id}
+                                                mostrarResponsavel={verEquipe && isGerente}
+                                                onConcluir={concluir}
+                                                onAbrirLead={abrirLead}
+                                            />
+                                        ),
+                                    )}
+                                </div>
+                            )}
+                        </Card>
+                        <ListaNegociosSaude
+                            titulo="Sem próximo passo"
+                            filtros={[{ field: "sem_proximo_passo", operator: "eq", value: true }, ...filtrosDono]}
+                            sorters={[{ field: "temperatura_ordem", order: "desc" }, { field: "id", order: "asc" }]}
+                            detalhe={() => "Agendar atividade"}
+                            vazio="Todo negócio aberto tem uma próxima atividade."
+                            habilitado={!isLoadingAccess}
+                        />
+                    </Space>
                 </Col>
                 <Col xs={24} lg={12}>
-                    <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={14} style={{ display: "flex" }}>
                         <ListaNegociosSaude
                             titulo={`Quentes sem contato há ${DIAS_QUENTE_SEM_CONTATO}+ dias`}
                             filtros={[...filtrosQuentesSemContato(), ...filtrosDono]}
@@ -238,14 +251,6 @@ export const MeuDiaPage = () => {
                             sorters={[{ field: "dias_sem_atividade", order: "desc" }, { field: "id", order: "asc" }]}
                             detalhe={(l) => rotuloParado(l.dias_sem_atividade)}
                             vazio="Nenhum negócio parado. O funil está andando."
-                            habilitado={!isLoadingAccess}
-                        />
-                        <ListaNegociosSaude
-                            titulo="Sem próximo passo"
-                            filtros={[{ field: "sem_proximo_passo", operator: "eq", value: true }, ...filtrosDono]}
-                            sorters={[{ field: "temperatura_ordem", order: "desc" }, { field: "id", order: "asc" }]}
-                            detalhe={() => "Agendar atividade"}
-                            vazio="Todo negócio aberto tem uma próxima atividade."
                             habilitado={!isLoadingAccess}
                         />
                     </Space>

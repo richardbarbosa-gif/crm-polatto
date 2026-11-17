@@ -12,7 +12,7 @@ import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { Button, Card, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL, formatPercentBR } from "../../lib/formatters";
+import { contar, formatCurrencyBRL, formatPercentBR } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     buildOwnerPerformance,
@@ -129,7 +129,7 @@ export const InsightsROIPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<LineChartOutlined />}
                 title="ROI Comercial"
@@ -146,19 +146,21 @@ export const InsightsROIPage = () => {
                             value={costPerLead}
                             min={0}
                             step={5}
+                            addonBefore="Custo por lead"
                             prefix="R$"
+                            aria-label="Custo por lead, em reais"
                             onChange={(value) => setCostPerLead(Number(value || 0))}
-                            style={{ width: 140 }}
-                            placeholder="Custo/lead"
+                            style={{ width: 230 }}
                         />
                         <InputNumber
                             value={costPerActivity}
                             min={0}
                             step={1}
+                            addonBefore="Custo por atividade"
                             prefix="R$"
+                            aria-label="Custo por atividade, em reais"
                             onChange={(value) => setCostPerActivity(Number(value || 0))}
-                            style={{ width: 150 }}
-                            placeholder="Custo/atividade"
+                            style={{ width: 256 }}
                         />
                         <Button
                             icon={<DownloadOutlined />}
@@ -195,7 +197,7 @@ export const InsightsROIPage = () => {
                         prefix={<WalletOutlined style={{ color: "#334155" }} />}
                         accentColor="#64748b"
                         valueStyle={{ color: "#334155" }}
-                        subtitle={`${roi.clientesPeriodo.length} leads e ${roi.tarefasPeriodo.length} atividades`}
+                        subtitle={`${contar(roi.clientesPeriodo.length, "lead", "leads")} e ${contar(roi.tarefasPeriodo.length, "atividade", "atividades")}`}
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>

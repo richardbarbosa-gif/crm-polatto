@@ -112,6 +112,14 @@ create trigger fechamento_servidor
 -- data_atividade (QUANDO a ligação/visita aconteceu) continua livre: é
 -- informação de negócio, não trilha de auditoria.
 -- SECURITY INVOKER: current_user distingue API de trigger do sistema.
+--
+-- Linhas do sistema (mudança de etapa, temperatura) são gravadas por
+-- triggers antigos que assinam com o E-MAIL do login. Na timeline e no
+-- registro de atividades a nota do mesmo vendedor saía com o nome e a
+-- mudança de etapa com o e-mail — duas identidades para a mesma pessoa.
+-- Aqui o e-mail do login vira o nome do funcionário. Só troca quando o
+-- autor gravado É o e-mail de quem está logado: "Automação «...»" e
+-- "sistema" (cron, sem login) passam intactos.
 -- ---------------------------------------------------------------------
 create or replace function public.fn_atividades_lead_carimbo()
 returns trigger
@@ -120,8 +128,17 @@ set search_path = public
 as $$
 declare
     v_autor text;
+    v_email text;
 begin
     if current_user not in ('authenticated', 'anon') then
+        if tg_op = 'INSERT' then
+            v_email := nullif(lower(btrim(auth.jwt() ->> 'email')), '');
+            if v_email is not null and lower(btrim(new.criado_por)) = v_email then
+                v_autor := public.nome_do_usuario_atual();
+                new.criado_por := v_autor;
+                new.author := v_autor;
+            end if;
+        end if;
         return new;
     end if;
 
@@ -143,6 +160,26 @@ drop trigger if exists atividades_lead_carimbo on public.atividades_lead;
 create trigger atividades_lead_carimbo
     before insert or update on public.atividades_lead
     for each row execute function public.fn_atividades_lead_carimbo();
+
+-- Acerto do que já foi gravado com o e-mail: vale o nome do funcionário
+-- da MESMA empresa com aquele e-mail (o ativo ganha do excluído). Sem
+-- funcionário correspondente a linha fica como está. Idempotente: depois
+-- de trocado, o autor deixa de ser um e-mail e não casa mais.
+with nomes as (
+    select distinct on (f.tenant_id, lower(btrim(f.email)))
+           f.tenant_id, lower(btrim(f.email)) as email, btrim(f.nome) as nome
+    from public.funcionarios f
+    where nullif(btrim(f.email), '') is not null
+      and nullif(btrim(f.nome), '') is not null
+    order by f.tenant_id, lower(btrim(f.email)), f.deleted_at nulls first, f.id
+)
+update public.atividades_lead a
+set criado_por = n.nome,
+    author = n.nome
+from nomes n
+where a.tenant_id = n.tenant_id
+  and a.created_by is null
+  and lower(btrim(a.criado_por)) = n.email;
 
 -- ---------------------------------------------------------------------
 -- 1c. MOTIVO DA PERDA na timeline, na MESMA transação que move o card

@@ -6,6 +6,13 @@ type CampoDocumentoProps = {
     tipo: TipoPessoa;
     onTipoChange: (tipo: TipoPessoa) => void;
     size?: "large" | "middle";
+    /**
+     * Padrão: obrigatório. Só a edição de um lead que JÁ está salvo sem
+     * documento (veio da importação de planilha) passa false — senão o
+     * vendedor não conseguiria nem corrigir o valor ou o telefone do lead
+     * antes de ter o CPF em mãos.
+     */
+    obrigatorio?: boolean;
 };
 
 /**
@@ -13,7 +20,7 @@ type CampoDocumentoProps = {
  * pessoa física cadastra CPF; empresa cadastra CNPJ. Os dígitos verificadores
  * são conferidos. O tipo não vai para o banco: é inferido do documento salvo.
  */
-export const CampoDocumento = ({ form, tipo, onTipoChange, size = "large" }: CampoDocumentoProps) => {
+export const CampoDocumento = ({ form, tipo, onTipoChange, size = "large", obrigatorio = true }: CampoDocumentoProps) => {
     const ehPf = tipo === "pf";
 
     const trocarTipo = (novo: TipoPessoa) => {
@@ -48,9 +55,10 @@ export const CampoDocumento = ({ form, tipo, onTipoChange, size = "large" }: Cam
                     label={ehPf ? "CPF" : "CNPJ"}
                     name="cpf_cnpj"
                     rules={[
-                        { required: true, message: ehPf ? "Informe o CPF." : "Informe o CNPJ." },
+                        ...(obrigatorio ? [{ required: true, message: ehPf ? "Informe o CPF." : "Informe o CNPJ." }] : []),
                         regraCpfCnpj(ehPf ? "cpf" : "cnpj"),
                     ]}
+                    extra={obrigatorio ? undefined : "Lead importado sem documento: preencha quando tiver."}
                 >
                     <Input
                         size={size}

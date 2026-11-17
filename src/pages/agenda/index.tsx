@@ -43,6 +43,10 @@ import { supabaseClient } from "../../utility";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { getSupabaseErrorMessage } from "../../lib/supabaseErrors";
 import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
+import { contar } from "../../lib/formatters";
+
+/** Agendamentos exibidos por dia na visão do mês; o restante vira "+N no dia". */
+const LIMITE_POR_CELULA = 2;
 
 const getTipoLabel = (tipo?: string | null) => rotuloTipoAtividade(tipo);
 
@@ -320,7 +324,7 @@ export const AgendaPage = () => {
         // Lá mostramos só marcadores; tocar no dia abre a lista completa.
         if (celular) {
             return (
-                <div className="crm-agenda-marcadores" aria-label={`${tarefasDoDia.length} agendamento(s)`}>
+                <div className="crm-agenda-marcadores" aria-label={contar(tarefasDoDia.length, "agendamento", "agendamentos")}>
                     {tarefasDoDia.slice(0, 3).map((tarefa) => (
                         <Badge
                             key={tarefa.id}
@@ -336,71 +340,49 @@ export const AgendaPage = () => {
             );
         }
 
-        return (
-            <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-                {tarefasDoDia.slice(0, 3).map((tarefa) => (
-                    <li key={tarefa.id}>
-                        {(() => {
-                            const clienteLabel = getClienteLabel(
-                                tarefa.cliente_id,
-                                tarefa.cliente_nome,
-                            );
-                            const executionStatus = getExecutionStatus(tarefa);
-                            const situation = getTaskSituation(
-                                tarefa.data_vencimento,
-                                dayjs(),
-                                executionStatus,
-                            );
-                            const statusLabel =
-                                executionStatus !== "pendente"
-                                    ? TASK_EXECUTION_STATUS_LABELS[executionStatus]
-                                    : situation === "atrasada"
-                                      ? getSituationLabel(situation)
-                                      : TASK_EXECUTION_STATUS_LABELS.pendente;
+        // A célula do mês tem 86px: cabem dois agendamentos de duas linhas
+        // (título + cliente/situação) e o aviso de "+N". Texto longo corta
+        // com reticências em vez de empurrar a situação para fora da célula.
+        const visiveis = tarefasDoDia.slice(0, LIMITE_POR_CELULA);
+        const restantes = tarefasDoDia.length - visiveis.length;
 
-                            return (
-                                <Badge
-                                    status={getSituationBadgeStatus(situation)}
-                                    text={
-                                        <span
-                                            style={{
-                                                cursor: "pointer",
-                                                display: "inline-flex",
-                                                flexDirection: "column",
-                                                lineHeight: 1.25,
-                                            }}
-                                            onClick={(event) => {
-                                                event.stopPropagation();
-                                                abrirDrawerTarefa(tarefa);
-                                            }}
-                                        >
-                                            <span>{tarefa.titulo || "Sem título"}</span>
-                                            <Typography.Text
-                                                type="secondary"
-                                                style={{ fontSize: 11 }}
-                                            >
-                                                {clienteLabel}
-                                            </Typography.Text>
-                                            <Typography.Text
-                                                type="secondary"
-                                                style={{ fontSize: 10 }}
-                                            >
-                                                {statusLabel}
-                                            </Typography.Text>
-                                        </span>
-                                    }
-                                />
-                            );
-                        })()}
-                    </li>
-                ))}
-                {tarefasDoDia.length > 3 && (
-                    <li>
-                        <Typography.Text type="secondary">
-                            +{tarefasDoDia.length - 3} mais
-                        </Typography.Text>
-                    </li>
-                )}
+        return (
+            <ul className="crm-agenda-eventos">
+                {visiveis.map((tarefa) => {
+                    const clienteLabel = getClienteLabel(tarefa.cliente_id, tarefa.cliente_nome);
+                    const executionStatus = getExecutionStatus(tarefa);
+                    const situation = getTaskSituation(tarefa.data_vencimento, dayjs(), executionStatus);
+                    const statusLabel =
+                        executionStatus !== "pendente"
+                            ? TASK_EXECUTION_STATUS_LABELS[executionStatus]
+                            : situation === "atrasada"
+                              ? getSituationLabel(situation)
+                              : TASK_EXECUTION_STATUS_LABELS.pendente;
+                    const titulo = tarefa.titulo || "Sem título";
+
+                    return (
+                        <li key={tarefa.id}>
+                            <button
+                                type="button"
+                                className="crm-agenda-evento"
+                                title={`${titulo} — ${clienteLabel} (${statusLabel})`}
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    abrirDrawerTarefa(tarefa);
+                                }}
+                            >
+                                <Badge status={getSituationBadgeStatus(situation)} />
+                                <span className="crm-agenda-evento__texto">
+                                    <span className="crm-agenda-evento__titulo">{titulo}</span>
+                                    <span className="crm-agenda-evento__detalhe">
+                                        {clienteLabel} · {statusLabel}
+                                    </span>
+                                </span>
+                            </button>
+                        </li>
+                    );
+                })}
+                {restantes > 0 ? <li className="crm-agenda-eventos__mais">+{restantes} no dia</li> : null}
             </ul>
         );
     };

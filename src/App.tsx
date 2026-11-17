@@ -2,7 +2,6 @@ import { Authenticated, Refine } from "@refinedev/core";
 import { PolattoLogo } from "./components/polatto-logo";
 import { DevtoolsPanel, DevtoolsProvider } from "@refinedev/devtools";
 import {
-    AuthPage,
     ErrorComponent,
     ThemedLayout,
     ThemedSider,
@@ -19,7 +18,8 @@ import routerProvider, {
 import { dataProvider, liveProvider } from "@refinedev/supabase";
 import { App as AntdApp, Menu, Spin } from "antd";
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Outlet, Route, Routes, Link } from "react-router";
+import { BrowserRouter, Link, Navigate, Outlet, Route, Routes } from "react-router";
+import { CADASTRO_ABERTO, TelaDeAcesso } from "./pages/acesso";
 
 import {
     BankOutlined,
@@ -315,7 +315,7 @@ function App() {
                                         grupos porque o link já autentica a sessão de recuperação. */}
                                     <Route
                                         path="/update-password"
-                                        element={<AuthPage type="updatePassword" title={<PolattoLogo variant="login" size="lg" />} />}
+                                        element={<TelaDeAcesso tipo="updatePassword" />}
                                     />
 
                                     <Route
@@ -325,9 +325,12 @@ function App() {
                                             </Authenticated>
                                         }
                                     >
-                                        <Route path="/login" element={<AuthPage type="login" title={<PolattoLogo variant="login" size="lg" />} />} />
-                                        <Route path="/register" element={<AuthPage type="register" title={<PolattoLogo variant="login" size="lg" />} />} />
-                                        <Route path="/forgot-password" element={<AuthPage type="forgotPassword" title={<PolattoLogo variant="login" size="lg" />} />} />
+                                        <Route path="/login" element={<TelaDeAcesso tipo="login" />} />
+                                        <Route
+                                            path="/register"
+                                            element={CADASTRO_ABERTO ? <TelaDeAcesso tipo="register" /> : <Navigate to="/login" replace />}
+                                        />
+                                        <Route path="/forgot-password" element={<TelaDeAcesso tipo="forgotPassword" />} />
                                     </Route>
                                 </Routes>
                             </TenantProvider>

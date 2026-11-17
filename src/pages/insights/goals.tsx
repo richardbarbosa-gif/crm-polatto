@@ -1,5 +1,6 @@
 import { FlagOutlined, PlusOutlined, TrophyOutlined, FireOutlined, FallOutlined, CrownOutlined } from "@ant-design/icons";
 import {
+    Alert,
     DatePicker,
     Form,
     Input,
@@ -18,12 +19,12 @@ import {
 } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
+import { Button, Card, EmptyState, RecursoIndisponivel, StatCard } from "../../components/ui";
+import { contar, formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
 import { isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { propsMoeda } from "../../lib/moedaInput";
 import { supabaseClient } from "../../utility";
-import { InsightsHeader, IntroCard, MissingSchemaAlert } from "./shared";
+import { InsightsHeader, IntroCard } from "./shared";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { rotuloDoPapel } from "../../lib/permissions";
 
@@ -78,7 +79,7 @@ export const InsightsGoalsPage = () => {
         try {
             const monthStart = monthRef.startOf("month").format("YYYY-MM-DD");
 
-            // 1. Busca equipa ativa
+            // 1. Busca equipe ativa
             const { data: employeesData, error: empError } = await supabaseClient
                 .from("funcionarios")
                 .select("id, nome, cargo, ativo")
@@ -210,14 +211,14 @@ export const InsightsGoalsPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<FlagOutlined />}
                 title="Metas da equipe"
                 subtitle={`Desempenho do time em tempo real — ${monthRef.format("MM/YYYY")}`}
                 extra={
                     <Space wrap>
-                        <DatePicker picker="month" value={monthRef} onChange={(val) => setMonthRef(val || dayjs())} allowClear={false} />
+                        <DatePicker picker="month" format="MM/YYYY" aria-label="Mês das metas" value={monthRef} onChange={(val) => setMonthRef(val || dayjs())} allowClear={false} />
                         <Segmented<GoalViewMode> options={[{ label: "Receita (R$)", value: "valor" }, { label: "Volume (Qtd)", value: "quantidade" }]} value={viewMode} onChange={setViewMode} />
                         {/* Metas são definidas pelo gerente (o banco recusa gravação de vendedor) */}
                         {isGerente ? (
@@ -232,8 +233,8 @@ export const InsightsGoalsPage = () => {
                 description="Acompanhe quem está no ritmo para bater a meta e veja o ranking da equipe atualizado a cada negócio fechado."
             />
 
-            {schemaMissing && <MissingSchemaAlert description="Estrutura de metas não encontrada no banco." />}
-            {errorMessage && <MissingSchemaAlert title="Erro" description={errorMessage} />}
+            {schemaMissing && <RecursoIndisponivel recurso="Metas" />}
+            {errorMessage && <Alert type="error" showIcon message="Não foi possível carregar as metas" description={errorMessage} style={{ marginBottom: 16 }} />}
 
             {/* KPIs GLOBAIS */}
             <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", marginBottom: 20 }}>
@@ -242,14 +243,14 @@ export const InsightsGoalsPage = () => {
                     value={viewMode === "valor" ? summary.totalTargetValue : summary.totalTargetWins}
                     prefix={<FlagOutlined style={{ color: "#2563eb" }} />}
                     accentColor="#2563eb"
-                    subtitle={viewMode === "valor" ? formatCurrencyBRL(summary.totalTargetValue, "R$ 0,00") : `${summary.totalTargetWins} negócios`}
+                    subtitle={viewMode === "valor" ? formatCurrencyBRL(summary.totalTargetValue, "R$ 0,00") : contar(summary.totalTargetWins, "negócio", "negócios")}
                 />
                 <StatCard
                     title="Realizado Global"
                     value={viewMode === "valor" ? summary.totalActualValue : summary.totalActualWins}
                     prefix={<TrophyOutlined style={{ color: "#10b981" }} />}
                     accentColor="#10b981"
-                    subtitle={viewMode === "valor" ? formatCurrencyBRL(summary.totalActualValue, "R$ 0,00") : `${summary.totalActualWins} negócios`}
+                    subtitle={viewMode === "valor" ? formatCurrencyBRL(summary.totalActualValue, "R$ 0,00") : contar(summary.totalActualWins, "negócio", "negócios")}
                 />
                 <StatCard
                     title="Atingimento da Empresa"
@@ -261,9 +262,9 @@ export const InsightsGoalsPage = () => {
             </div>
 
             {/* LEADERBOARD */}
-            <Card title={`Ranking da Equipa - ${monthRef.format("MMMM/YYYY")}`}>
+            <Card title={`Ranking da equipe — ${monthRef.format("MMMM [de] YYYY")}`}>
                 {performanceRows.length === 0 ? (
-                    <EmptyState title="Sem equipa" description="Cadastre utilizadores para medir performance." />
+                    <EmptyState title="Sem equipe" description="Cadastre os membros na tela Equipe para acompanhar o desempenho." />
                 ) : (
                     <Table
                         size="middle"

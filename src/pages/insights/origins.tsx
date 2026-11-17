@@ -2,9 +2,10 @@ import { BranchesOutlined, DownloadOutlined } from "@ant-design/icons";
 import { useList, type CrudFilter } from "@refinedev/core";
 import { Alert, Col, Progress, Row, Select, Skeleton, Space, Table, Typography } from "antd";
 import { useMemo, useState } from "react";
-import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel, StatCard } from "../../components/ui";
 import { exportRowsToCsv } from "../../lib/exportCsv";
-import { formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
+import { contar, formatCurrencyBRL, formatPercentBR, formatoProgresso } from "../../lib/formatters";
+import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import {
     inicioDoPeriodo,
     RECURSO_VENDAS_POR_ORIGEM,
@@ -66,7 +67,7 @@ export const InsightsOriginsPage = () => {
     if (query.isLoading) return <Skeleton active />;
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<BranchesOutlined />}
                 title="Vendas por origem"
@@ -104,12 +105,16 @@ export const InsightsOriginsPage = () => {
                 }
             />
 
-            {query.isError ? (
+            {/* Estrutura ausente e falha de rede são coisas diferentes: antes
+                qualquer erro (até queda de internet) culpava o banco. */}
+            {query.isError && isSupabaseMissingRelation(query.error) ? (
+                <RecursoIndisponivel recurso="Vendas por origem" style={{ marginBottom: 0 }} />
+            ) : query.isError ? (
                 <Alert
-                    type="warning"
+                    type="error"
                     showIcon
-                    message="Relatório indisponível"
-                    description="A estrutura de origens ainda não foi aplicada neste ambiente (migration 16)."
+                    message="Não foi possível carregar o relatório"
+                    description={getSupabaseErrorMessage(query.error) || "Confira a conexão e recarregue a página."}
                 />
             ) : (
                 <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -121,7 +126,7 @@ export const InsightsOriginsPage = () => {
                             <StatCard
                                 title="Conversão geral"
                                 value={`${formatPercentBR(totais.conversao)}%`}
-                                subtitle={`${totais.ganhos} ganhos de ${totais.ganhos + totais.perdidos} encerrados`}
+                                subtitle={`${contar(totais.ganhos, "ganho", "ganhos")} de ${contar(totais.ganhos + totais.perdidos, "encerrado", "encerrados")}`}
                                 accentColor="#10b981"
                             />
                         </Col>

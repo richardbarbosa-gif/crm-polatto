@@ -16,6 +16,7 @@ import {
 } from "../../lib/insights";
 import { exportRowsToCsv } from "../../lib/exportCsv";
 import { fetchMudancasDeEtapa } from "../../lib/mudancasDeEtapa";
+import { rotuloTipoAtividade } from "../../lib/tiposAtividade";
 import { useNomesDeClientes } from "../../lib/nomesDeClientes";
 import { InsightsHeader, IntroCard } from "./shared";
 
@@ -110,7 +111,7 @@ export const InsightsActivityLogPage = () => {
                 objectName: clienteLabel,
                 event: task.titulo ? `Atividade registrada: ${task.titulo}` : "Atividade registrada",
                 before: "-",
-                after: task.tipo || "-",
+                after: task.tipo ? rotuloTipoAtividade(task.tipo) : "-",
             };
         });
 
@@ -127,7 +128,7 @@ export const InsightsActivityLogPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<ProfileOutlined />}
                 title="Registro de atividades"

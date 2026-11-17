@@ -3,10 +3,9 @@ import { useCreate, useDelete, useList, useUpdate } from "@refinedev/core";
 import { Alert, Form, type FormInstance, Modal, Popconfirm, Skeleton, Space, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { type ReactNode, useMemo, useRef, useState } from "react";
-import { Button, EmptyState } from "../../../components/ui";
+import { Button, EmptyState, RecursoIndisponivel } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
-import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
-import { getSupabaseErrorMessage } from "../../../lib/supabaseErrors";
+import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
 
 export type ConfigRecord = { id: string | number; [key: string]: unknown };
 
@@ -123,13 +122,7 @@ export function ConfigCrudTable<T extends ConfigRecord>({
     return (
         <div>
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Estrutura do banco pendente"
-                    description={`A tabela ${resource} ainda não existe neste ambiente. Execute as migrations em database/migrations/ no Supabase.`}
-                    style={{ marginBottom: 16 }}
-                />
+                <RecursoIndisponivel recurso={titulo} />
             ) : null}
 
             {!canManage ? (

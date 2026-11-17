@@ -15,7 +15,7 @@ import { ListaNegociosSaude } from "../../components/saude/lista-negocios-saude"
 import { PrimeiroAcesso } from "../../components/primeiro-acesso";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useRealtimeNegocios } from "../../hooks/useRealtimeNegocios";
-import { formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue, formatoProgresso } from "../../lib/formatters";
+import { contar, formatCurrencyBRL, formatDateBR, formatPercentBR, parseCurrencyLikeValue, formatoProgresso } from "../../lib/formatters";
 import {
     classificarDesfecho,
     indexarEtapas,
@@ -248,7 +248,7 @@ export const DashboardPage = () => {
                         suffix="%"
                         prefix={<RiseOutlined style={{ color: "var(--crm-sky-600)" }} />}
                         accentColor="#2563eb"
-                        subtitle={`${resumo.ganhos} ganho${resumo.ganhos === 1 ? "" : "s"} de ${resumo.encerrados} encerrado${resumo.encerrados === 1 ? "" : "s"}`}
+                        subtitle={`${contar(resumo.ganhos, "ganho", "ganhos")} de ${contar(resumo.encerrados, "encerrado", "encerrados")}`}
                         style={{ height: "100%" }}
                     />
                 </div>
@@ -266,68 +266,192 @@ export const DashboardPage = () => {
 
             </div>
 
+            {/* Duas colunas independentes: à esquerda o que é largo (funil,
+                ranking, últimos leads), à direita os cartões estreitos, que
+                acompanham a rolagem. Antes eram duas fileiras e o cartão mais
+                baixo deixava um buraco em branco no meio da página. */}
             <Row gutter={[14, 14]}>
                 <Col xs={24} lg={16}>
-                    <Card
-                        title={<Text strong style={{ fontSize: 15 }}>Funil de vendas</Text>}
-                        style={{ borderRadius: 14 }}
-                        bodyStyle={{ padding: "16px 22px 20px" }}
-                        extra={
-                            <Button size="small" onClick={() => navigate("/clientes")}>
-                                Ver pipeline
-                            </Button>
-                        }
-                    >
-                        {resumo.porEtapa.length === 0 ? (
-                            <EmptyState
-                                title="Nenhum lead ainda"
-                                description="Cadastre o primeiro lead para acompanhar o funil."
-                            />
-                        ) : (
-                            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                                {resumo.porEtapa.map((etapa) => {
-                                    const cor = etapa.cor || CORES_DESFECHO[etapa.desfecho];
-                                    const pct = (etapa.total / maxFunil) * 100;
-                                    return (
-                                        <div key={etapa.chave}>
-                                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8 }}>
-                                                <Text style={{ fontSize: 13.5, fontWeight: 500, color: "var(--crm-ink-700)" }}>{etapa.nome}</Text>
-                                                <Space size={12}>
-                                                    <Text type="secondary" style={{ fontSize: 12 }}>
-                                                        {formatCurrencyBRL(etapa.valor, "R$ 0")}
-                                                    </Text>
-                                                    <Text style={{ fontSize: 20, fontWeight: 700, color: cor, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.02em" }}>
-                                                        {etapa.total}
-                                                    </Text>
-                                                </Space>
-                                            </div>
-                                            <div
-                                                style={{ background: "var(--crm-surface-2)", borderRadius: 6, height: 8, overflow: "hidden" }}
-                                                role="progressbar"
-                                                aria-label={`${etapa.nome}: ${etapa.total}`}
-                                                aria-valuenow={etapa.total}
-                                                aria-valuemax={maxFunil}
-                                            >
+                    <Space direction="vertical" size={14} style={{ display: "flex" }}>
+                        <Card
+                            title={<Text strong style={{ fontSize: 15 }}>Funil de vendas</Text>}
+                            style={{ borderRadius: 14 }}
+                            bodyStyle={{ padding: "16px 22px 20px" }}
+                            extra={
+                                <Button size="small" onClick={() => navigate("/clientes")}>
+                                    Ver pipeline
+                                </Button>
+                            }
+                        >
+                            {resumo.porEtapa.length === 0 ? (
+                                <EmptyState
+                                    title="Nenhum lead ainda"
+                                    description="Cadastre o primeiro lead para acompanhar o funil."
+                                />
+                            ) : (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                                    {resumo.porEtapa.map((etapa) => {
+                                        const cor = etapa.cor || CORES_DESFECHO[etapa.desfecho];
+                                        const pct = (etapa.total / maxFunil) * 100;
+                                        return (
+                                            <div key={etapa.chave}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8 }}>
+                                                    <Text style={{ fontSize: 13.5, fontWeight: 500, color: "var(--crm-ink-700)" }}>{etapa.nome}</Text>
+                                                    <Space size={12}>
+                                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                                            {formatCurrencyBRL(etapa.valor, "R$ 0")}
+                                                        </Text>
+                                                        <Text style={{ fontSize: 20, fontWeight: 700, color: cor, fontFamily: "'Sora','Inter',sans-serif", letterSpacing: "-0.02em" }}>
+                                                            {etapa.total}
+                                                        </Text>
+                                                    </Space>
+                                                </div>
                                                 <div
-                                                    style={{
-                                                        width: `${Math.max(pct, 2)}%`,
-                                                        height: "100%",
-                                                        background: `linear-gradient(90deg, ${cor}, ${cor}cc)`,
-                                                        borderRadius: 6,
-                                                        transition: "width 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
-                                                    }}
-                                                />
+                                                    style={{ background: "var(--crm-surface-2)", borderRadius: 6, height: 8, overflow: "hidden" }}
+                                                    role="progressbar"
+                                                    aria-label={`${etapa.nome}: ${etapa.total}`}
+                                                    aria-valuenow={etapa.total}
+                                                    aria-valuemax={maxFunil}
+                                                >
+                                                    <div
+                                                        style={{
+                                                            width: `${Math.max(pct, 2)}%`,
+                                                            height: "100%",
+                                                            background: `linear-gradient(90deg, ${cor}, ${cor}cc)`,
+                                                            borderRadius: 6,
+                                                            transition: "width 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
+                                                        }}
+                                                    />
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </Card>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </Card>
+
+                        <Card
+                            title={<Text strong style={{ fontSize: 15 }}>Ranking de vendedores</Text>}
+                            style={{ borderRadius: 14 }}
+                            bodyStyle={{ padding: 0 }}
+                            extra={
+                                <Button size="small" onClick={() => navigate("/equipe")}>
+                                    Ver equipe
+                                </Button>
+                            }
+                        >
+                            <Table
+                                size="small"
+                                rowKey={(r) => r.nome}
+                                pagination={false}
+                                dataSource={topResponsaveis}
+                                scroll={{ x: 480 }}
+                                locale={{ emptyText: "Nenhum lead atribuído ainda." }}
+                                columns={[
+                                    {
+                                        title: "#",
+                                        width: 40,
+                                        render: (_, __, index) => (
+                                            <div style={{
+                                                width: 24, height: 24, borderRadius: 6,
+                                                background: index === 0 ? "rgba(245,158,11,0.12)" : index === 1 ? "rgba(148,163,184,0.1)" : "transparent",
+                                                display: "grid", placeItems: "center",
+                                                fontSize: 12, fontWeight: 700,
+                                                color: index === 0 ? "#f59e0b" : index === 1 ? "#94a3b8" : "var(--crm-ink-400)",
+                                            }}>
+                                                {index + 1}
+                                            </div>
+                                        ),
+                                    },
+                                    {
+                                        title: "Consultor",
+                                        dataIndex: "nome",
+                                        render: (v: string) => <Text strong style={{ fontSize: 13.5 }}>{v}</Text>,
+                                    },
+                                    { title: "Leads", dataIndex: "total", width: 65 },
+                                    { title: "Ganhos", dataIndex: "ganhos", width: 70, render: (v: number) => <Text style={{ color: "var(--crm-success-fg)", fontWeight: 600 }}>{v}</Text> },
+                                    {
+                                        title: "Conversão",
+                                        className: "crm-nowrap",
+                                        width: 140,
+                                        render: (_, r) => (
+                                            <Progress format={formatoProgresso} percent={Number(taxaDeConversao(r.ganhos, r.perdidos).toFixed(0))} size="small" strokeColor="#10b981" />
+                                        ),
+                                    },
+                                    {
+                                        title: "Valor",
+                                        className: "crm-nowrap",
+                                        dataIndex: "valor",
+                                        width: 120,
+                                        render: (v: number) => <Text strong>{formatCurrencyBRL(v, "R$ 0")}</Text>,
+                                    },
+                                ]}
+                            />
+                        </Card>
+
+                        <Card
+                            title={<Text strong style={{ fontSize: 15 }}>Últimos leads</Text>}
+                            style={{ borderRadius: 14 }}
+                            bodyStyle={{ padding: "8px 0" }}
+                            extra={
+                                <Button size="small" onClick={() => navigate("/clientes")}>
+                                    Ver todos
+                                </Button>
+                            }
+                        >
+                            {recentes.length === 0 ? (
+                                <div style={{ padding: 24, textAlign: "center" }}>
+                                    <Text type="secondary">Nenhum lead cadastrado ainda.</Text>
+                                </div>
+                            ) : (
+                                <div>
+                                    {recentes.map((lead, index) => {
+                                        const desfecho = classificarDesfecho(lead, etapasPorId);
+                                        return (
+                                            <button
+                                                type="button"
+                                                key={String(lead.id)}
+                                                className="crm-dashboard-recent-lead"
+                                                style={{
+                                                    display: "flex",
+                                                    width: "100%",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    padding: "10px 22px",
+                                                    border: "none",
+                                                    background: "transparent",
+                                                    textAlign: "left",
+                                                    borderBottom: index < recentes.length - 1 ? "1px solid var(--crm-border-subtle)" : "none",
+                                                    cursor: "pointer",
+                                                }}
+                                                onClick={() => navigate(`/clientes/show/${lead.id}`)}
+                                            >
+                                                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+                                                    <span
+                                                        aria-hidden
+                                                        style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_DESFECHO[desfecho], flexShrink: 0 }}
+                                                    />
+                                                    <div style={{ minWidth: 0 }}>
+                                                        <Text strong style={{ fontSize: 13.5, display: "block" }} ellipsis>{lead.nome || "Sem nome"}</Text>
+                                                        <Text type="secondary" style={{ fontSize: 11.5 }}>
+                                                            {lead.responsavel || "Sem responsável"} · {formatDateBR(lead.created_at, "-")}
+                                                        </Text>
+                                                    </div>
+                                                </div>
+                                                <Text style={{ fontSize: 13, fontWeight: 600, color: "var(--crm-ink-700)", whiteSpace: "nowrap" }}>
+                                                    {formatCurrencyBRL(valorDoLead(lead), "-")}
+                                                </Text>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </Card>
+                    </Space>
                 </Col>
 
                 <Col xs={24} lg={8}>
-                    <Space direction="vertical" size={14} style={{ width: "100%" }}>
+                    <Space direction="vertical" size={14} className="crm-coluna-fixa" style={{ display: "flex" }}>
                         <Card
                             title={<Text strong style={{ fontSize: 15 }}>Temperatura dos leads</Text>}
                             style={{ borderRadius: 14 }}
@@ -426,130 +550,6 @@ export const DashboardPage = () => {
                             )}
                         </Card>
                     </Space>
-                </Col>
-            </Row>
-
-            <Row gutter={[14, 14]}>
-                <Col xs={24} lg={14}>
-                    <Card
-                        title={<Text strong style={{ fontSize: 15 }}>Ranking de vendedores</Text>}
-                        style={{ borderRadius: 14 }}
-                        bodyStyle={{ padding: 0 }}
-                        extra={
-                            <Button size="small" onClick={() => navigate("/equipe")}>
-                                Ver equipe
-                            </Button>
-                        }
-                    >
-                        <Table
-                            size="small"
-                            rowKey={(r) => r.nome}
-                            pagination={false}
-                            dataSource={topResponsaveis}
-                            scroll={{ x: 480 }}
-                            locale={{ emptyText: "Nenhum lead atribuído ainda." }}
-                            columns={[
-                                {
-                                    title: "#",
-                                    width: 40,
-                                    render: (_, __, index) => (
-                                        <div style={{
-                                            width: 24, height: 24, borderRadius: 6,
-                                            background: index === 0 ? "rgba(245,158,11,0.12)" : index === 1 ? "rgba(148,163,184,0.1)" : "transparent",
-                                            display: "grid", placeItems: "center",
-                                            fontSize: 12, fontWeight: 700,
-                                            color: index === 0 ? "#f59e0b" : index === 1 ? "#94a3b8" : "var(--crm-ink-400)",
-                                        }}>
-                                            {index + 1}
-                                        </div>
-                                    ),
-                                },
-                                {
-                                    title: "Consultor",
-                                    dataIndex: "nome",
-                                    render: (v: string) => <Text strong style={{ fontSize: 13.5 }}>{v}</Text>,
-                                },
-                                { title: "Leads", dataIndex: "total", width: 65 },
-                                { title: "Ganhos", dataIndex: "ganhos", width: 70, render: (v: number) => <Text style={{ color: "var(--crm-success-fg)", fontWeight: 600 }}>{v}</Text> },
-                                {
-                                    title: "Conversão",
-                                    className: "crm-nowrap",
-                                    width: 140,
-                                    render: (_, r) => (
-                                        <Progress format={formatoProgresso} percent={Number(taxaDeConversao(r.ganhos, r.perdidos).toFixed(0))} size="small" strokeColor="#10b981" />
-                                    ),
-                                },
-                                {
-                                    title: "Valor",
-                                    className: "crm-nowrap",
-                                    dataIndex: "valor",
-                                    width: 120,
-                                    render: (v: number) => <Text strong>{formatCurrencyBRL(v, "R$ 0")}</Text>,
-                                },
-                            ]}
-                        />
-                    </Card>
-                </Col>
-
-                <Col xs={24} lg={10}>
-                    <Card
-                        title={<Text strong style={{ fontSize: 15 }}>Últimos leads</Text>}
-                        style={{ borderRadius: 14 }}
-                        bodyStyle={{ padding: "8px 0" }}
-                        extra={
-                            <Button size="small" onClick={() => navigate("/clientes")}>
-                                Ver todos
-                            </Button>
-                        }
-                    >
-                        {recentes.length === 0 ? (
-                            <div style={{ padding: 24, textAlign: "center" }}>
-                                <Text type="secondary">Nenhum lead cadastrado ainda.</Text>
-                            </div>
-                        ) : (
-                            <div>
-                                {recentes.map((lead, index) => {
-                                    const desfecho = classificarDesfecho(lead, etapasPorId);
-                                    return (
-                                        <button
-                                            type="button"
-                                            key={String(lead.id)}
-                                            className="crm-dashboard-recent-lead"
-                                            style={{
-                                                display: "flex",
-                                                width: "100%",
-                                                alignItems: "center",
-                                                justifyContent: "space-between",
-                                                padding: "10px 22px",
-                                                border: "none",
-                                                background: "transparent",
-                                                textAlign: "left",
-                                                borderBottom: index < recentes.length - 1 ? "1px solid var(--crm-border-subtle)" : "none",
-                                                cursor: "pointer",
-                                            }}
-                                            onClick={() => navigate(`/clientes/show/${lead.id}`)}
-                                        >
-                                            <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                                                <span
-                                                    aria-hidden
-                                                    style={{ width: 8, height: 8, borderRadius: "50%", background: CORES_DESFECHO[desfecho], flexShrink: 0 }}
-                                                />
-                                                <div style={{ minWidth: 0 }}>
-                                                    <Text strong style={{ fontSize: 13.5, display: "block" }} ellipsis>{lead.nome || "Sem nome"}</Text>
-                                                    <Text type="secondary" style={{ fontSize: 11.5 }}>
-                                                        {lead.responsavel || "Sem responsável"} · {formatDateBR(lead.created_at, "-")}
-                                                    </Text>
-                                                </div>
-                                            </div>
-                                            <Text style={{ fontSize: 13, fontWeight: 600, color: "var(--crm-ink-700)", whiteSpace: "nowrap" }}>
-                                                {formatCurrencyBRL(valorDoLead(lead), "-")}
-                                            </Text>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </Card>
                 </Col>
             </Row>
         </div>

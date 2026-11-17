@@ -59,5 +59,5 @@ export const getSupabaseErrorMessage = (erro: unknown): string => {
         return `${message} ${details}`.trim();
     }
 
-    return message || details || "Erro inesperado ao consultar o Supabase.";
+    return message || details || "Erro inesperado ao consultar os dados.";
 };

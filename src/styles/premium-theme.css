@@ -517,6 +517,13 @@ h1, h2, h3, h4, h5, h6,
     max-width: 1400px;
 }
 
+/* Relatórios (Insights, Equipe, Metas): mesma margem das demais telas. Os
+   blocos internos já trazem o próprio espaçamento, por isso não há "gap". */
+.crm-insights-shell {
+    padding: 28px 32px;
+    max-width: 1400px;
+}
+
 .crm-page-header {
     display: flex;
     justify-content: space-between;
@@ -930,7 +937,8 @@ h1, h2, h3, h4, h5, h6,
    ═══════════════════════════════════════════════════════════ */
 
 @media (max-width: 768px) {
-    .crm-page-shell {
+    .crm-page-shell,
+    .crm-insights-shell {
         padding: 16px;
     }
 
@@ -2848,6 +2856,91 @@ html[data-theme="dark"] .crm-form-section.crm-form-endereco {
     color: var(--crm-ink-300);
 }
 
+/* Coluna estreita de painéis: em telas largas acompanha a rolagem, para
+   não sobrar um vazio ao lado de uma coluna principal mais comprida. */
+@media (min-width: 992px) {
+    .crm-coluna-fixa {
+        position: sticky;
+        top: 68px;
+    }
+}
+
+/* Agenda no mês (desktop): cada agendamento ocupa duas linhas fixas */
+.crm-agenda-eventos {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.crm-agenda-evento {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.crm-agenda-evento:focus-visible {
+    outline: 2px solid var(--crm-sky-500);
+    outline-offset: 1px;
+    border-radius: 4px;
+}
+
+.crm-agenda-evento .ant-badge {
+    line-height: 17px;
+    flex: none;
+}
+
+.crm-agenda-evento__texto {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.crm-agenda-evento__titulo,
+.crm-agenda-evento__detalhe {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.crm-agenda-evento__titulo {
+    font-size: 13px;
+    line-height: 17px;
+    color: var(--crm-ink-950);
+}
+
+.crm-agenda-evento:hover .crm-agenda-evento__titulo {
+    color: var(--crm-sky-600);
+}
+
+html[data-theme="dark"] .crm-agenda-evento:hover .crm-agenda-evento__titulo {
+    color: var(--crm-sky-400);
+}
+
+.crm-agenda-evento__detalhe {
+    font-size: 11px;
+    line-height: 14px;
+    color: var(--crm-ink-500);
+}
+
+.crm-agenda-eventos__mais {
+    font-size: 11px;
+    line-height: 14px;
+    font-weight: 600;
+    color: var(--crm-ink-500);
+    padding-left: 12px;
+}
+
 /* Agenda no celular: marcadores no lugar dos títulos */
 .crm-agenda-marcadores {
     display: flex;
@@ -2905,4 +2998,194 @@ html[data-theme="dark"] .crm-busca__topo .ant-input:focus {
     background: transparent !important;
     border-color: transparent !important;
     box-shadow: none !important;
+}
+
+
+/* ═══════════════════════════════════════════════════════════
+   TELAS DE ACESSO (entrar, criar conta, recuperar senha)
+   Painel da marca à esquerda, formulário à direita. O AuthPage do
+   Refine centraliza tudo numa coluna de 92%; aqui a moldura ocupa a
+   tela inteira.
+   ═══════════════════════════════════════════════════════════ */
+.crm-acesso.ant-layout {
+    min-height: 100dvh;
+    background: var(--crm-surface-0);
+}
+
+.crm-acesso > .ant-row {
+    padding: 0 !important;
+    min-height: 100dvh;
+    align-items: stretch;
+}
+
+.crm-acesso > .ant-row > .ant-col {
+    flex: 0 0 100%;
+    max-width: 100%;
+    display: flex;
+}
+
+.crm-acesso__grade {
+    flex: 1;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    min-height: 100dvh;
+}
+
+.crm-acesso__marca {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 40px;
+    padding: 44px 56px;
+    color: #e2e8f0;
+    background:
+        radial-gradient(900px 520px at 88% -8%, rgba(37, 99, 235, 0.42), transparent 62%),
+        radial-gradient(640px 420px at -6% 104%, rgba(245, 158, 11, 0.2), transparent 60%),
+        linear-gradient(160deg, var(--crm-navy-900) 0%, var(--crm-navy-800) 58%, #0d1730 100%);
+}
+
+/* Malha discreta: dá textura ao painel sem competir com o texto. */
+.crm-acesso__marca::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(148, 163, 184, 0.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148, 163, 184, 0.07) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(ellipse at 70% 20%, #000 0%, transparent 72%);
+    -webkit-mask-image: radial-gradient(ellipse at 70% 20%, #000 0%, transparent 72%);
+    pointer-events: none;
+}
+
+.crm-acesso__marca > * {
+    position: relative;
+}
+
+.crm-acesso__mensagem {
+    max-width: 520px;
+}
+
+.crm-acesso__titulo {
+    margin: 0 0 18px;
+    font-family: "Sora", "Inter", sans-serif;
+    font-size: clamp(30px, 3.1vw, 44px);
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+    text-wrap: balance;
+}
+
+.crm-acesso__titulo span {
+    color: var(--crm-gold-300);
+}
+
+.crm-acesso__texto {
+    margin: 0 0 30px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #b6c2d6;
+    max-width: 460px;
+}
+
+.crm-acesso__lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 14px;
+}
+
+.crm-acesso__lista li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: #e2e8f0;
+}
+
+.crm-acesso__lista .anticon {
+    margin-top: 3px;
+    font-size: 16px;
+    color: var(--crm-gold-400);
+}
+
+.crm-acesso__rodape {
+    font-size: 12.5px;
+    color: #8695ad;
+}
+
+.crm-acesso__formulario {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 40px 24px;
+    background:
+        radial-gradient(700px 380px at 50% -10%, rgba(37, 99, 235, 0.07), transparent 70%),
+        var(--crm-surface-0);
+}
+
+.crm-acesso__logo-celular {
+    display: none;
+}
+
+.crm-acesso__formulario .ant-card {
+    width: 100%;
+    max-width: 420px !important;
+    border: 1px solid var(--crm-border) !important;
+    border-radius: 18px !important;
+    box-shadow: var(--crm-shadow-lg) !important;
+}
+
+.crm-acesso__formulario .ant-card-head {
+    border-bottom: 0 !important;
+    padding-top: 12px;
+}
+
+.crm-acesso__formulario .ant-card-head-title .ant-typography {
+    font-family: "Sora", "Inter", sans-serif;
+    font-size: 24px !important;
+    letter-spacing: -0.02em;
+    color: var(--crm-ink-950) !important;
+}
+
+.crm-acesso__formulario .ant-input,
+.crm-acesso__formulario .ant-input-affix-wrapper {
+    min-height: 44px;
+}
+
+.crm-acesso__formulario .ant-btn-primary {
+    height: 46px;
+    font-weight: 600;
+}
+
+@media (max-width: 900px) {
+    .crm-acesso__grade {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .crm-acesso__marca {
+        display: none;
+    }
+
+    .crm-acesso__logo-celular {
+        display: block;
+    }
+
+    .crm-acesso__formulario {
+        justify-content: flex-start;
+        padding: 48px 16px 32px;
+    }
+}
+
+html[data-theme="dark"] .crm-acesso__formulario {
+    background:
+        radial-gradient(700px 380px at 50% -10%, rgba(76, 140, 249, 0.1), transparent 70%),
+        var(--crm-surface-0);
 }

@@ -1,6 +1,6 @@
 import { useGetIdentity } from "@refinedev/core";
 import { Button, Form, Input, Modal, Result, Select, Spin, message } from "antd";
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { UsuarioEmpresa } from "../types/db";
 import { supabaseClient } from "../utility";
 
@@ -149,7 +149,16 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
     const [membershipError, setMembershipError] = useState<string | null>(null);
     const [isSystemAdmin, setIsSystemAdmin] = useState(false);
 
-    const loadMembership = async () => {
+    // Cada carga recebe um número; só a mais recente grava no estado. Sem
+    // isso, sair e entrar com outro login (ou clicar em "tentar de novo"
+    // duas vezes) deixava a resposta atrasada da carga antiga sobrescrever
+    // a empresa do login atual.
+    const cargaAtual = useRef(0);
+
+    const loadMembership = useCallback(async () => {
+        const carga = ++cargaAtual.current;
+        const vigente = () => carga === cargaAtual.current;
+
         if (!identityEmail && !identityUserId) {
             setMembership(null);
             setEmpresas([]);
@@ -165,9 +174,8 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
 
         try {
             const adminCheck = await checkIsSystemAdmin(identityEmail);
-            setIsSystemAdmin(adminCheck);
-
             const vinculos = await fetchMemberships(identityUserId);
+            if (!vigente()) return;
 
             // Respeita a empresa que o usuário escolheu no seletor, DESDE QUE
             // ela seja realmente dele. Antes o vínculo era sempre sobrescrito
@@ -179,6 +187,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             );
             const nextMembership = valida || ordenados[0] || null;
 
+            setIsSystemAdmin(adminCheck);
             setMembership(nextMembership);
 
             if (nextMembership?.tenant_id) {
@@ -191,6 +200,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             // não existe no schema; a lista é montada aqui)
             const ids = vinculos.map((v) => String(v.tenant_id));
             const nomes = await fetchNomesEmpresas(ids);
+            if (!vigente()) return;
             setEmpresas(
                 vinculos.map((v) => ({
                     id: String(v.tenant_id),
@@ -199,22 +209,24 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
                 })),
             );
         } catch (error: unknown) {
+            if (!vigente()) return;
+            const padrao = "Não foi possível carregar a empresa do seu login.";
             const message = typeof error === "object" && error && "message" in error
-                ? String((error as { message?: unknown }).message || "Falha ao carregar vinculo do tenant.")
-                : "Falha ao carregar vinculo do tenant.";
+                ? String((error as { message?: unknown }).message || padrao)
+                : padrao;
             setMembershipError(message);
             setMembership(null);
             setEmpresas([]);
             setIsSystemAdmin(false);
             window.localStorage.removeItem("crm_tenant_id");
         } finally {
-            setIsMembershipLoading(false);
+            if (vigente()) setIsMembershipLoading(false);
         }
-    };
+    }, [identityEmail, identityUserId]);
 
     useEffect(() => {
         void loadMembership();
-    }, [identityEmail, identityUserId]);
+    }, [loadMembership]);
 
     const tenantId = membership?.tenant_id || null;
     const role = membership?.role || null;
@@ -227,7 +239,7 @@ export const TenantProvider = ({ children }: TenantProviderProps) => {
             error: membershipError, canAccessTenant, identityEmail, identityUserId,
             refresh: loadMembership,
         }),
-        [canAccessTenant, empresas, identityEmail, identityUserId, isIdentityLoading, isMembershipLoading, isSystemAdmin, membership, membershipError, role, tenantId]
+        [canAccessTenant, empresas, identityEmail, identityUserId, isIdentityLoading, isMembershipLoading, isSystemAdmin, loadMembership, membership, membershipError, role, tenantId]
     );
 
     return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;

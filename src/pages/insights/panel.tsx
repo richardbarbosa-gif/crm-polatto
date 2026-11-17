@@ -11,7 +11,7 @@ import dayjs from "dayjs";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Button, Card, EmptyState, StatCard } from "../../components/ui";
-import { formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
+import { contar, formatCurrencyBRL, formatoProgresso } from "../../lib/formatters";
 import {
     COLUNAS_INSIGHT_CLIENTE,
     dataDeDecisao,
@@ -248,7 +248,7 @@ export const InsightsPanelPage = () => {
     }
 
     return (
-        <div style={{ padding: 20 }}>
+        <div className="crm-insights-shell">
             <InsightsHeader
                 icon={<DashboardOutlined />}
                 title="Painel comercial"
@@ -298,7 +298,7 @@ export const InsightsPanelPage = () => {
                         prefix={<TeamOutlined style={{ color: "#e67e22" }} />}
                         accentColor="#e67e22"
                         valueStyle={{ color: "#b45309" }}
-                        subtitle={`${metrics.ganhos} ganho(s) de ${metrics.encerrados} encerrado(s)`}
+                        subtitle={`${contar(metrics.ganhos, "ganho", "ganhos")} de ${contar(metrics.encerrados, "encerrado", "encerrados")}`}
                     />
                 </Col>
                 <Col xs={24} md={12} xl={6}>

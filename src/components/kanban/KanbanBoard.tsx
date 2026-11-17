@@ -77,14 +77,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         return (
             <div style={{ padding: 20 }}>
                 <EmptyState
-                    title={
-                        hasKpiPolicyRecursion
-                            ? "Falha de permissão no banco de dados"
-                            : "Não foi possível carregar os leads"
-                    }
+                    title="Não foi possível carregar os leads"
                     description={
                         hasKpiPolicyRecursion
-                            ? "Uma regra de acesso (RLS) do banco entrou em recursão. Avise o administrador."
+                            ? "O CRM encontrou um problema de permissão ao ler os negócios. Fale com o suporte."
                             : kpiErrorMessage || "Tente recarregar a página."
                     }
                 />

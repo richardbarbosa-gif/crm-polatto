@@ -2,7 +2,7 @@ import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import { useList } from "@refinedev/core";
 import { Alert, Skeleton, Typography } from "antd";
 import { useMemo, useState } from "react";
-import { Button, Card, EmptyState } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { ehIdDoModeloNovo } from "../../lib/leadTimeline";
@@ -112,12 +112,7 @@ export const OrcamentosDoLead = ({ lead, onDocumentoSalvo }: Props) => {
             }
         >
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Módulo de orçamentos pendente"
-                    description="Execute a migration 2026-11-03_13_orcamentos.sql no Supabase para habilitar os orçamentos."
-                />
+                <RecursoIndisponivel recurso="Orçamentos" style={{ marginBottom: 0 }} />
             ) : query.isLoading ? (
                 <Skeleton active paragraph={{ rows: 2 }} />
             ) : query.error ? (

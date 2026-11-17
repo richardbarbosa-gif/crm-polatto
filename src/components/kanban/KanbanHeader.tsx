@@ -135,8 +135,9 @@ export const KanbanHeader: React.FC<KanbanHeaderProps> = ({
                     onChange={(e) => onSearchChange(e.target.value)}
                     style={{
                         width: 180,
-                        backgroundColor: "var(--crm-surface-2)",
-                        border: "1px solid var(--crm-border-subtle)",
+                        // Mesmo fundo e borda dos filtros ao lado: cinza parecia campo desativado.
+                        backgroundColor: "var(--crm-surface-1)",
+                        border: "1px solid var(--crm-border-input)",
                         borderRadius: 8,
                         height: 32,
                         fontSize: 12.5,

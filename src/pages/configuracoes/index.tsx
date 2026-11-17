@@ -1,19 +1,17 @@
 import {
     AppstoreOutlined,
-    BellOutlined,
     BgColorsOutlined,
     BranchesOutlined,
     CloseCircleOutlined,
     FormOutlined,
     FunnelPlotOutlined,
-    GlobalOutlined,
     IdcardOutlined,
     MessageOutlined,
     ScheduleOutlined,
     SettingOutlined,
     ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Card, Divider, Grid, Select, Switch, Tabs, Typography } from "antd";
+import { Card, Grid, Select, Switch, Tabs, Typography } from "antd";
 import {
     CanaisOrigemConfig,
     CustomFieldsConfig,
@@ -23,7 +21,9 @@ import {
     ProdutosConfig,
     TiposAtividadeConfig,
 } from "./crm";
+import { useContext } from "react";
 import { useSearchParams } from "react-router";
+import { ColorModeContext } from "../../contexts/color-mode";
 import { AutomacoesConfig } from "./automacoes";
 import { IdentidadePropostaConfig } from "./identidade-proposta";
 
@@ -32,127 +32,16 @@ const { Title, Text } = Typography;
 const sectionTitleStyle = { margin: 0 };
 
 export const ConfiguracoesPage = () => {
-    // No celular, um seletor de seção substitui as 12 abas: na lateral o conteúdo
+    // No celular, um seletor de seção substitui as abas: na lateral o conteúdo
     // ficava espremido e, no topo, só se via 3 abas sem pista de que havia mais.
     const telas = Grid.useBreakpoint();
     const celular = telas.md === false;
     // A aba fica na URL (?aba=funis): os atalhos do checklist de primeiro
-    // acesso caem direto na seção certa e o F5 não volta para "Geral".
+    // acesso caem direto na seção certa e o F5 não volta para a primeira.
     const [parametros, setParametros] = useSearchParams();
+    const { mode, setMode } = useContext(ColorModeContext);
 
     const itens = [
-        {
-            key: "geral",
-            label: (
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <GlobalOutlined /> Geral
-                </span>
-            ),
-            children: (
-                <div className="crm-form-section" style={{ marginBottom: 0 }}>
-                    <Title level={4} style={sectionTitleStyle}>
-                        Preferências regionais
-                    </Title>
-                    <Text className="crm-form-section-subtitle" type="secondary">
-                        Defina idioma e fuso para padronizar datas, horários e mensagens.
-                    </Text>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Idioma do sistema</Text>
-                        </div>
-                        <Select
-                            defaultValue="pt-BR"
-                            style={{ width: 240 }}
-                            options={[
-                                { value: "pt-BR", label: "Português (Brasil)" },
-                                { value: "en-US", label: "English (US)" },
-                                { value: "es-ES", label: "Español" },
-                            ]}
-                        />
-                    </div>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Fuso horário</Text>
-                        </div>
-                        <Select
-                            defaultValue="utc-3"
-                            style={{ width: 240 }}
-                            options={[{ value: "utc-3", label: "Brasília (UTC-3)" }]}
-                        />
-                    </div>
-                </div>
-            ),
-        },
-        {
-            key: "aparencia",
-            label: (
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <BgColorsOutlined /> Aparência
-                </span>
-            ),
-            children: (
-                <div className="crm-form-section" style={{ marginBottom: 0 }}>
-                    <Title level={4} style={sectionTitleStyle}>
-                        Interface e tema
-                    </Title>
-                    <Text className="crm-form-section-subtitle" type="secondary">
-                        Ajustes de leitura e contraste para o dia a dia comercial.
-                    </Text>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Modo noturno</Text>
-                            <Text type="secondary" style={{ display: "block" }}>
-                                Escurece a interface para ambientes de baixa luz.
-                            </Text>
-                        </div>
-                        <Switch />
-                    </div>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Alto contraste</Text>
-                            <Text type="secondary" style={{ display: "block" }}>
-                                Melhora a legibilidade de cards, funil e tabelas.
-                            </Text>
-                        </div>
-                        <Switch defaultChecked />
-                    </div>
-                </div>
-            ),
-        },
-        {
-            key: "notificacoes",
-            label: (
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <BellOutlined /> Notificações
-                </span>
-            ),
-            children: (
-                <div className="crm-form-section" style={{ marginBottom: 0 }}>
-                    <Title level={4} style={sectionTitleStyle}>
-                        Alertas do CRM
-                    </Title>
-                    <Text className="crm-form-section-subtitle" type="secondary">
-                        Configure avisos para manter o time atento ao pipeline.
-                    </Text>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Som ao receber novo lead</Text>
-                        </div>
-                        <Switch defaultChecked />
-                    </div>
-                    <div className="crm-config-row">
-                        <div>
-                            <Text strong>Avisos de tarefas atrasadas</Text>
-                        </div>
-                        <Switch defaultChecked />
-                    </div>
-                    <Divider style={{ margin: "10px 0 0" }} />
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                        Estas preferências valem só neste navegador.
-                    </Text>
-                </div>
-            ),
-        },
         {
             key: "funis",
             label: (
@@ -333,10 +222,41 @@ export const ConfiguracoesPage = () => {
                 </div>
             ),
         },
-];
+        {
+            key: "aparencia",
+            label: (
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <BgColorsOutlined /> Aparência
+                </span>
+            ),
+            children: (
+                <div className="crm-form-section" style={{ marginBottom: 0 }}>
+                    <Title level={4} style={sectionTitleStyle}>
+                        Interface e tema
+                    </Title>
+                    <Text className="crm-form-section-subtitle" type="secondary">
+                        Vale para este navegador: cada pessoa do time escolhe o seu.
+                    </Text>
+                    <div className="crm-config-row">
+                        <div>
+                            <Text strong>Modo noturno</Text>
+                            <Text type="secondary" style={{ display: "block" }}>
+                                Escurece a interface para ambientes de baixa luz.
+                            </Text>
+                        </div>
+                        <Switch
+                            aria-label="Modo noturno"
+                            checked={mode === "dark"}
+                            onChange={(ligado) => setMode(ligado ? "dark" : "light")}
+                        />
+                    </div>
+                </div>
+            ),
+        },
+    ];
 
     const pedida = parametros.get("aba") ?? "";
-    const aba = itens.some((item) => item.key === pedida) ? pedida : "geral";
+    const aba = itens.some((item) => item.key === pedida) ? pedida : itens[0].key;
     const trocarAba = (chave: string) =>
         setParametros(
             (atuais) => {
@@ -356,7 +276,7 @@ export const ConfiguracoesPage = () => {
                         Configurações
                     </Title>
                     <Text className="crm-page-header-subtitle">
-                        Preferências visuais e operacionais do CRM para o seu time.
+                        Funis, campos, automações e a identidade das propostas da sua empresa.
                     </Text>
                 </div>
             </div>

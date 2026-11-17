@@ -1,7 +1,6 @@
 import { BankOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { useCreate, useList, useUpdate } from "@refinedev/core";
 import {
-    Alert,
     Form,
     Input,
     Modal,
@@ -15,12 +14,12 @@ import {
     message,
 } from "antd";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button, Card, EmptyState } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCpfCnpj, formatDateBR } from "../../lib/formatters";
 import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
-import { regraCpfCnpj } from "../../lib/documentos";
+import { exibirTelefone, regraCpfCnpj } from "../../lib/documentos";
 import { montarFiltroDuplicata } from "../../lib/duplicatas";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
 import { supabaseClient } from "../../utility";
@@ -238,13 +237,7 @@ export const OrganizacoesPage = () => {
             </div>
 
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Estrutura do banco pendente"
-                    description="A tabela organizacoes ainda não existe neste ambiente. Execute as migrations em database/migrations/ no Supabase."
-                    style={{ marginBottom: 16 }}
-                />
+                <RecursoIndisponivel recurso="Organizações" />
             ) : null}
 
             <Card bordered={false} className="crm-card">
@@ -304,7 +297,7 @@ export const OrganizacoesPage = () => {
                                 className: "crm-nowrap",
                                 dataIndex: "telefone",
                                 responsive: ["lg"],
-                                render: (value: string | null) => value || "—",
+                                render: (value: string | null) => exibirTelefone(value) || "—",
                             },
                             {
                                 title: "Criada em",

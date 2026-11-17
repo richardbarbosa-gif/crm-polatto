@@ -16,7 +16,7 @@ import {
     message,
 } from "antd";
 import { useMemo, useRef, useState } from "react";
-import { Button, EmptyState } from "../../../components/ui";
+import { Button, EmptyState, RecursoIndisponivel } from "../../../components/ui";
 import { useTenant } from "../../../contexts/tenant";
 import { useCrmAccess } from "../../../hooks/useCrmAccess";
 import { isSupabaseMissingRelation } from "../../../lib/supabaseErrors";
@@ -210,13 +210,7 @@ export const PipelinesConfig = () => {
     return (
         <div>
             {tabelaPipelinesAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Estrutura do banco pendente"
-                    description="A tabela pipelines ainda não existe neste ambiente. Execute as migrations em database/migrations/ no Supabase."
-                    style={{ marginBottom: 16 }}
-                />
+                <RecursoIndisponivel recurso="Funis de venda" />
             ) : null}
 
             {!canDeleteRecords ? (

@@ -4,11 +4,11 @@ import { Alert, Col, Input, Row, Select, Skeleton, Table, Typography } from "ant
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { EmptyState, StatCard } from "../../components/ui";
+import { EmptyState, RecursoIndisponivel, StatCard } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useBuscaNoServidor } from "../../hooks/useBuscaNoServidor";
-import { formatCurrencyBRL } from "../../lib/formatters";
+import { contar, formatCurrencyBRL } from "../../lib/formatters";
 import { buscarClientesDosNegocios } from "../../lib/orcamentos/api";
 import { ROTULO_STATUS, STATUS_ORCAMENTO, formatarDataIso, type StatusOrcamento } from "../../lib/orcamentos/formato";
 import { rotuloRevisao } from "../../lib/orcamentos/regras";
@@ -250,12 +250,7 @@ export const OrcamentosPage = () => {
             </div>
 
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Módulo de orçamentos pendente"
-                    description="Execute a migration 2026-11-03_13_orcamentos.sql no Supabase para habilitar os orçamentos."
-                />
+                <RecursoIndisponivel recurso="Orçamentos" />
             ) : (
                 <>
                     <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
@@ -263,7 +258,7 @@ export const OrcamentosPage = () => {
                             <StatCard
                                 title="Em aberto (rascunho e enviados)"
                                 value={formatCurrencyBRL(resumo.valorAberto)}
-                                subtitle={`${resumo.abertos} proposta(s)`}
+                                subtitle={contar(resumo.abertos, "proposta", "propostas")}
                                 accentColor="#2563eb"
                             />
                         </Col>
@@ -271,7 +266,7 @@ export const OrcamentosPage = () => {
                             <StatCard
                                 title="Aceitos"
                                 value={formatCurrencyBRL(resumo.valorAceito)}
-                                subtitle={`${resumo.aceitos} proposta(s)`}
+                                subtitle={contar(resumo.aceitos, "proposta", "propostas")}
                                 accentColor="#16a34a"
                             />
                         </Col>

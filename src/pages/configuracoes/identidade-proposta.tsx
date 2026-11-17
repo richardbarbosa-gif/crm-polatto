@@ -1,7 +1,7 @@
 import { DeleteOutlined, FilePdfOutlined, UploadOutlined } from "@ant-design/icons";
 import { Alert, App, ColorPicker, Divider, Form, Input, InputNumber, Skeleton, Space, Typography } from "antd";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "../../components/ui";
+import { Button, RecursoIndisponivel } from "../../components/ui";
 import { useTenant } from "../../contexts/tenant";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { regraCpfCnpj, somenteDigitos } from "../../lib/documentos";
@@ -295,14 +295,7 @@ export const IdentidadePropostaConfig = () => {
 
     if (carga.estado === "carregando" || carregandoPapel) return <Skeleton active paragraph={{ rows: 8 }} />;
     if (carga.estado === "ausente") {
-        return (
-            <Alert
-                type="warning"
-                showIcon
-                message="Estrutura do banco pendente"
-                description="Execute a migration 2026-11-03_13_orcamentos.sql no Supabase para configurar a identidade da proposta."
-            />
-        );
+        return <RecursoIndisponivel recurso="Identidade da proposta" style={{ marginBottom: 0 }} />;
     }
     if (carga.estado === "erro") return <Alert type="error" showIcon message={carga.mensagem} />;
 

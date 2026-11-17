@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+    exibirTelefone,
     formatarTelefoneBR,
     regraCpfCnpj,
     validarCnpj,
@@ -90,5 +91,24 @@ describe("validarEmail", () => {
         expect(validarEmail("ana@empresa.com.br")).toBe(true);
         expect(validarEmail("ana@empresa")).toBe(false);
         expect(validarEmail("")).toBe(false);
+    });
+});
+
+describe("exibirTelefone", () => {
+    it("padroniza número brasileiro gravado cru ou já formatado", () => {
+        expect(exibirTelefone("11955550001")).toBe("(11) 95555-0001");
+        expect(exibirTelefone("(11) 95555-0001")).toBe("(11) 95555-0001");
+        expect(exibirTelefone("1133334444")).toBe("(11) 3333-4444");
+    });
+
+    it("não mexe em número com DDI nem de outro país", () => {
+        expect(exibirTelefone("+55 (11) 90001-0001")).toBe("+55 (11) 90001-0001");
+        expect(exibirTelefone("+1 415 555 2671")).toBe("+1 415 555 2671");
+        expect(exibirTelefone("4155552671234")).toBe("4155552671234");
+    });
+
+    it("vazio continua vazio", () => {
+        expect(exibirTelefone(null)).toBe("");
+        expect(exibirTelefone("  ")).toBe("");
     });
 });

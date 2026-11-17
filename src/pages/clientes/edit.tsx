@@ -10,7 +10,7 @@ import { useTenant } from "../../contexts/tenant";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
 import { fetchEmployeesDirectory } from "../../lib/crmEmployees";
 import { matchesLeadOwner, useCrmAccess } from "../../hooks/useCrmAccess";
-import { formatarDocumento, tipoPessoaDoDocumento, type TipoPessoa, validarTelefone } from "../../lib/documentos";
+import { formatarDocumento, somenteDigitos, tipoPessoaDoDocumento, type TipoPessoa, validarTelefone } from "../../lib/documentos";
 import { CampoDocumento } from "../../components/campo-documento";
 import {
     buildLeadStageOptions,
@@ -163,6 +163,10 @@ export const ClienteEdit = () => {
         form.setFieldValue("cpf_cnpj", formatarDocumento(currentDocument, tipo));
     }, [form, record?.cpf_cnpj]);
 
+    // Lead que veio da importação sem CPF/CNPJ: o documento continua sendo
+    // conferido se for preenchido, mas não trava a edição dos outros campos.
+    const leadSemDocumento = Boolean(record) && !somenteDigitos(typeof record?.cpf_cnpj === "string" ? record.cpf_cnpj : null);
+
     // Carrega os valores já gravados dos campos customizados no formulário.
     // Sem isto o campo abriria vazio e salvar apagaria o que estava lá.
     useEffect(() => {
@@ -219,6 +223,9 @@ export const ClienteEdit = () => {
 
         return formProps.onFinish?.({
             ...payloadLimpo,
+            // Documento em branco vai como nulo: texto vazio contaria como um
+            // "documento" repetido no índice de CPF/CNPJ único por empresa.
+            cpf_cnpj: somenteDigitos(payloadLimpo.cpf_cnpj) ? payloadLimpo.cpf_cnpj : null,
             ...(Object.keys(dadosExtras).length ? { dados_extras: dadosExtras } : {}),
             tenant_id: tenantId || undefined,
             stage_id: nextStageId,
@@ -273,7 +280,12 @@ export const ClienteEdit = () => {
             {/* Mesmo grid do "Novo lead": antes o editar era uma coluna única, com
                 campos menores e outra ordem — parecia outro sistema. */}
             <Form {...formProps} layout="vertical" onFinish={(valores) => handleFinish(valores as ClienteEditFormValues)}>
-                <CampoDocumento form={form} tipo={tipoPessoa} onTipoChange={setTipoPessoa} />
+                <CampoDocumento
+                    form={form}
+                    tipo={tipoPessoa}
+                    onTipoChange={setTipoPessoa}
+                    obrigatorio={!leadSemDocumento}
+                />
 
                 <Row gutter={20}>
                     <Col xs={24}>

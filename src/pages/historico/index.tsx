@@ -2,7 +2,7 @@ import { HistoryOutlined, RollbackOutlined } from "@ant-design/icons";
 import { useList, useUpdate, type CrudFilter } from "@refinedev/core";
 import { Alert, Col, Modal, Row, Segmented, Skeleton, Table, Tag, Typography, message } from "antd";
 import { useCallback, useMemo, useState } from "react";
-import { Button, Card, EmptyState, StatCard } from "../../components/ui";
+import { Button, Card, EmptyState, RecursoIndisponivel, StatCard } from "../../components/ui";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { formatCurrencyBRL, formatDateBR } from "../../lib/formatters";
 import { getSupabaseErrorMessage, isSupabaseMissingRelation } from "../../lib/supabaseErrors";
@@ -219,13 +219,7 @@ export const HistoricoPage = () => {
             </div>
 
             {tabelaAusente ? (
-                <Alert
-                    type="warning"
-                    showIcon
-                    message="Estrutura do banco pendente"
-                    description="A tabela clientes ainda não existe neste ambiente. Execute as migrations em database/migrations/ no Supabase."
-                    style={{ marginBottom: 16 }}
-                />
+                <RecursoIndisponivel recurso="Histórico" />
             ) : null}
 
             {listErrorMessage ? (
