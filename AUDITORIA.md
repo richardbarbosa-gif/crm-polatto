@@ -272,3 +272,25 @@ Testado em produção (Supabase real) com o login de teste, no build de produç�
 3. Vercel: `VITE_SUPABASE_URL` e `VITE_SUPABASE_KEY` (chave pública).
 4. Trocar a senha ou apagar o login de teste — a senha passou pelo chat.
 5. Meio de pagamento: decisão de negócio pendente.
+
+## Verificação independente (17/11/2026, noite)
+
+Conferência item por item deste documento contra o código do `testes-kanban` e contra o catálogo do banco de produção (só leitura, sem ler dado de cliente).
+
+**Execução local:** banco 787 asserções aprovadas, 0 falhas (Postgres 16, migrations duas vezes + instalação do zero) · 357 testes unitários · tipos e lint sem erro · build ok.
+
+**Confirmado em produção:** 57 policies no formato `(select current_tenant_id())` e nenhuma com `tenant_filter(...)` (P2-02) · `anon` sem nenhum privilégio de tabela e `authenticated` sem `TRUNCATE` (P2-03) · `enforce_rate_limit`/`registro_eh_do_usuario` fora da API (P2-04) · nenhuma FK sem índice (P2-05) · policies restritivas no `lead-files` (P2-06) · schema de backup apagado (P2-07) · `cliente_status_history` sem escrita pela API (P2-01) · `uq_metas_funcionario_mes` (P3-04) · `audit_changes` nas 6 tabelas (P3-08) · migrations até a 22, Edge Function `equipe-usuarios` ativa com JWT, cadastro fechado (P1-01, P1-03) · 3 jobs do `pg_cron` com 78/78 execuções ok nos últimos 3 dias (automações agendadas, que constavam como "não testado").
+
+**Confirmado no código:** RPCs transacionais em uso (P3-02 a P3-05, P4-07) · trava de um movimento por card · sem data/autor do navegador (P3-01, P3-07) · realtime fora da view `clientes` (P4-03) · cadastro sem sessão avisa (P4-04) · assinatura `%PDF-` no upload (P2-06) · os 25 `catch` sem variável restantes são legítimos (P4-02) · `antdReact19` é o primeiro import (RF-01).
+
+**Ressalvas (marcados como feitos, mas com diferença em relação à correção proposta):**
+- **P1-01:** o login da equipe saiu de `auth.users` (o defeito de risco), mas é criado com a senha digitada pelo gerente e e-mail já confirmado, não por convite. O gerente continua conhecendo a senha inicial; o membro pode trocá-la em Meu perfil. Para o piloto não importa; antes de vender, considerar convite por e-mail ou troca obrigatória no primeiro acesso.
+- **P2-08:** feito em parte. Saíram os scripts avulsos e entrou o `relatorio_privilegios()`, mas as migrations continuam aplicadas à mão (sem `supabase/migrations` + CLI) e não há job agendado rodando os linters. Não bloqueia o piloto.
+
+**Corrigido nesta verificação:** um alerta alto publicado hoje no `picomatch` (sem versão corrigida) derrubaria o gate `npm audit` do CI no próximo push. Ele só chegava por `@refinedev/cli` e `@refinedev/devtools`, ferramentas que não vão para o navegador, agora em `devDependencies` (nenhuma versão mudou). `CLAUDE.md` com a tabela de rotas completa (a observação da linha final da Fase 1).
+
+**Pendências do dono, atualizadas:**
+1. *Leaked password protection* (P1-02) só existe no plano Pro do Supabase: fica para a migração ao plano pago.
+2. O login de teste e a "Empresa de Teste E2E" continuam em produção (2 logins no Auth): trocar a senha ou apagar antes de entregar ao cliente.
+3. Plano gratuito: o projeto pausa após cerca de uma semana sem uso e não tem backup diário. Avisar o cliente do piloto.
+4. A empresa do cliente ainda não existe ("Empresa Pioneira" não tem negócios): usar a Pioneira ou abrir o cadastro, cadastrar e fechar de novo.
