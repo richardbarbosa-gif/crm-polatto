@@ -289,6 +289,8 @@ Conferência item por item deste documento contra o código do `testes-kanban` e
 
 **Corrigido nesta verificação:** um alerta alto publicado hoje no `picomatch` (sem versão corrigida) derrubaria o gate `npm audit` do CI no próximo push. Ele só chegava por `@refinedev/cli` e `@refinedev/devtools`, ferramentas que não vão para o navegador, agora em `devDependencies` (nenhuma versão mudou). `CLAUDE.md` com a tabela de rotas completa (a observação da linha final da Fase 1).
 
+**Busca que ignora acentos (pendência das notas da Fase 2, corrigida em 18/11):** "joao" não achava "João" — e não só em Pessoas/Organizações: também no Kanban, na busca global (Ctrl+K), em Orçamentos e no seletor de lead da Agenda. Migration 23: coluna calculada `busca_sem_acento` nas 5 fontes, sem alterar tabela nem view; o front filtra por ela com o termo sem acento (`src/lib/buscaSemAcento.ts`). Suíte 18 (13 asserções), inclusive a prova de que nada que a busca antiga achava deixa de ser achado; teste de paridade do mapa de letras SQL × front. Aplicada em produção e conferida: funções `SECURITY INVOKER`, nada para a chave pública, linters iguais aos de antes, coluna reconhecida pela API nas 5 fontes. Banco 800/800, 361 testes unitários, tipos do banco em dia, build ok.
+
 **Pendências do dono, atualizadas:**
 1. *Leaked password protection* (P1-02) só existe no plano Pro do Supabase: fica para a migração ao plano pago.
 2. O login de teste e a "Empresa de Teste E2E" continuam em produção (2 logins no Auth): trocar a senha ou apagar antes de entregar ao cliente.

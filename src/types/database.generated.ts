@@ -1975,6 +1975,11 @@ export type Database = {
         Functions: {
             alterar_papel_membro: { Args: { p_user_id: string; p_papel: string }; Returns: Json };
             atualizar_meu_perfil: { Args: { p_nome: string; p_telefone?: string | null }; Returns: Json };
+            busca_sem_acento: { Args: { p_linha: unknown }; Returns: string }
+                | { Args: { p_linha: unknown }; Returns: string }
+                | { Args: { p_linha: unknown }; Returns: string }
+                | { Args: { p_linha: unknown }; Returns: string }
+                | { Args: { p_linha: unknown }; Returns: string };
             check_feature: { Args: { p_feature_key: string; p_tenant_id?: string | null }; Returns: boolean };
             current_tenant_id: { Args: Record<PropertyKey, never>; Returns: string };
             definir_meta_mensal: { Args: { p_funcionario_id: string; p_mes: string; p_valor: number; p_ganhos?: number | null }; Returns: undefined };
@@ -2004,6 +2009,7 @@ export type Database = {
             salvar_membro_equipe: { Args: { p_funcionario_id: string; p_nome: string; p_email?: string | null; p_cargo?: string | null; p_ativo?: boolean | null; p_papel?: string | null; p_meta_mensal?: number | null }; Returns: undefined };
             salvar_metas_mes: { Args: { p_mes: string; p_metas: Json }; Returns: number };
             salvar_orcamento: { Args: { p_orcamento: Json; p_itens: Json }; Returns: string };
+            sem_acento: { Args: { p_texto: string }; Returns: string };
             status_primeiro_acesso: { Args: Record<PropertyKey, never>; Returns: Json };
             tem_coluna: { Args: { p_tabela: string; p_coluna: string }; Returns: boolean };
             tenant_filter: { Args: { p_tenant_id: string }; Returns: boolean };

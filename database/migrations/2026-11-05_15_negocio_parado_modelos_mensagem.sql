@@ -160,9 +160,16 @@ create index if not exists idx_negocios_temperatura
 --   sem_proximo_passo    aberto e sem tarefa aberta (atrasada conta como
 --                        próximo passo: aparece em vermelho no card)
 -- security_invoker: a RLS de negocios/tarefas/timeline do usuário vale.
--- DROP + CREATE (nada depende desta view): permite acrescentar colunas
--- no futuro sem o erro "cannot drop columns from view".
+-- DROP + CREATE: permite acrescentar colunas no futuro sem o erro
+-- "cannot drop columns from view". A única dependência é a coluna
+-- calculada de busca (migration 23), apagada aqui e recriada pela 23.
 -- ---------------------------------------------------------------------
+do $$
+begin
+    if to_regclass('public.vw_negocios_saude') is not null then
+        execute 'drop function if exists public.busca_sem_acento(public.vw_negocios_saude)';
+    end if;
+end $$;
 drop view if exists public.vw_negocios_saude;
 create view public.vw_negocios_saude
 with (security_invoker = on)

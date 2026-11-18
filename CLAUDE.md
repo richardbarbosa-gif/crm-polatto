@@ -70,6 +70,7 @@ Routes are declared as Refine resources and map to page components:
 - Phones are displayed with `exibirTelefone()` (`src/lib/documentos.ts`).
 - A missing table/feature shows `<RecursoIndisponivel recurso="..." />` — never migration/table names to end users.
 - Infinite queries (Kanban) are not refreshed by `invalidates: ["list"]`; use `["resourceAll"]`.
+- Text search goes through `filtroBuscaSemAcento()` (`src/lib/buscaSemAcento.ts`), never a raw `contains` on name columns: it filters the computed column `busca_sem_acento` so "joao" finds "João". A new searchable table/view needs its `busca_sem_acento(<row>)` function (migration 23 pattern); the accent map must stay identical in SQL and TS (a unit test checks).
 - Business rules live in the database (RLS, triggers, transactional RPCs); the frontend checks are UX only.
 
 ### Environment

@@ -66,7 +66,7 @@ export const OrcamentosPage = () => {
     // vw_orcamentos_resumo. Antes a tela baixava todos os orçamentos da
     // empresa para somar, filtrar e buscar no navegador.
     const [pagina, setPagina] = useState(1);
-    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, ["numero", "titulo", "cliente_nome"]);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca);
     const chaveDosFiltros = `${termo}|${status.join(",")}|${responsavel ?? ""}`;
     useEffect(() => setPagina(1), [chaveDosFiltros]);
 

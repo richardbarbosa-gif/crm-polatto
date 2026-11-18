@@ -87,7 +87,7 @@ export const PessoasPage = () => {
     // Paginação e busca no banco: a tela recebe só a página exibida (antes
     // baixava todos os contatos e todas as organizações da empresa).
     const [pagina, setPagina] = useState(1);
-    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, ["nome", "email", "telefone", "cargo"]);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca);
     useEffect(() => setPagina(1), [termo]);
 
     const { query } = useList<PessoaRecord>({
@@ -118,7 +118,7 @@ export const PessoasPage = () => {
     });
 
     const [buscaOrganizacao, setBuscaOrganizacao] = useState("");
-    const { filtros: filtrosDaOrganizacao } = useBuscaNoServidor(buscaOrganizacao, ["nome_fantasia", "razao_social"]);
+    const { filtros: filtrosDaOrganizacao } = useBuscaNoServidor(buscaOrganizacao);
     const { query: organizacoesQuery } = useList<OrganizacaoRecord>({
         resource: "organizacoes",
         pagination: { currentPage: 1, pageSize: LIMITE_DO_SELETOR },

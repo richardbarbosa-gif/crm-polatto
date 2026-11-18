@@ -1,5 +1,6 @@
 import type { CrudFilter } from "@refinedev/core";
 import { useEffect, useMemo, useState } from "react";
+import { filtroBuscaSemAcento } from "../lib/buscaSemAcento";
 
 const ATRASO_MS = 300;
 
@@ -10,12 +11,13 @@ const ATRASO_MS = 300;
 export const limparTermoDeBusca = (texto: string): string => texto.replace(/[,()]/g, " ").trim();
 
 /**
- * Busca digitada → filtro "contém" (ILIKE) em várias colunas, aplicado pelo
- * banco. Espera o usuário parar de digitar para não disparar uma consulta
- * por tecla. Devolve também o termo já aplicado, para a tela voltar à
- * primeira página quando ele muda.
+ * Busca digitada → filtro "contém" (ILIKE) aplicado pelo banco, ignorando
+ * acentos, na coluna calculada `busca_sem_acento` da fonte (os campos de
+ * cada uma estão em src/lib/buscaSemAcento.ts). Espera o usuário parar de
+ * digitar para não disparar uma consulta por tecla. Devolve também o termo
+ * já aplicado, para a tela voltar à primeira página quando ele muda.
  */
-export const useBuscaNoServidor = (busca: string, colunas: string[]) => {
+export const useBuscaNoServidor = (busca: string) => {
     const [termo, setTermo] = useState("");
 
     useEffect(() => {
@@ -23,16 +25,7 @@ export const useBuscaNoServidor = (busca: string, colunas: string[]) => {
         return () => window.clearTimeout(timer);
     }, [busca]);
 
-    const chaveColunas = colunas.join(",");
-    const filtros = useMemo<CrudFilter[]>(() => {
-        if (!termo) return [];
-        return [
-            {
-                operator: "or",
-                value: chaveColunas.split(",").map((field) => ({ field, operator: "contains" as const, value: termo })),
-            },
-        ];
-    }, [termo, chaveColunas]);
+    const filtros = useMemo<CrudFilter[]>(() => (termo ? [filtroBuscaSemAcento(termo)] : []), [termo]);
 
     return { termo, filtros };
 };

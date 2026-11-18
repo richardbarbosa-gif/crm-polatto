@@ -1,4 +1,5 @@
 import type { CrudFilter } from "@refinedev/core";
+import { filtroBuscaSemAcento } from "./buscaSemAcento";
 import type { LeadTemperatureTag } from "./leadTemperature";
 
 export type LeadFilterInput = {
@@ -125,15 +126,11 @@ export const buildLeadFilters = ({
 }: LeadFilterInput): CrudFilter[] => {
     const filters: CrudFilter[] = [];
 
+    // Nome e telefone, ignorando acentos (coluna calculada da migration 23,
+    // presente em clientes e em vw_negocios_saude — as duas fontes do board).
     const termo = sanitizarBusca(busca);
     if (termo) {
-        filters.push({
-            operator: "or",
-            value: [
-                { field: "nome", operator: "contains", value: termo },
-                { field: "telefone", operator: "contains", value: termo },
-            ],
-        });
+        filters.push(filtroBuscaSemAcento(termo));
     }
 
     if (responsavel) {

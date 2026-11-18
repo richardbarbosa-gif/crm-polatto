@@ -210,6 +210,12 @@ SQL
 echo "==> Suíte 17: lista e resumo de orçamentos no banco (migration 22)"
 psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/17_teste_orcamentos_lista_resumo.sql"
 
+# A 23 cria a coluna calculada de clientes só depois da virada (suíte 2),
+# como manda o README: as migrations a partir da 10 rodam de novo depois dela.
+psql -v ON_ERROR_STOP=1 -q -f "$REPO_DIR/database/migrations/2026-11-17_23_busca_sem_acento.sql" >/dev/null 2>&1
+echo "==> Suíte 18: busca que ignora acentos (migration 23)"
+psql -v ON_ERROR_STOP=1 -f "$REPO_DIR/database/tests/18_teste_busca_sem_acento.sql"
+
 # ---------------------------------------------------------------------
 # FASE 2 — BANCO NOVO (instalação do zero / reconstrução de produção):
 # 00..N, virada (clientes -> view) e 01 + 10 em diante de novo.

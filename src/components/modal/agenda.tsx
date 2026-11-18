@@ -4,6 +4,7 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useCrmAccess } from "../../hooks/useCrmAccess";
 import { useTenantSegmento } from "../../hooks/useTenantSegmento";
+import { filtroBuscaSemAcento } from "../../lib/buscaSemAcento";
 import { sanitizarBusca } from "../../lib/leadFilters";
 import type { TipoAtividadeRecord } from "../../types/db";
 import { supabaseClient } from "../../utility";
@@ -151,7 +152,7 @@ export const TaskFormModal = ({
         resource: "clientes",
         pagination: { currentPage: 1, pageSize: 20 },
         sorters: [{ field: "nome", order: "asc" }],
-        filters: termoBusca ? [{ field: "nome", operator: "contains", value: termoBusca }] : [],
+        filters: termoBusca ? [filtroBuscaSemAcento(termoBusca)] : [],
         meta: { select: "id,nome,endereco_instalacao" },
         queryOptions: { enabled: open && !isClienteLocked },
     });

@@ -19,16 +19,10 @@ describe("buildLeadFilters", () => {
         expect(buildLeadFilters({})).toEqual([]);
     });
 
-    it("busca procura em nome e telefone", () => {
-        const filtros = buildLeadFilters({ busca: "maria" });
+    it("busca procura em nome e telefone ignorando acentos (coluna calculada do banco)", () => {
+        const filtros = buildLeadFilters({ busca: "Maria Conceição" });
         expect(filtros).toHaveLength(1);
-        expect(filtros[0]).toMatchObject({
-            operator: "or",
-            value: [
-                { field: "nome", operator: "contains", value: "maria" },
-                { field: "telefone", operator: "contains", value: "maria" },
-            ],
-        });
+        expect(filtros[0]).toEqual({ field: "busca_sem_acento", operator: "contains", value: "Maria Conceicao" });
     });
 
     it("filtra por responsável", () => {

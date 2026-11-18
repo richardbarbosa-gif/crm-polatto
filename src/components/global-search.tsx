@@ -3,6 +3,7 @@ import { Modal, Input, List, Typography, Tag, Space, Skeleton, type InputRef } f
 import { BankOutlined, ContactsOutlined, RightOutlined, SearchOutlined, UserOutlined } from "@ant-design/icons";
 import { useList, useGo, type CrudFilter } from "@refinedev/core";
 import { useCrmAccess } from "../hooks/useCrmAccess";
+import { filtroBuscaSemAcento } from "../lib/buscaSemAcento";
 import { sanitizarBusca } from "../lib/leadFilters";
 
 const { Text } = Typography;
@@ -98,15 +99,8 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
     // Mesma visão do Kanban: vendedor sem acesso total só encontra os próprios leads.
     const filtrosDeLeads = useMemo<CrudFilter[]>(() => {
         if (!buscaAtiva) return [];
-        const filtros: CrudFilter[] = [
-            {
-                operator: "or",
-                value: [
-                    { field: "nome", operator: "contains", value: termo },
-                    { field: "telefone", operator: "contains", value: termo },
-                ],
-            },
-        ];
+        // Nome e telefone, ignorando acentos (coluna calculada da migration 23).
+        const filtros: CrudFilter[] = [filtroBuscaSemAcento(termo)];
         if (!canViewAllLeads && ownerCandidates.length > 0) {
             filtros.push({ field: "responsavel", operator: "in", value: ownerCandidates });
         }
@@ -126,16 +120,7 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
         resource: "organizacoes",
         pagination: { pageSize: 4 },
         filters: buscaAtiva
-            ? [
-                  {
-                      operator: "or",
-                      value: [
-                          { field: "nome_fantasia", operator: "contains", value: termo },
-                          { field: "razao_social", operator: "contains", value: termo },
-                      ],
-                  },
-                  { field: "deleted_at", operator: "null", value: true },
-              ]
+            ? [filtroBuscaSemAcento(termo), { field: "deleted_at", operator: "null", value: true }]
             : [],
         queryOptions: { enabled: buscaAtiva, retry: false },
     });
@@ -144,17 +129,7 @@ export const GlobalSearch = ({ open, setOpen }: { open: boolean; setOpen: (v: bo
         resource: "pessoas",
         pagination: { pageSize: 4 },
         filters: buscaAtiva
-            ? [
-                  {
-                      operator: "or",
-                      value: [
-                          { field: "nome", operator: "contains", value: termo },
-                          { field: "email", operator: "contains", value: termo },
-                          { field: "telefone", operator: "contains", value: termo },
-                      ],
-                  },
-                  { field: "deleted_at", operator: "null", value: true },
-              ]
+            ? [filtroBuscaSemAcento(termo), { field: "deleted_at", operator: "null", value: true }]
             : [],
         queryOptions: { enabled: buscaAtiva, retry: false },
     });

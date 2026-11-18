@@ -65,12 +65,7 @@ export const OrganizacoesPage = () => {
     // Paginação e busca no banco: a tela recebe só a página exibida (antes
     // baixava todas as organizações e filtrava no navegador).
     const [pagina, setPagina] = useState(1);
-    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca, [
-        "nome_fantasia",
-        "razao_social",
-        "cnpj",
-        "setor",
-    ]);
+    const { termo, filtros: filtrosDaBusca } = useBuscaNoServidor(busca);
     useEffect(() => setPagina(1), [termo]);
 
     const { query } = useList<OrganizacaoRecord>({
